@@ -167,11 +167,16 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="field">
         <label for="volGuide">Guide voice volume</label>
-        <div class="field-row"><input id="volGuide" type="range" min="0" max="1" step="0.05" value="0.6"><span class="val" id="volGuideV">60%</span></div>
+        <div class="field-row"><input id="volGuide" type="range" min="0" max="4" step="0.1" value="1.5"><span class="val" id="volGuideV">150%</span></div>
       </div>
       <div class="field">
         <label for="volBack">Backing volume</label>
-        <div class="field-row"><input id="volBack" type="range" min="0" max="1" step="0.05" value="0.9"><span class="val" id="volBackV">90%</span></div>
+        <div class="field-row"><input id="volBack" type="range" min="0" max="2" step="0.05" value="0.8"><span class="val" id="volBackV">80%</span></div>
+      </div>
+      <div class="field">
+        <label for="volTone">Guide tone volume</label>
+        <div class="field-row"><input id="volTone" type="range" min="0" max="1" step="0.05" value="0"><span class="val" id="volToneV">off</span></div>
+        <span class="small">A clean tone that plays the target note. Easier to hear than the voice when the backing is busy.</span>
       </div>
     </div>
 
@@ -181,6 +186,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <label for="delay">Delay compensation</label>
         <div class="field-row"><input id="delay" type="range" min="0" max="500" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
         <span class="small">If your line always looks slightly late compared with the target, raise this. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
+      </div>
+      <div class="field" id="micSelField" hidden>
+        <label for="micSel">Microphone</label>
+        <select id="micSel" style="font:inherit;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);width:100%"></select>
+        <span class="small">With Bluetooth earbuds, choosing the phone’s own microphone can keep the earbuds in better sound quality.</span>
       </div>
       <div class="field">
         <label for="zoom">Seconds on screen</label>
@@ -245,11 +255,35 @@ const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
 function ensureCtx(){
   if(!S.ctx){
     const AC=window.AudioContext||window.webkitAudioContext; S.ctx=new AC({latencyHint:'interactive'});
-    S.gGuide=S.ctx.createGain(); S.gBack=S.ctx.createGain();
-    S.gGuide.connect(S.ctx.destination); S.gBack.connect(S.ctx.destination);
-    S.gGuide.gain.value=+$('#volGuide').value; S.gBack.gain.value=+$('#volBack').value;
+    const c=S.ctx;
+    S.limiter=c.createDynamicsCompressor();
+    S.limiter.threshold.value=-8; S.limiter.knee.value=6; S.limiter.ratio.value=16; S.limiter.attack.value=0.003; S.limiter.release.value=0.2;
+    S.master=c.createGain(); S.master.gain.value=1.3;
+    S.limiter.connect(S.master).connect(c.destination);
+    S.gGuide=c.createGain(); S.gBack=c.createGain(); S.gTone=c.createGain();
+    S.gGuide.connect(S.limiter); S.gBack.connect(S.limiter); S.gTone.connect(S.limiter);
+    applyGains();
   }
   return S.ctx;
+}
+function applyGains(){
+  if(!S.gGuide) return;
+  S.gGuide.gain.value=+$('#volGuide').value*(S.normGuide||1);
+  S.gBack.gain.value=+$('#volBack').value*(S.normBack||1);
+  S.gTone.gain.value=+$('#volTone').value*0.35;
+}
+// loudness of the louder passages (90th percentile of 50 ms RMS)
+function loudness(buf){
+  if(!buf) return 0;
+  const x=buf.getChannelData(0), win=Math.round(buf.sampleRate*0.05), vals=[];
+  for(let s=0;s+win<=x.length;s+=win){ let e=0; for(let j=0;j<win;j+=2){ const v=x[s+j]; e+=v*v; } vals.push(Math.sqrt(e/(win/2))); }
+  if(!vals.length) return 0; vals.sort((a,b)=>a-b); return vals[Math.floor(vals.length*0.9)];
+}
+function normalize(){
+  const target=0.15, lg=loudness(S.guideBuf), lb=loudness(S.backBuf);
+  S.normGuide=lg>1e-4?Math.min(10,Math.max(0.3,target/lg)):1;
+  S.normBack=lb>1e-4?Math.min(4,Math.max(0.3,target/lb)):1;
+  applyGains();
 }
 async function decode(buf){
   const ctx=ensureCtx();
@@ -310,6 +344,7 @@ async function loadGuide(file){
       for(let i=0;i<tr.n;i++) tt[i]=i*tr.hop+tr.t0;
       setTarget(tt,sm);
     }
+    normalize();
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -318,7 +353,7 @@ async function loadGuide(file){
 }
 async function loadBack(file){
   stop(); setStatus('Loading '+file.name+'…');
-  try{ S.backBuf=await decode(await file.arrayBuffer()); $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime(); setStatus('Backing loaded. Press Play and sing along.'); }
+  try{ S.backBuf=await decode(await file.arrayBuffer()); normalize(); $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime(); setStatus('Backing loaded. Press Play and sing along.'); }
   catch(err){ setStatus('Could not read this audio file. Try an MP3, M4A or WAV file.',true); }
 }
 function updateDur(){
@@ -351,6 +386,7 @@ async function play(){
   if(S.pos>=S.dur-0.05) S.pos=0;
   if(loopActive()){ const st=loopStart(); if(S.pos<st-0.01||S.pos>=S.loop.b) S.pos=st; S.pass={n:0,hit:0,sum:0}; }
   startSources(S.pos);
+  startTone();
   S.playing=true;
   S.pts=S.pts.filter(p=>p.t<S.pos-0.02); S.micHist=[];
   if(S.pos<0.5) S.stat={n:0,hit:0,sum:0};
@@ -405,9 +441,25 @@ function stop(){
   if(!S.playing) return;
   S.pos=Math.min(S.dur,songTime()); S.playing=false;
   S.srcs.forEach(s=>{ try{s.stop()}catch(e){} s.disconnect(); }); S.srcs=[];
+  stopTone();
   $('#playLbl').textContent='Play';
   try{ S.wake&&S.wake.release(); }catch(e){} S.wake=null;
   showResult(); updateTime(); draw();
+}
+function startTone(){
+  stopTone(); const c=S.ctx;
+  const o=c.createOscillator(); o.type='triangle'; o.frequency.value=220;
+  const env=c.createGain(); env.gain.value=0;
+  const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1800;
+  o.connect(lp).connect(env).connect(S.gTone); o.start();
+  S.tone={o,env,m:NaN};
+}
+function stopTone(){ if(!S.tone) return; try{S.tone.o.stop()}catch(e){} S.tone.o.disconnect(); S.tone.env.disconnect(); S.tone=null; }
+function updateTone(now){
+  if(!S.tone) return; const c=S.ctx, tg=targetAt(now), T=S.tone;
+  if(isNaN(tg)){ if(!isNaN(T.m)){ T.env.gain.setTargetAtTime(0,c.currentTime,0.02); T.m=NaN; } return; }
+  const m=Math.round(tg);
+  if(m!==T.m){ T.o.frequency.setTargetAtTime(m2f(m),c.currentTime,isNaN(T.m)?0.001:0.015); if(isNaN(T.m)) T.env.gain.setTargetAtTime(1,c.currentTime,0.01); T.m=m; }
 }
 function seek(t){ const was=S.playing; if(was) stop(); S.pos=Math.max(0,Math.min(S.dur,t)); if(was) play(); else { updateTime(); draw(); } }
 function resetRun(clearPts){ if(clearPts) S.pts=[]; S.stat={n:0,hit:0,sum:0}; $('#rScore').textContent='–'; $('#result').hidden=true; }
@@ -417,13 +469,24 @@ function updateTime(){ $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur)
 async function startMic(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setStatus('This browser cannot use the microphone here. Open the page from an https:// address in Chrome, Safari or Ecosia.',true); return false; }
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    const ac={echoCancellation:false,noiseSuppression:false,autoGainControl:false}; if(S.micId) ac.deviceId={exact:S.micId};
+    const stream=await navigator.mediaDevices.getUserMedia({audio:ac});
     const ctx=ensureCtx(); const src=ctx.createMediaStreamSource(stream);
     const an=ctx.createAnalyser(); an.fftSize=2048; an.smoothingTimeConstant=0; src.connect(an);
     S.mic={stream,an,src}; S.micBuf=new Float32Array(an.fftSize);
     $('#micDot').classList.add('live');
+    listMics(stream);
     return true;
   }catch(err){ setStatus('The microphone was not allowed. Allow it in the browser’s site settings, then try again.',true); return false; }
+}
+async function listMics(stream){
+  try{
+    const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
+    if(devs.length<2) return;
+    const cur=stream.getAudioTracks()[0].getSettings().deviceId, sel=$('#micSel');
+    sel.innerHTML=''; devs.forEach((d,i)=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||('Microphone '+(i+1)); if(d.deviceId===cur) o.selected=true; sel.appendChild(o); });
+    $('#micSelField').hidden=false;
+  }catch(e){}
 }
 function stopMic(){ if(!S.mic) return; S.mic.stream.getTracks().forEach(t=>t.stop()); S.mic.src.disconnect(); S.mic=null; $('#micDot').classList.remove('live'); }
 
@@ -458,7 +521,7 @@ function tick(){
   const now=songTime();
   if(loopActive()&&now>=S.loop.b){ loopRestart(); requestAnimationFrame(tick); return; }
   if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); return; }
-  let you=NaN, tgtNow=targetAt(now);
+  let you=NaN; updateTone(now);
   if(S.mic){
     const raw=micPitch();
     S.micHist.push(raw); if(S.micHist.length>5) S.micHist.shift();
@@ -588,8 +651,10 @@ $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.
 $('#backFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadBack(f).finally(()=>e.target.value=''); });
 $('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
 const pct=v=>Math.round(v*100)+'%';
-$('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); if(S.gGuide) S.gGuide.gain.value=+e.target.value; });
-$('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); if(S.gBack) S.gBack.gain.value=+e.target.value; });
+$('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); });
+$('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
+$('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; applyGains(); });
+$('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; if(was) play(); });
 $('#delay').addEventListener('input',e=>{ S.delay=+e.target.value/1000; $('#delayV').textContent=e.target.value+' ms'; try{localStorage.setItem('pc-delay',e.target.value)}catch(x){} });
 $('#zoom').addEventListener('input',e=>{ S.win=+e.target.value; $('#zoomV').textContent=S.win+' s'; draw(); });
 $('#ignoreOct').addEventListener('change',e=>{ S.ignoreOct=e.target.checked; });
@@ -616,7 +681,7 @@ async function makeDemo(){
 }
 (async()=>{
   size(); draw();
-  try{ ensureCtx(); const d=await makeDemo(); S.guideBuf=d.buf; setTarget(d.tt,d.mm); updateDur(); updateTime(); draw(); }catch(e){}
+  try{ ensureCtx(); const d=await makeDemo(); S.guideBuf=d.buf; normalize(); setTarget(d.tt,d.mm); updateDur(); updateTime(); draw(); }catch(e){}
 })();
 </script>
 </body>
