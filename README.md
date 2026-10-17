@@ -14,3 +14,6 @@ Save: saves the take as a WAV file to your phone's Downloads folder.
 Press Stop listening to end playback.
 Good to know:
 Recordings stay until you reload or close the page, so save the takes you want to keep. The page keeps the latest 15 takes.
+
+
+The first time you separate a song, it downloads the model (67 MB) from Hugging Face, a public site for AI models, and keeps it on that device
