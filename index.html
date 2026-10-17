@@ -90,6 +90,19 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .loop select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 .loop-info{font-family:var(--font-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:1 1 220px;min-width:0}
 .loop-info b{color:var(--fg);font-weight:600}
+.lib{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.lib h2{font-family:var(--font-display);font-size:18px;margin:0}
+.lib-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.sep-box{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:8px;background:var(--lane-alt)}
+.sep-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.bar{flex:1 1 160px;height:6px;border-radius:3px;background:var(--line);overflow:hidden;max-width:320px}
+.bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.engine{font-family:var(--font-mono);font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface);color:var(--muted)}
+.engine.gpu{background:var(--accent-soft);color:var(--accent)}
+.song-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.song-row .take-info{flex:1 1 220px}
+.song-row button{padding:7px 12px}
+.danger{color:var(--off);border-color:var(--off)}
 .takes{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .takes h2{font-family:var(--font-display);font-size:18px;margin:0}
 .take{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 0;border-top:1px solid var(--line)}
@@ -161,6 +174,25 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   <section class="panel result" id="result" hidden>
     <h2>Last run</h2>
     <div id="resultText"></div>
+  </section>
+
+  <section class="panel lib" id="libPanel">
+    <div class="lib-head">
+      <h2>Song library</h2>
+      <span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span>
+    </div>
+    <div class="sep-box" id="sepBox" hidden>
+      <div class="sep-row"><b id="sepName"></b><span class="engine" id="engine" hidden></span></div>
+      <div class="sep-row"><div class="bar"><i id="sepFill"></i></div><span class="small" id="sepText"></span></div>
+      <div class="sep-row">
+        <label class="check" for="keepLib"><input id="keepLib" type="checkbox" checked>Keep in library</label>
+        <button id="sepCancel" type="button">Cancel</button>
+        <button id="sepSave" type="button" hidden>Save vocals</button>
+      </div>
+      <span class="small">Keep this page open and the screen on while it works. On a laptop this takes a few minutes; on a phone it can take much longer.</span>
+    </div>
+    <div id="songList"></div>
+    <span class="small" id="libEmpty">Choose a song (for example your part MP3). The app separates the voice, finds the pitch line and keeps the vocals here for next time.</span>
   </section>
 
   <section class="panel takes" id="takesPanel" hidden>
@@ -339,6 +371,23 @@ async function readZip(ab){
 
 // ===== guide loading =====
 function setTarget(times,midis){ S.tT=times; S.tM=midis; computeView(); }
+async function pitchLineOf(buf,onProg){
+  const len=Math.ceil(buf.duration*11025), oc=new OfflineAudioContext(1,len,11025);
+  const src=oc.createBufferSource(); src.buffer=buf;
+  const hp=oc.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=70;
+  const lp=oc.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2800;
+  src.connect(hp).connect(lp).connect(oc.destination); src.start();
+  const x=(await oc.startRendering()).getChannelData(0);
+  const tr=await yinTrack(x,11025,80,700,onProg);
+  const mm=contourOf(tr), tt=new Float32Array(tr.n);
+  for(let i=0;i<tr.n;i++) tt[i]=i*tr.hop+tr.t0;
+  return {tt,mm,hop:tr.hop,t0:tr.t0};
+}
+function songReady(name,label){
+  normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
+  $('#songName').textContent=name; $('#guideName').textContent=label||name;
+  updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
+}
 async function loadGuide(file){
   stop(); setStatus('Loading '+file.name+'…');
   try{
@@ -354,17 +403,8 @@ async function loadGuide(file){
       setTarget(tt,mm);
     }else{
       const buf=await decode(ab); S.guideBuf=buf;
-      setStatus('Finding the pitch line in '+file.name+'…');
-      const len=Math.ceil(buf.duration*11025), oc=new OfflineAudioContext(1,len,11025);
-      const src=oc.createBufferSource(); src.buffer=buf;
-      const hp=oc.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=70;
-      const lp=oc.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2800;
-      src.connect(hp).connect(lp).connect(oc.destination); src.start();
-      const x=(await oc.startRendering()).getChannelData(0);
-      const tr=await yinTrack(x,11025,80,700,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'));
-      const sm=contourOf(tr), tt=new Float32Array(tr.n);
-      for(let i=0;i<tr.n;i++) tt[i]=i*tr.hop+tr.t0;
-      setTarget(tt,sm);
+      const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'));
+      setTarget(pl.tt,pl.mm);
     }
     normalize(); S.stretch=null;
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
@@ -535,6 +575,170 @@ function updateTone(now){
 function seek(t){ const was=S.playing; if(was) stop(); S.pos=Math.max(0,Math.min(S.dur,t)); if(was) play(); else { updateTime(); draw(); } }
 function resetRun(clearPts){ if(clearPts) S.pts=[]; S.stat={n:0,hit:0,sum:0}; $('#rScore').textContent='–'; $('#result').hidden=true; }
 function updateTime(){ $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur); }
+
+// ===== song library (IndexedDB) =====
+const LIB_SR=24000;
+function libDb(){ return new Promise((res,rej)=>{ try{ const r=indexedDB.open('part-coach',1);
+  r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('songs')) db.createObjectStore('songs',{keyPath:'id',autoIncrement:true}); if(!db.objectStoreNames.contains('files')) db.createObjectStore('files'); };
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }catch(e){ rej(e); } }); }
+async function idbDo(store,mode,fn){ const db=await libDb(); return await new Promise((res,rej)=>{ const tx=db.transaction(store,mode), st=tx.objectStore(store); let out; const q=fn(st); if(q) q.onsuccess=()=>{ out=q.result; }; tx.oncomplete=()=>res(out); tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error||new Error('storage full')); }); }
+const libList=()=>idbDo('songs','readonly',st=>st.getAll()).catch(()=>[]);
+const libGet=id=>idbDo('songs','readonly',st=>st.get(id));
+const libPut=rec=>idbDo('songs','readwrite',st=>st.put(rec));
+const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id));
+const fileGet=k=>idbDo('files','readonly',st=>st.get(k)).catch(()=>null);
+const filePut=(k,v)=>idbDo('files','readwrite',st=>st.put(v,k)).catch(()=>{});
+
+async function renderLib(){
+  const songs=(await libList()).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur})).sort((a,b)=>b.created-a.created);
+  const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0;
+  for(const s of songs){
+    const row=document.createElement('div'); row.className='song-row';
+    const d=new Date(s.created);
+    row.innerHTML=`<div class="take-info"><b></b><span>${fmtT(s.dur)} · added ${d.toLocaleDateString()}</span></div>`;
+    row.querySelector('b').textContent=s.name;
+    const mk=(label,fn,cls)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; if(cls) b.className=cls; b.addEventListener('click',()=>fn(b)); row.appendChild(b); return b; };
+    mk('Practise',()=>openLibSong(s.id),'primary');
+    mk('Save vocals',b=>saveLibVocals(s.id,b));
+    mk('Delete',b=>{ if(b.dataset.armed){ libDel(s.id).then(renderLib); return; } b.dataset.armed='1'; b.textContent='Tap again to delete'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; b.classList.remove('danger'); } },4000); });
+    list.appendChild(row);
+  }
+}
+async function openLibSong(id){
+  stop(); setStatus('Opening from the library…');
+  try{
+    const s=await libGet(id); if(!s) throw new Error('song not found');
+    const pcm=new Int16Array(s.pcm), f=new Float32Array(pcm.length); for(let i=0;i<pcm.length;i++) f[i]=pcm[i]/32768;
+    ensureCtx(); const buf=new AudioBuffer({numberOfChannels:1,length:f.length,sampleRate:s.sr}); buf.copyToChannel(f,0);
+    const mm=new Float32Array(s.contour), tt=new Float32Array(mm.length); for(let i=0;i<mm.length;i++) tt[i]=i*s.hop+s.t0;
+    S.guideBuf=buf; S.backBuf=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
+    setTarget(tt,mm); songReady(s.name,s.name+' (vocals, from library)');
+    setStatus('Ready. The vocals are the guide. Load a backing track too if you have one.');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(err){ setStatus('Could not open this song: '+((err&&err.message)||'unknown error')+'.',true); }
+}
+async function saveLibVocals(id,btn){
+  const s=await libGet(id); if(!s) return; btn.disabled=true; const old=btn.textContent; btn.textContent='Preparing…';
+  try{ await saveVocalsFile(new Int16Array(s.pcm),s.sr,s.name+' (vocals only)'); }
+  finally{ btn.disabled=false; btn.textContent=old; }
+}
+function loadScript(url){ return new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src=url; sc.onload=res; sc.onerror=()=>rej(new Error('could not load '+url)); document.head.appendChild(sc); }); }
+async function saveVocalsFile(pcm,sr,base){
+  let blob=null, ext='mp3';
+  try{
+    if(!window.lamejs) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js');
+    const enc=new lamejs.Mp3Encoder(1,sr,96), parts=[], step=1152*20;
+    for(let i=0;i<pcm.length;i+=step){ const b=enc.encodeBuffer(pcm.subarray(i,i+step)); if(b.length) parts.push(new Uint8Array(b)); if(i%(step*50)===0) await new Promise(r=>setTimeout(r,0)); }
+    const end=enc.flush(); if(end.length) parts.push(new Uint8Array(end));
+    blob=new Blob(parts,{type:'audio/mpeg'});
+  }catch(err){
+    ext='wav'; const n=pcm.length, buf=new ArrayBuffer(44+n*2), v=new DataView(buf);
+    const w=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
+    w(0,'RIFF'); v.setUint32(4,36+n*2,true); w(8,'WAVE'); w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+    v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40,n*2,true);
+    new Int16Array(buf,44).set(pcm); blob=new Blob([buf],{type:'audio/wav'});
+  }
+  const name=base.replace(/[\\/:*?"<>|]/g,'')+'.'+ext;
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000);
+  setStatus('Saved '+name+' to your downloads.');
+}
+async function toInt16(buf,sr){
+  const len=Math.max(1,Math.ceil(buf.duration*sr)), oc=new OfflineAudioContext(1,len,sr);
+  const s=oc.createBufferSource(); s.buffer=buf; s.connect(oc.destination); s.start();
+  const x=(await oc.startRendering()).getChannelData(0);
+  let peak=1e-6; for(let i=0;i<x.length;i++){ const a=Math.abs(x[i]); if(a>peak) peak=a; }
+  const g=Math.min(4,0.9/peak), out=new Int16Array(x.length);
+  for(let i=0;i<x.length;i++){ const v=Math.max(-1,Math.min(1,x[i]*g)); out[i]=v<0?v*32768:v*32767; }
+  return out;
+}
+
+// ===== vocal separation (MDX-Net Voc_FT, runs in a worker) =====
+const ORT_URL='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.webgpu.min.js';
+const ORT_DIR='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/';
+const MODEL_PARTS=5, MODEL_KEY='voc_ft_v1', MODEL_BYTES=66762490;
+S.sep={worker:null,token:0};
+function sepUI(text,p){ $('#sepText').textContent=text; $('#sepFill').style.width=(p==null?0:Math.round(p*100))+'%'; }
+const fmtLeft=s=>s<60?Math.max(1,Math.round(s))+' s':Math.round(s/60)+' min';
+const MODEL_URLS=[
+  'https://huggingface.co/masszhou/mdxnet/resolve/main/UVR-MDX-NET-Voc_FT.onnx',
+  'https://huggingface.co/Politrees/UVR_resources/resolve/main/models/MDXNet/UVR-MDX-NET-Voc_FT.onnx'
+];
+async function fetchWithProgress(url,my,total){
+  const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status);
+  const rd=r.body.getReader(), ch=[]; let got=0;
+  for(;;){ const {done,value}=await rd.read(); if(done) break; ch.push(value); got+=value.length;
+    if(my===S.sep.token) sepUI('Downloading the separation model… '+Math.round(got/1e6)+' of '+Math.round(total/1e6)+' MB (only the first time)',got/total); }
+  return new Blob(ch);
+}
+async function getModel(my){
+  const cached=await fileGet(MODEL_KEY); if(cached&&cached.size===MODEL_BYTES) return cached;
+  let m=null, lastErr=null;
+  for(const u of MODEL_URLS){ try{ const b=await fetchWithProgress(u,my,MODEL_BYTES); if(b.size===MODEL_BYTES){ m=b; break; } lastErr=new Error('unexpected file size'); }catch(e){ lastErr=e; } if(my!==S.sep.token) return null; }
+  if(!m){ // fallback: model parts uploaded next to the page
+    try{ const blobs=[]; for(let i=0;i<MODEL_PARTS;i++){ blobs.push(await fetchWithProgress('voc_ft.part'+i+'.wasm',my,MODEL_BYTES/MODEL_PARTS)); } const b=new Blob(blobs); if(b.size===MODEL_BYTES) m=b; }catch(e){}
+  }
+  if(!m) throw new Error('the separation model could not be downloaded ('+((lastErr&&lastErr.message)||'network error')+'). Check the internet connection and try again');
+  filePut(MODEL_KEY,m); return m;
+}
+async function separateSong(file){
+  if(S.sep.worker) return;
+  stop(); const my=++S.sep.token, name=file.name.replace(/\.(mp3|m4a|wav|ogg|aac|flac)$/i,'').replace(/_/g,' ');
+  $('#sepBox').hidden=false; $('#sepSave').hidden=true; $('#sepName').textContent=name; $('#engine').hidden=true; $('#sepCancel').hidden=false; $('#sepFile').disabled=true;
+  let wake=null, wurl=null;
+  try{ if(navigator.wakeLock) wake=await navigator.wakeLock.request('screen'); }catch(e){}
+  try{
+    try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); }catch(e){}
+    sepUI('Reading the song…',0);
+    const mix=await decode(await file.arrayBuffer()); if(my!==S.sep.token) return;
+    const model=await getModel(my); if(!model||my!==S.sep.token) return;
+    sepUI('Preparing the audio…',0);
+    const sr=44100, len=Math.ceil(mix.duration*sr), oc=new OfflineAudioContext(2,len,sr);
+    const s=oc.createBufferSource(); s.buffer=mix; s.connect(oc.destination); s.start();
+    const st=await oc.startRendering(); if(my!==S.sep.token) return;
+    const L=st.getChannelData(0).slice(), R=st.getChannelData(1).slice();
+    const mbuf=await model.arrayBuffer();
+    wurl=URL.createObjectURL(new Blob([document.getElementById('sepWorkerSrc').textContent],{type:'text/javascript'}));
+    const w=new Worker(wurl); S.sep.worker=w;
+    sepUI('Starting the separation engine…',0);
+    let t0=performance.now();
+    const res=await new Promise((resolve,reject)=>{
+      w.onmessage=e=>{ const d=e.data;
+        if(d.type==='mode'){ const el=$('#engine'); el.hidden=false; el.textContent=d.mode==='gpu'?'Using graphics card':'Using processor only'; el.classList.toggle('gpu',d.mode==='gpu'); t0=performance.now(); sepUI('Separating vocals… 0%',0); }
+        else if(d.type==='progress'){ const el=(performance.now()-t0)/1000; sepUI('Separating vocals… '+Math.round(d.p*100)+'% · about '+fmtLeft(el/d.p*(1-d.p))+' left',d.p); }
+        else if(d.type==='done') resolve(d); else if(d.type==='error') reject(new Error(d.msg)); };
+      w.onerror=e=>{ e.preventDefault&&e.preventDefault(); reject(new Error(e.message||'the separation engine could not start')); };
+      w.postMessage({model:mbuf,ortUrl:ORT_URL,ortDir:ORT_DIR,L:L.buffer,R:R.buffer,preferGpu:true},[mbuf,L.buffer,R.buffer]);
+    });
+    w.terminate(); S.sep.worker=null; if(my!==S.sep.token) return;
+    sepUI('Finding the pitch line…',1);
+    const VL=new Float32Array(res.VL), VR=new Float32Array(res.VR), n=VL.length;
+    const oL=st.getChannelData(0), oR=st.getChannelData(1);
+    const voc=new AudioBuffer({numberOfChannels:1,length:n,sampleRate:sr}), vm=new Float32Array(n);
+    for(let i=0;i<n;i++) vm[i]=0.5*(VL[i]+VR[i]); voc.copyToChannel(vm,0);
+    const back=new AudioBuffer({numberOfChannels:2,length:n,sampleRate:sr}), bl=new Float32Array(n), br=new Float32Array(n);
+    for(let i=0;i<n;i++){ bl[i]=oL[i]-VL[i]; br[i]=oR[i]-VR[i]; } back.copyToChannel(bl,0); back.copyToChannel(br,1);
+    const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1));
+    S.guideBuf=voc; S.backBuf=back; $('#backName').textContent='Backing from the separation (this time only)'; $('#backClear').hidden=false;
+    setTarget(pl.tt,pl.mm); songReady(name,name+' (separated vocals)');
+    let note='';
+    if($('#keepLib').checked){
+      sepUI('Saving to the library…',1);
+      try{ const pcm=await toInt16(voc,LIB_SR); await libPut({name,created:Date.now(),dur:voc.duration,sr:LIB_SR,pcm:pcm.buffer,contour:pl.mm,hop:pl.hop,t0:pl.t0}); await renderLib(); note=' Saved in the library.'; }
+      catch(err){ note=' It could not be saved in the library (the browser storage may be full).'; }
+    }
+    S.sep.last={voc,name}; $('#sepSave').hidden=false;
+    sepUI('Done in '+fmtLeft((performance.now()-t0)/1000)+'.'+note,1); $('#sepCancel').hidden=true;
+    setStatus('Ready. The separated vocals are the guide and the rest of the song is the backing. Press Play.');
+  }catch(err){
+    if(my!==S.sep.token) return;
+    if(S.sep.worker){ S.sep.worker.terminate(); S.sep.worker=null; }
+    sepUI('Separation stopped: '+((err&&err.message)||'unknown error')+'.',null); $('#sepCancel').hidden=true;
+  }finally{
+    if(wurl) URL.revokeObjectURL(wurl); try{ wake&&wake.release(); }catch(e){} $('#sepFile').disabled=false;
+  }
+}
+function cancelSeparation(){ S.sep.token++; if(S.sep.worker){ S.sep.worker.terminate(); S.sep.worker=null; } sepUI('Cancelled.',null); $('#sepCancel').hidden=true; $('#sepFile').disabled=false; }
 
 // ===== voice recording =====
 const REC_SRC=`class PcRec extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(2048);this.n=0;this.t=0;}
@@ -829,6 +1033,10 @@ $('#tempo').addEventListener('change',async e=>{
   if(S.rate===1){ S.stretch=null; setStatus('Normal tempo.'); if(was) play(); return; }
   const ok=await prepareTempo(); if(ok&&was) play();
 });
+$('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
+$('#sepCancel').addEventListener('click',cancelSeparation);
+$('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
+renderLib();
 $('#setA').addEventListener('click',()=>setLoopPoint('a'));
 $('#setB').addEventListener('click',()=>setLoopPoint('b'));
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
@@ -875,6 +1083,127 @@ async function makeDemo(){
   size(); draw();
   try{ ensureCtx(); const d=await makeDemo(); S.guideBuf=d.buf; normalize(); setTarget(d.tt,d.mm); updateDur(); updateTime(); draw(); }catch(e){}
 })();
+</script>
+<script type="text/plain" id="sepWorkerSrc">
+// Vocal separation core (MDX-Net Voc_FT). Runs in a worker or Node.
+const N_FFT=7680, HOP=1024, DIM_F=3072, DIM_T=256, COMP=1.021;
+const TRIM=N_FFT/2, CHUNK=HOP*(DIM_T-1), GEN=CHUNK-2*TRIM;
+
+const WIN=new Float64Array(N_FFT);
+for(let i=0;i<N_FFT;i++) WIN[i]=0.5-0.5*Math.cos(2*Math.PI*i/N_FFT);
+
+// mixed-radix FFT (radix 2/3/4/5), forward, out-of-place
+const FACT=[4,4,4,4,2,3,5];
+const TWR=new Float64Array(N_FFT), TWI=new Float64Array(N_FFT);
+for(let i=0;i<N_FFT;i++){ TWR[i]=Math.cos(-2*Math.PI*i/N_FFT); TWI[i]=Math.sin(-2*Math.PI*i/N_FFT); }
+const SR=new Float64Array(5), SI=new Float64Array(5);
+function fftRec(oR,oI,oOff,iR,iI,iOff,fstride,fi,n){
+  const p=FACT[fi], m=n/p;
+  if(m===1){ for(let j=0;j<p;j++){ oR[oOff+j]=iR[iOff+j*fstride]; oI[oOff+j]=iI[iOff+j*fstride]; } }
+  else { for(let j=0;j<p;j++) fftRec(oR,oI,oOff+j*m,iR,iI,iOff+j*fstride,fstride*p,fi+1,m); }
+  const qs=N_FFT/p;
+  for(let k=0;k<m;k++){
+    for(let j=0;j<p;j++){
+      const a=oR[oOff+j*m+k], b=oI[oOff+j*m+k];
+      const ti=(j*k*fstride)%N_FFT, wr=TWR[ti], wi=TWI[ti];
+      SR[j]=a*wr-b*wi; SI[j]=a*wi+b*wr;
+    }
+    for(let q=0;q<p;q++){
+      let xr=0, xi=0;
+      for(let j=0;j<p;j++){ const ti=(j*q*qs)%N_FFT, wr=TWR[ti], wi=TWI[ti]; xr+=SR[j]*wr-SI[j]*wi; xi+=SR[j]*wi+SI[j]*wr; }
+      oR[oOff+q*m+k]=xr; oI[oOff+q*m+k]=xi;
+    }
+  }
+}
+const inR=new Float64Array(N_FFT), inI=new Float64Array(N_FFT), outR=new Float64Array(N_FFT), outI=new Float64Array(N_FFT);
+function fft(){ fftRec(outR,outI,0,inR,inI,0,1,0,N_FFT); }
+
+const WSUM=(()=>{ const len=CHUNK+N_FFT, w=new Float64Array(len);
+  for(let t=0;t<DIM_T;t++) for(let i=0;i<N_FFT;i++) w[t*HOP+i]+=WIN[i]*WIN[i]; return w; })();
+
+// L, R: Float32Array channels at 44.1 kHz. run(input Float32Array[4*DIM_F*DIM_T]) -> Promise<Float32Array same size>
+async function separate(L, R, run, onProgress){
+  const n=L.length, pad=GEN-(n%GEN), total=n+pad;
+  const VL=new Float32Array(n), VR=new Float32Array(n);
+  const steps=Math.ceil(total/GEN);
+  const cl=new Float64Array(CHUNK), cr=new Float64Array(CHUNK);
+  const inp=new Float32Array(4*DIM_F*DIM_T);
+  const olaL=new Float64Array(CHUNK+N_FFT), olaR=new Float64Array(CHUNK+N_FFT);
+  const PL=TRIM; // reflect pad size inside STFT = N_FFT/2
+  const plane=DIM_F*DIM_T;
+  for(let s=0;s<steps;s++){
+    const base=s*GEN;
+    for(let j=0;j<CHUNK;j++){ const idx=base+j-TRIM; const ok=idx>=0&&idx<n; cl[j]=ok?L[idx]:0; cr[j]=ok?R[idx]:0; }
+    // STFT (center, reflect)
+    for(let t=0;t<DIM_T;t++){
+      const start=t*HOP-PL;
+      for(let i=0;i<N_FFT;i++){
+        let p=start+i; if(p<0) p=-p; else if(p>=CHUNK) p=2*(CHUNK-1)-p;
+        inR[i]=cl[p]*WIN[i]; inI[i]=cr[p]*WIN[i];
+      }
+      fft();
+      for(let k=0;k<DIM_F;k++){
+        const nk=(N_FFT-k)%N_FFT;
+        const a=outR[k], b=outI[k], c=outR[nk], d=outI[nk];
+        const o=k*DIM_T+t;
+        inp[o]=(a+c)/2; inp[plane+o]=(b-d)/2;          // L re, im
+        inp[2*plane+o]=(b+d)/2; inp[3*plane+o]=-(a-c)/2; // R re, im
+      }
+    }
+    const out=await run(inp);
+    // ISTFT
+    olaL.fill(0); olaR.fill(0);
+    for(let t=0;t<DIM_T;t++){
+      inR.fill(0); inI.fill(0);
+      for(let k=0;k<DIM_F;k++){
+        const o=k*DIM_T+t;
+        const Lr=out[o], Li=k?out[plane+o]:0, Rr=out[2*plane+o], Ri=k?out[3*plane+o]:0;
+        // conj(Z) for inverse via forward FFT
+        inR[k]=Lr-Ri; inI[k]=-(Li+Rr);
+        if(k>0){ const nk=N_FFT-k; inR[nk]=Lr+Ri; inI[nk]=-(Rr-Li); }
+      }
+      fft();
+      const off=t*HOP;
+      for(let i=0;i<N_FFT;i++){ const w=WIN[i]/N_FFT; olaL[off+i]+=outR[i]*w; olaR[off+i]-=outI[i]*w; }
+    }
+    for(let j=0;j<GEN;j++){
+      const dst=base+j; if(dst>=n) break;
+      const src=PL+TRIM+j, ws=WSUM[src]>1e-8?WSUM[src]:1e-8;
+      VL[dst]=olaL[src]/ws*COMP; VR[dst]=olaR[src]/ws*COMP;
+    }
+    if(onProgress) onProgress((s+1)/steps);
+  }
+  return [VL,VR];
+}
+const SEP={N_FFT,HOP,DIM_F,DIM_T,separate};
+if(typeof module!=='undefined') module.exports=SEP;
+
+self.onmessage=async e=>{
+  const d=e.data;
+  try{
+    importScripts(d.ortUrl);
+    ort.env.wasm.numThreads=1; ort.env.wasm.proxy=false; ort.env.wasm.wasmPaths=d.ortDir;
+    const model=new Uint8Array(d.model);
+    let sess=null, mode='cpu';
+    if(self.GPUAdapter && !GPUAdapter.prototype.requestAdapterInfo){ GPUAdapter.prototype.requestAdapterInfo=function(){ return Promise.resolve(this.info||{}); }; }
+    if(d.preferGpu && self.navigator && navigator.gpu){
+      try{ const ad=await navigator.gpu.requestAdapter(); if(ad){ sess=await ort.InferenceSession.create(model,{executionProviders:['webgpu']}); mode='gpu'; } }catch(err){ sess=null; }
+    }
+    if(!sess){ sess=await ort.InferenceSession.create(model,{executionProviders:['wasm']}); mode='cpu'; }
+    self.postMessage({type:'mode',mode});
+    const once=async inp=>{ const o=await sess.run({input:new ort.Tensor('float32',inp,[1,4,SEP.DIM_F,SEP.DIM_T])}); return o[sess.outputNames[0]].data; };
+    const run=async inp=>{
+      if(mode==='gpu'){
+        try{ const out=await once(inp); let ok=true; for(let i=0;i<out.length;i+=997){ if(!Number.isFinite(out[i])){ ok=false; break; } } if(ok) return out; }catch(err){}
+        try{ sess.release&&sess.release(); }catch(e){}
+        sess=await ort.InferenceSession.create(model,{executionProviders:['wasm']}); mode='cpu'; self.postMessage({type:'mode',mode});
+      }
+      return once(inp);
+    };
+    const [VL,VR]=await SEP.separate(new Float32Array(d.L),new Float32Array(d.R),run,p=>self.postMessage({type:'progress',p}));
+    self.postMessage({type:'done',VL:VL.buffer,VR:VR.buffer},[VL.buffer,VR.buffer]);
+  }catch(err){ self.postMessage({type:'error',msg:(err&&err.message)||String(err)}); }
+};
 </script>
 </body>
 </html>
