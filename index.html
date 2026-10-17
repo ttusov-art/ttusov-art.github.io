@@ -86,6 +86,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .loop .lbl{margin-right:2px}
 .loop-on{display:inline-flex;align-items:center;gap:8px;font-weight:500}
 .loop-on input{width:20px;height:20px;accent-color:var(--accent)}
+.sel{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 .loop select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 .loop-info{font-family:var(--font-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:1 1 220px;min-width:0}
 .loop-info b{color:var(--fg);font-weight:600}
@@ -128,6 +129,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <button id="back" type="button">−5 s</button>
     <button id="restart" type="button">Start over</button>
     <span class="time" id="time">0:00 / 0:00</span>
+    <label class="small" for="tempo">Tempo</label>
+    <select id="tempo" class="sel">
+      <option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7">70%</option><option value="0.75">75%</option>
+      <option value="0.8">80%</option><option value="0.85">85%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option>
+    </select>
     <label class="mic" for="micOn"><span class="dot" id="micDot"></span><input id="micOn" type="checkbox" checked>Sing with microphone</label>
   </section>
   <section class="panel loop" aria-label="Loop a section">
@@ -250,7 +256,7 @@ const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
   tT:null,tM:null, // target times (song seconds) and midi (NaN = none)
   pos:0,pos0:0,startAt:0,playing:false,srcs:[],
   mic:null,micBuf:null,micHist:[],pts:[],stat:{n:0,hit:0,sum:0},
-  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
+  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
 
 function ensureCtx(){
   if(!S.ctx){
@@ -344,7 +350,7 @@ async function loadGuide(file){
       for(let i=0;i<tr.n;i++) tt[i]=i*tr.hop+tr.t0;
       setTarget(tt,sm);
     }
-    normalize();
+    normalize(); S.stretch=null;
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -353,7 +359,7 @@ async function loadGuide(file){
 }
 async function loadBack(file){
   stop(); setStatus('Loading '+file.name+'…');
-  try{ S.backBuf=await decode(await file.arrayBuffer()); normalize(); $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime(); setStatus('Backing loaded. Press Play and sing along.'); }
+  try{ S.backBuf=await decode(await file.arrayBuffer()); normalize(); S.stretch=null; $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime(); setStatus('Backing loaded. Press Play and sing along.'); }
   catch(err){ setStatus('Could not read this audio file. Try an MP3, M4A or WAV file.',true); }
 }
 function updateDur(){
@@ -377,12 +383,13 @@ function targetAt(t){
 }
 
 // ===== playback =====
-function songTime(){ return S.playing? S.pos0+(S.ctx.currentTime-S.startAt) : S.pos; }
+function songTime(){ return S.playing? S.pos0+(S.ctx.currentTime-S.startAt)*S.rate : S.pos; }
 async function play(){
   if(S.playing) return;
   if(!S.guideBuf&&!S.backBuf){ setStatus('Load a song first.',true); return; }
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
   if($('#micOn').checked && !S.mic){ const ok=await startMic(); if(!ok) $('#micOn').checked=false; }
+  if(S.rate!==1&&!(S.stretch&&S.stretch.rate===S.rate)){ const ok=await prepareTempo(); if(!ok) return; }
   if(S.pos>=S.dur-0.05) S.pos=0;
   if(loopActive()){ const st=loopStart(); if(S.pos<st-0.01||S.pos>=S.loop.b) S.pos=st; S.pass={n:0,hit:0,sum:0}; }
   startSources(S.pos);
@@ -398,11 +405,55 @@ async function play(){
 function startSources(pos){
   const ctx=S.ctx; S.srcs.forEach(s=>{ try{s.stop()}catch(e){} s.disconnect(); }); S.srcs=[];
   const at=ctx.currentTime+0.06;
-  for(const [buf,g] of [[S.guideBuf,S.gGuide],[S.backBuf,S.gBack]]){
-    if(!buf||pos>=buf.duration) continue;
-    const s=ctx.createBufferSource(); s.buffer=buf; s.connect(g); s.start(at,pos); S.srcs.push(s);
+  const st=S.rate!==1&&S.stretch&&S.stretch.rate===S.rate?S.stretch:null;
+  for(const [orig,str,g] of [[S.guideBuf,st&&st.guide,S.gGuide],[S.backBuf,st&&st.back,S.gBack]]){
+    if(!orig||pos>=orig.duration) continue;
+    const buf=st?str:orig; if(!buf) continue;
+    const s=ctx.createBufferSource(); s.buffer=buf; s.connect(g); s.start(at,st?pos/S.rate:pos); S.srcs.push(s);
   }
   S.startAt=at; S.pos0=pos;
+}
+// ===== tempo (WSOLA time-stretch, keeps pitch) =====
+async function wsola(bufs,rate,onProg){
+  const N=2048,Hs=1024,D=8,tol=512,Ha=Hs*rate,Nd=N/D,td=tol/D;
+  const len=Math.max(...bufs.map(b=>b?b.length:0)), sr=S.ctx.sampleRate;
+  const mono=bufs.map(b=>{ if(!b) return null; if(b.numberOfChannels===1) return b.getChannelData(0);
+    const a=b.getChannelData(0),c=b.getChannelData(1),m=new Float32Array(b.length); for(let i=0;i<m.length;i++) m[i]=0.5*(a[i]+c[i]); return m; });
+  const ny=Math.ceil(len/D), y=new Float32Array(ny);
+  for(const m of mono){ if(!m) continue; for(let i=0;i<ny;i++){ let s=0; const o=i*D; for(let k=0;k<D;k++){ const v=m[o+k]; if(v!==undefined) s+=v; } y[i]+=s/D; } }
+  const outLen=Math.ceil(len/rate)+N, frames=Math.floor((outLen-N)/Hs)+1;
+  const win=new Float32Array(N); for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
+  const outs=mono.map(m=>m?new Float32Array(outLen):null);
+  let start=0;
+  for(let k=0;k<frames;k++){
+    const o=k*Hs;
+    for(let c=0;c<mono.length;c++){ const m=mono[c]; if(!m) continue; const out=outs[c];
+      for(let j=0;j<N;j++){ const idx=start+j; if(idx>=0&&idx<m.length) out[o+j]+=m[idx]*win[j]; } }
+    const nextNom=Math.round((k+1)*Ha), base=Math.floor(nextNom/D), tp=Math.floor((start+Hs)/D);
+    let best=0;
+    if(tp>=0&&tp+Nd<ny&&base-td>=0&&base+td+Nd<ny){
+      let bc=-Infinity;
+      for(let d=-td;d<=td;d++){ const cb=base+d; let s=0,e=1e-9; for(let j=0;j<Nd;j++){ const v=y[cb+j]; s+=y[tp+j]*v; e+=v*v; } const sc=s/Math.sqrt(e); if(sc>bc){ bc=sc; best=d; } }
+    }
+    start=(base+best)*D;
+    if(k%400===0){ onProg&&onProg(k/frames); await new Promise(r=>setTimeout(r,0)); }
+  }
+  return outs.map(o=>{ if(!o) return null; const b=new AudioBuffer({numberOfChannels:1,length:o.length,sampleRate:sr}); b.copyToChannel(o,0); return b; });
+}
+async function prepareTempo(){
+  if(S.rate===1) return true;
+  if(S.stretch&&S.stretch.rate===S.rate) return true;
+  if(!S.guideBuf&&!S.backBuf) return false;
+  const r=S.rate, sel=$('#tempo'); sel.disabled=true; $('#play').disabled=true;
+  S.stretch=null;
+  try{
+    const [guide,back]=await wsola([S.guideBuf,S.backBuf],r,p=>setStatus('Preparing '+Math.round(r*100)+'% tempo… '+Math.round(p*100)+'%'));
+    if(S.rate!==r) return false;
+    S.stretch={rate:r,guide,back};
+    setStatus('Tempo '+Math.round(r*100)+'% ready. The pitch stays the same.');
+    return true;
+  }catch(err){ setStatus('Could not change the tempo on this device: '+((err&&err.message)||'out of memory')+'.',true); S.rate=1; sel.value='1'; return false; }
+  finally{ sel.disabled=false; $('#play').disabled=false; }
 }
 // ===== loop =====
 function loopActive(){ const L=S.loop; return L.on&&L.a!=null&&L.b!=null&&L.b-L.a>=0.5; }
@@ -469,8 +520,10 @@ function updateTime(){ $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur)
 async function startMic(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setStatus('This browser cannot use the microphone here. Open the page from an https:// address in Chrome, Safari or Ecosia.',true); return false; }
   try{
-    const ac={echoCancellation:false,noiseSuppression:false,autoGainControl:false}; if(S.micId) ac.deviceId={exact:S.micId};
-    const stream=await navigator.mediaDevices.getUserMedia({audio:ac});
+    const ac={echoCancellation:false,noiseSuppression:false,autoGainControl:false};
+    let stream=null;
+    if(S.micId){ try{ stream=await navigator.mediaDevices.getUserMedia({audio:{...ac,deviceId:{exact:S.micId}}}); }catch(e){ if(e&&e.name==='NotAllowedError') throw e; S.micId=null; try{localStorage.removeItem('pc-mic')}catch(x){} } }
+    if(!stream) stream=await navigator.mediaDevices.getUserMedia({audio:ac});
     const ctx=ensureCtx(); const src=ctx.createMediaStreamSource(stream);
     const an=ctx.createAnalyser(); an.fftSize=2048; an.smoothingTimeConstant=0; src.connect(an);
     S.mic={stream,an,src}; S.micBuf=new Float32Array(an.fftSize);
@@ -527,7 +580,7 @@ function tick(){
     S.micHist.push(raw); if(S.micHist.length>5) S.micHist.shift();
     const ok=S.micHist.filter(v=>!isNaN(v));
     if(!isNaN(raw)&&ok.length>=3){ you=median(ok); }
-    const tSung=now-S.delay;
+    const tSung=now-S.delay*S.rate;
     if(!isNaN(you)&&tSung>=0){
       const tg=targetAt(tSung); let c=null;
       if(!isNaN(tg)){ const d=centsDiff(you,tg); c=grade(d); S.stat.n++; S.stat.sum+=d; if(c==='good') S.stat.hit++; if(loopActive()&&inLoop(tSung)){ S.pass.n++; S.pass.sum+=d; if(c==='good') S.pass.hit++; } }
@@ -535,7 +588,7 @@ function tick(){
     } else if(tSung>=0) S.pts.push({t:tSung,m:NaN,c:null});
   }
   // readout
-  const tgShow=targetAt(now-S.delay);
+  const tgShow=targetAt(now-S.delay*S.rate);
   $('#rTarget').textContent=isNaN(tgShow)?'–':noteName(Math.round(tgShow));
   const ry=$('#rYou'), rc=$('#rCents');
   if(!isNaN(you)){
@@ -638,6 +691,12 @@ canvas.addEventListener('pointermove',e=>{ if(!drag) return; const pps=(canvas.c
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,()=>{ drag=null; }));
 
 // ===== controls =====
+$('#tempo').addEventListener('change',async e=>{
+  const was=S.playing; if(was) stop();
+  S.rate=+e.target.value; S.ghost=[];
+  if(S.rate===1){ S.stretch=null; setStatus('Normal tempo.'); if(was) play(); return; }
+  const ok=await prepareTempo(); if(ok&&was) play();
+});
 $('#setA').addEventListener('click',()=>setLoopPoint('a'));
 $('#setB').addEventListener('click',()=>setLoopPoint('b'));
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
@@ -649,15 +708,16 @@ $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop()
 $('#micOn').addEventListener('change',async e=>{ if(e.target.checked){ const ok=await startMic(); if(!ok) e.target.checked=false; } else stopMic(); });
 $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadGuide(f).finally(()=>e.target.value=''); });
 $('#backFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadBack(f).finally(()=>e.target.value=''); });
-$('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
+$('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
 const pct=v=>Math.round(v*100)+'%';
 $('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); });
 $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
 $('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; applyGains(); });
-$('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; if(was) play(); });
+$('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; if(was) play(); });
 $('#delay').addEventListener('input',e=>{ S.delay=+e.target.value/1000; $('#delayV').textContent=e.target.value+' ms'; try{localStorage.setItem('pc-delay',e.target.value)}catch(x){} });
 $('#zoom').addEventListener('input',e=>{ S.win=+e.target.value; $('#zoomV').textContent=S.win+' s'; draw(); });
 $('#ignoreOct').addEventListener('change',e=>{ S.ignoreOct=e.target.checked; });
+try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
 try{ const d=localStorage.getItem('pc-delay'); if(d){ $('#delay').value=d; S.delay=+d/1000; $('#delayV').textContent=d+' ms'; } }catch(x){}
 new ResizeObserver(()=>{ size(); draw(); }).observe(canvas);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
