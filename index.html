@@ -254,6 +254,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <ul class="tips">
         <li>Score counts only moments where both the target and you have a clear pitch.</li>
         <li>Turn the guide voice down once you know the part, and sing it alone over the backing.</li>
+        <li>You can turn the screen off while singing. The song, scoring and recording keep going, and lock-screen controls can pause it.</li>
       </ul>
     </div>
   </section>
@@ -456,7 +457,8 @@ async function play(){
   if(S.pos<0.5) S.stat={n:0,hit:0,sum:0};
   $('#playLbl').textContent='Pause'; $('#result').hidden=true;
   setStatus(S.mic?'Listening. Sing along with the target line.':'Playing without the microphone.');
-  try{ if(navigator.wakeLock) S.wake=await navigator.wakeLock.request('screen'); }catch(e){}
+  startBg(); mediaOn();
+  try{ if(navigator.wakeLock&&!document.hidden) S.wake=await navigator.wakeLock.request('screen'); }catch(e){}
   requestAnimationFrame(tick);
 }
 function startSources(pos){
@@ -555,6 +557,7 @@ function stop(){
   stopTone();
   $('#playLbl').textContent='Play';
   try{ S.wake&&S.wake.release(); }catch(e){} S.wake=null;
+  stopBg(); mediaOff();
   showResult(); updateTime(); draw();
 }
 function startTone(){
@@ -827,15 +830,17 @@ async function reviewTake(k,withBacking){
   }
   S.review={take:k,at,song0,rate:k.rate,srcs,end:at+(k.buf.duration-voiceOff)};
   $('#playLbl').textContent='Stop listening'; setStatus('Playing take '+k.no+(withBacking?' with the backing.':', your voice only.'));
-  renderTakes(); requestAnimationFrame(reviewTick);
+  renderTakes(); startBg(); mediaOn(); requestAnimationFrame(reviewTick);
 }
 function reviewTick(){
   if(!S.review) return;
+  if(document.hidden){ requestAnimationFrame(reviewTick); return; }
   if(S.ctx.currentTime>=S.review.end){ stopReview(); return; }
   updateTime(); draw(); requestAnimationFrame(reviewTick);
 }
 function stopReview(){
   if(!S.review) return;
+  stopBg(); mediaOff();
   S.pos=Math.min(S.dur,songTime());
   S.review.srcs.forEach(n=>{ try{n.stop&&n.stop()}catch(e){} n.disconnect(); });
   S.review=null; $('#playLbl').textContent='Play'; setStatus('Stopped.'); renderTakes(); updateTime(); draw();
@@ -907,8 +912,13 @@ function grade(d){ const a=Math.abs(d); return a<=50?'good':a<=100?'near':'off';
 // ===== main loop =====
 function tick(){
   if(!S.playing) return;
+  if(!document.hidden) step();
+  if(S.playing) requestAnimationFrame(tick);
+}
+function step(){
+  if(!S.playing) return;
   const now=songTime();
-  if(loopActive()&&now>=S.loop.b){ loopRestart(); requestAnimationFrame(tick); return; }
+  if(loopActive()&&now>=S.loop.b){ loopRestart(); return; }
   if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); return; }
   let you=NaN; updateTone(now);
   if(S.mic){
@@ -932,9 +942,46 @@ function tick(){
     if(!isNaN(tgShow)){ const d=Math.round(centsDiff(you,tgShow)); rc.textContent=(d>0?'+':d<0?'−':'±')+Math.abs(d)+' ¢'; rc.className='c-'+grade(d); }
     else { rc.textContent='–'; rc.className=''; }
   } else { ry.textContent=S.mic?'–':'mic off'; rc.textContent='–'; rc.className=''; }
+  if(document.hidden) return;
   const st=loopActive()?S.pass:S.stat; $('#rScore').textContent=st.n>20? Math.round(100*st.hit/st.n)+'%':'–';
   updateTime(); draw();
-  requestAnimationFrame(tick);
+}
+// background driver: keeps the song logic running while the screen is off
+function startBg(){
+  stopBg();
+  S.bg=setInterval(()=>{
+    if(!document.hidden) return;
+    if(S.playing) step();
+    else if(S.review&&S.ctx.currentTime>=S.review.end) stopReview();
+  },40);
+}
+function stopBg(){ if(S.bg){ clearInterval(S.bg); S.bg=null; } }
+// silent media element + media session: lock-screen controls and keeps Android treating the page as playing media
+function silentWavUrl(){
+  const sr=8000,n=sr,b=new ArrayBuffer(44+n*2),v=new DataView(b),w=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
+  w(0,'RIFF'); v.setUint32(4,36+n*2,true); w(8,'WAVE'); w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40,n*2,true);
+  return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
+}
+function mediaOn(){
+  try{
+    if(!S.keep){ S.keep=new Audio(silentWavUrl()); S.keep.loop=true; }
+    const p=S.keep.play(); if(p&&p.catch) p.catch(()=>{});
+    if('mediaSession' in navigator){
+      navigator.mediaSession.metadata=new MediaMetadata({title:$('#songName').textContent,artist:'Part Coach'});
+      navigator.mediaSession.playbackState='playing';
+      if(!S.msHandlers){
+        S.msHandlers=true;
+        navigator.mediaSession.setActionHandler('play',()=>{ if(!S.playing&&!S.review) play(); });
+        navigator.mediaSession.setActionHandler('pause',()=>stop());
+        try{ navigator.mediaSession.setActionHandler('stop',()=>stop()); }catch(e){}
+        try{ navigator.mediaSession.setActionHandler('seekbackward',()=>seek(songTime()-5)); }catch(e){}
+      }
+    }
+  }catch(e){}
+}
+function mediaOff(){
+  try{ if(S.keep) S.keep.pause(); if('mediaSession' in navigator) navigator.mediaSession.playbackState='paused'; }catch(e){}
 }
 function showResult(){
   if(S.stat.n<30){ $('#result').hidden=true; return; }
@@ -1061,7 +1108,11 @@ try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
 try{ const d=localStorage.getItem('pc-delay'); if(d){ $('#delay').value=d; S.delay=+d/1000; $('#delayV').textContent=d+' ms'; } }catch(x){}
 new ResizeObserver(()=>{ size(); draw(); }).observe(canvas);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
-document.addEventListener('visibilitychange',()=>{ if(document.hidden) stop(); });
+document.addEventListener('visibilitychange',async()=>{
+  if(document.hidden) return;
+  updateTime(); draw();
+  if(S.playing&&!S.wake){ try{ if(navigator.wakeLock) S.wake=await navigator.wakeLock.request('screen'); }catch(e){} }
+});
 
 // ===== demo =====
 async function makeDemo(){
