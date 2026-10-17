@@ -90,6 +90,15 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .loop select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 .loop-info{font-family:var(--font-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:1 1 220px;min-width:0}
 .loop-info b{color:var(--fg);font-weight:600}
+.takes{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.takes h2{font-family:var(--font-display);font-size:18px;margin:0}
+.take{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.take:first-of-type{border-top:0}
+.take-info{flex:1 1 220px;min-width:0;display:flex;flex-direction:column}
+.take-info b{font-weight:600}
+.take-info span{font-family:var(--font-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.take button{padding:7px 12px}
+.take.now{background:var(--accent-soft);margin-inline:-16px;padding-inline:16px}
 .result{padding:14px 16px;display:flex;flex-direction:column;gap:6px}
 .result h2{font-family:var(--font-display);font-size:18px;margin:0}
 .tips{margin:0;padding-left:18px;color:var(--muted);font-size:13px;max-width:75ch}
@@ -135,6 +144,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <option value="0.8">80%</option><option value="0.85">85%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option>
     </select>
     <label class="mic" for="micOn"><span class="dot" id="micDot"></span><input id="micOn" type="checkbox" checked>Sing with microphone</label>
+    <label class="mic" for="recOn" style="margin-left:0"><input id="recOn" type="checkbox" checked>Record my voice</label>
   </section>
   <section class="panel loop" aria-label="Loop a section">
     <span class="lbl">Loop</span>
@@ -151,6 +161,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   <section class="panel result" id="result" hidden>
     <h2>Last run</h2>
     <div id="resultText"></div>
+  </section>
+
+  <section class="panel takes" id="takesPanel" hidden>
+    <h2>Your recordings</h2>
+    <div id="takeList"></div>
+    <span class="small">Recordings stay here until you reload the page. Save the ones you want to keep.</span>
   </section>
 
   <section class="grid2">
@@ -256,7 +272,7 @@ const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
   tT:null,tM:null, // target times (song seconds) and midi (NaN = none)
   pos:0,pos0:0,startAt:0,playing:false,srcs:[],
   mic:null,micBuf:null,micHist:[],pts:[],stat:{n:0,hit:0,sum:0},
-  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
+  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,takes:[],pending:[],takeNo:0,review:null,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
 
 function ensureCtx(){
   if(!S.ctx){
@@ -383,7 +399,7 @@ function targetAt(t){
 }
 
 // ===== playback =====
-function songTime(){ return S.playing? S.pos0+(S.ctx.currentTime-S.startAt)*S.rate : S.pos; }
+function songTime(){ if(S.review) return S.review.song0+(S.ctx.currentTime-S.review.at)*S.review.rate; return S.playing? S.pos0+(S.ctx.currentTime-S.startAt)*S.rate : S.pos; }
 async function play(){
   if(S.playing) return;
   if(!S.guideBuf&&!S.backBuf){ setStatus('Load a song first.',true); return; }
@@ -393,6 +409,7 @@ async function play(){
   if(S.pos>=S.dur-0.05) S.pos=0;
   if(loopActive()){ const st=loopStart(); if(S.pos<st-0.01||S.pos>=S.loop.b) S.pos=st; S.pass={n:0,hit:0,sum:0}; }
   startSources(S.pos);
+  beginTake();
   startTone();
   S.playing=true;
   S.pts=S.pts.filter(p=>p.t<S.pos-0.02); S.micHist=[];
@@ -460,13 +477,14 @@ function loopActive(){ const L=S.loop; return L.on&&L.a!=null&&L.b!=null&&L.b-L.
 function loopStart(){ return Math.max(0,S.loop.a-S.loop.lead); }
 function inLoop(t){ return S.loop.a!=null&&S.loop.b!=null&&t>=S.loop.a&&t<=S.loop.b; }
 function loopRestart(){
+  endTake();
   const L=S.loop;
   if(S.pass.n>=20) S.passes.push(Math.round(100*S.pass.hit/S.pass.n));
   S.ghost=S.pts.filter(p=>p.t>=L.a-0.05&&p.t<=L.b+0.05);
   const st=loopStart();
   S.pts=S.pts.filter(p=>p.t<st-0.02||p.t>L.b+0.05);
   S.pass={n:0,hit:0,sum:0}; S.micHist=[];
-  startSources(st); updateLoopUI();
+  startSources(st); beginTake(); updateLoopUI();
 }
 function setLoopPoint(which){
   if(!S.dur) return;
@@ -489,7 +507,9 @@ function updateLoopUI(){
 }
 const fmtT1=t=>{ const m=Math.floor(t/60), s=t-m*60; return m+':'+(s<10?'0':'')+s.toFixed(1); };
 function stop(){
+  if(S.review){ stopReview(); return; }
   if(!S.playing) return;
+  endTake();
   S.pos=Math.min(S.dur,songTime()); S.playing=false;
   S.srcs.forEach(s=>{ try{s.stop()}catch(e){} s.disconnect(); }); S.srcs=[];
   stopTone();
@@ -516,6 +536,117 @@ function seek(t){ const was=S.playing; if(was) stop(); S.pos=Math.max(0,Math.min
 function resetRun(clearPts){ if(clearPts) S.pts=[]; S.stat={n:0,hit:0,sum:0}; $('#rScore').textContent='–'; $('#result').hidden=true; }
 function updateTime(){ $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur); }
 
+// ===== voice recording =====
+const REC_SRC=`class PcRec extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(2048);this.n=0;this.t=0;}
+process(inp){const c=inp[0]&&inp[0][0];if(c){if(this.n===0)this.t=currentTime;this.b.set(c,this.n);this.n+=c.length;if(this.n>=2048){this.port.postMessage({t:this.t,d:this.b.slice(0,this.n)});this.n=0;}}return true;}}
+registerProcessor('pc-rec',PcRec);`;
+async function attachRecorder(src){
+  const ctx=S.ctx, sink=ctx.createGain(); sink.gain.value=0; sink.connect(ctx.destination);
+  try{
+    if(!S.recModule){ const url=URL.createObjectURL(new Blob([REC_SRC],{type:'text/javascript'})); await ctx.audioWorklet.addModule(url); S.recModule=true; }
+    const node=new AudioWorkletNode(ctx,'pc-rec'); node.port.onmessage=e=>onRecChunk(e.data.t,e.data.d);
+    src.connect(node); node.connect(sink); S.recNode=node;
+  }catch(err){
+    const sp=ctx.createScriptProcessor(2048,1,1);
+    sp.onaudioprocess=e=>{ const d=e.inputBuffer.getChannelData(0); onRecChunk(e.playbackTime-d.length/ctx.sampleRate,d.slice()); };
+    src.connect(sp); sp.connect(sink); S.recNode=sp;
+  }
+}
+function onRecChunk(t,d){
+  const sr=S.ctx.sampleRate, t1=t+d.length/sr;
+  for(const k of S.pending){
+    const a=Math.max(t,k.ctx0), b=Math.min(t1,k.ctxEnd); if(b<=a) continue;
+    k.chunks.push(d.subarray(Math.round((a-t)*sr),Math.round((b-t)*sr)));
+  }
+}
+function beginTake(){
+  if(!S.mic||!$('#recOn').checked) return;
+  S.pending.push({ctx0:S.startAt,ctxEnd:Infinity,song0:S.pos0-S.delay*S.rate,rate:S.rate,delay:S.delay,chunks:[],stat0:{...S.stat},loop:loopActive()});
+}
+function endTake(){
+  const open=S.pending.filter(k=>k.ctxEnd===Infinity); if(!open.length) return;
+  const now=S.ctx.currentTime, st=loopActive()?S.pass:null;
+  for(const k of open){
+    k.ctxEnd=now;
+    const s=st||{n:S.stat.n-k.stat0.n,hit:S.stat.hit-k.stat0.hit};
+    k.score=s.n>=20?Math.round(100*s.hit/s.n):null;
+    k.song1=k.song0+(now-k.ctx0)*k.rate;
+    k.pts=S.pts.filter(p=>p.t>=k.song0-0.05&&p.t<=k.song1+0.05).map(p=>({...p}));
+  }
+  setTimeout(finishTakes,400);
+}
+function finishTakes(){
+  const done=S.pending.filter(k=>k.ctxEnd!==Infinity); S.pending=S.pending.filter(k=>k.ctxEnd===Infinity);
+  for(const k of done){
+    const n=k.chunks.reduce((a,c)=>a+c.length,0); if(n<S.ctx.sampleRate*1.5) continue;
+    const data=new Float32Array(n); let o=0; for(const c of k.chunks){ data.set(c,o); o+=c.length; }
+    S.takes.push({no:++S.takeNo,song0:k.song0,song1:k.song1,rate:k.rate,score:k.score,pts:k.pts,data,sr:S.ctx.sampleRate,song:$('#songName').textContent});
+  }
+  let total=0; for(let i=S.takes.length-1;i>=0;i--){ total+=S.takes[i].data.length; if(i<S.takes.length-15||total>S.ctx.sampleRate*1500){ S.takes.splice(0,i+1); break; } }
+  renderTakes();
+}
+function renderTakes(){
+  const list=$('#takeList'); $('#takesPanel').hidden=!S.takes.length;
+  list.innerHTML='';
+  [...S.takes].reverse().forEach(k=>{
+    const row=document.createElement('div'); row.className='take'+(S.review&&S.review.take===k?' now':'');
+    const len=k.data.length/k.sr;
+    row.innerHTML=`<div class="take-info"><b>Take ${k.no}</b><span>${fmtT(Math.max(0,k.song0))}–${fmtT(k.song1)} · ${Math.round(len)} s${k.rate!==1?' · tempo '+Math.round(k.rate*100)+'%':''}${k.score!=null?' · '+k.score+'% on pitch':''}</span></div>`;
+    const mk=(label,fn)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; b.addEventListener('click',fn); row.appendChild(b); };
+    mk('Voice only',()=>reviewTake(k,false));
+    mk('With backing',()=>reviewTake(k,true));
+    mk('Save',()=>saveTake(k));
+    list.appendChild(row);
+  });
+}
+function takeBuffer(k){
+  if(k.buf) return k.buf;
+  const b=new AudioBuffer({numberOfChannels:1,length:k.data.length,sampleRate:k.sr}); b.copyToChannel(k.data,0);
+  let e=0,c=0; for(let i=0;i<k.data.length;i+=4){ e+=k.data[i]*k.data[i]; c++; } const rms=Math.sqrt(e/Math.max(1,c));
+  k.gain=rms>1e-5?Math.min(20,0.08/rms):1; k.buf=b; return b;
+}
+async function reviewTake(k,withBacking){
+  stop(); if(S.review) stopReview();
+  const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
+  if(withBacking&&k.rate!==S.rate){ S.rate=k.rate; $('#tempo').value=String(k.rate); }
+  if(withBacking&&S.rate!==1&&!(S.stretch&&S.stretch.rate===S.rate)){ const ok=await prepareTempo(); if(!ok) return; }
+  const at=ctx.currentTime+0.08, srcs=[];
+  let voiceOff=0, song0=k.song0;
+  if(song0<0){ voiceOff=-song0/k.rate; song0=0; }
+  const vg=ctx.createGain(); vg.gain.value=takeBuffer(k)&&k.gain; vg.connect(S.limiter);
+  const vs=ctx.createBufferSource(); vs.buffer=k.buf; vs.connect(vg); vs.start(at,voiceOff); srcs.push(vs,vg);
+  if(withBacking){
+    const st=k.rate!==1?S.stretch:null, buf=st?st.back:S.backBuf, g=S.gBack;
+    const fallback=!buf&&S.guideBuf;
+    const b=buf||(st?st.guide:S.guideBuf);
+    if(b){ const s=ctx.createBufferSource(); s.buffer=b; const gg=ctx.createGain(); gg.gain.value=fallback?0.5:1; s.connect(gg).connect(fallback?S.gGuide:g); s.start(at,st?song0/k.rate:song0); srcs.push(s,gg); }
+  }
+  S.review={take:k,at,song0,rate:k.rate,srcs,end:at+(k.buf.duration-voiceOff)};
+  $('#playLbl').textContent='Stop listening'; setStatus('Playing take '+k.no+(withBacking?' with the backing.':', your voice only.'));
+  renderTakes(); requestAnimationFrame(reviewTick);
+}
+function reviewTick(){
+  if(!S.review) return;
+  if(S.ctx.currentTime>=S.review.end){ stopReview(); return; }
+  updateTime(); draw(); requestAnimationFrame(reviewTick);
+}
+function stopReview(){
+  if(!S.review) return;
+  S.pos=Math.min(S.dur,songTime());
+  S.review.srcs.forEach(n=>{ try{n.stop&&n.stop()}catch(e){} n.disconnect(); });
+  S.review=null; $('#playLbl').textContent='Play'; setStatus('Stopped.'); renderTakes(); updateTime(); draw();
+}
+function saveTake(k){
+  const n=k.data.length, buf=new ArrayBuffer(44+n*2), v=new DataView(buf), g=k.gain||(takeBuffer(k),k.gain);
+  const w=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
+  w(0,'RIFF'); v.setUint32(4,36+n*2,true); w(8,'WAVE'); w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,k.sr,true); v.setUint32(28,k.sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40,n*2,true);
+  for(let i=0;i<n;i++){ const s=Math.max(-1,Math.min(1,k.data[i]*g)); v.setInt16(44+i*2,s<0?s*32768:s*32767,true); }
+  const name=(k.song||'Part Coach').replace(/[\\/:*?"<>|]/g,'')+' - take '+k.no+'.wav';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf],{type:'audio/wav'})); a.download=name;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },2000);
+  setStatus('Saved '+name+' to your downloads.');
+}
 // ===== microphone =====
 async function startMic(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setStatus('This browser cannot use the microphone here. Open the page from an https:// address in Chrome, Safari or Ecosia.',true); return false; }
@@ -527,6 +658,7 @@ async function startMic(){
     const ctx=ensureCtx(); const src=ctx.createMediaStreamSource(stream);
     const an=ctx.createAnalyser(); an.fftSize=2048; an.smoothingTimeConstant=0; src.connect(an);
     S.mic={stream,an,src}; S.micBuf=new Float32Array(an.fftSize);
+    await attachRecorder(src);
     $('#micDot').classList.add('live');
     listMics(stream);
     return true;
@@ -541,7 +673,7 @@ async function listMics(stream){
     $('#micSelField').hidden=false;
   }catch(e){}
 }
-function stopMic(){ if(!S.mic) return; S.mic.stream.getTracks().forEach(t=>t.stop()); S.mic.src.disconnect(); S.mic=null; $('#micDot').classList.remove('live'); }
+function stopMic(){ if(!S.mic) return; if(S.recNode){ try{S.recNode.disconnect()}catch(e){} S.recNode=null; } S.mic.stream.getTracks().forEach(t=>t.stop()); S.mic.src.disconnect(); S.mic=null; $('#micDot').classList.remove('live'); }
 
 // real-time YIN on the analyser window, decimated to ~16 kHz
 const RT={dec:3,x:null,cm:null};
@@ -664,7 +796,7 @@ function draw(){
   g.lineWidth=3; g.lineCap='round';
   const colors={good:col('--good'),near:col('--near'),off:col('--off'),none:col('--you-idle')};
   let prev=null;
-  for(const p of S.pts){
+  for(const p of (S.review?S.review.take.pts:S.pts)){
     if(p.t<t0-0.2||p.t>t1){ prev=null; continue; }
     if(isNaN(p.m)){ prev=null; continue; }
     if(prev&&p.t-prev.t<0.12&&Math.abs(p.m-prev.m)<1.5){
@@ -702,7 +834,7 @@ $('#setB').addEventListener('click',()=>setLoopPoint('b'));
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
 $('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); });
-$('#play').addEventListener('click',()=>S.playing?stop():play());
+$('#play').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 $('#back').addEventListener('click',()=>seek(songTime()-5));
 $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop(); resetRun(true); S.pos=0; if(was) play(); else { updateTime(); draw(); } });
 $('#micOn').addEventListener('change',async e=>{ if(e.target.checked){ const ok=await startMic(); if(!ok) e.target.checked=false; } else stopMic(); });
