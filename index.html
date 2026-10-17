@@ -208,6 +208,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <span class="lbl">Guide (target line)</span>
         <div class="row">
           <span class="btn primary">Load session or vocals<input id="guideFile" type="file" aria-label="Load a .ntpsession file or a vocals-only audio file"></span>
+          <button id="addLib" type="button" hidden>Add to library</button>
         </div>
         <span class="file-name" id="guideName">A .ntpsession file, or a vocals-only MP3.</span>
       </div>
@@ -305,7 +306,7 @@ const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
   tT:null,tM:null, // target times (song seconds) and midi (NaN = none)
   pos:0,pos0:0,startAt:0,playing:false,srcs:[],
   mic:null,micBuf:null,micHist:[],pts:[],stat:{n:0,hit:0,sum:0},
-  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,takes:[],pending:[],takeNo:0,review:null,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
+  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
 
 function ensureCtx(){
   if(!S.ctx){
@@ -407,7 +408,7 @@ async function loadGuide(file){
       const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'));
       setTarget(pl.tt,pl.mm);
     }
-    normalize(); S.stretch=null;
+    normalize(); S.stretch=null; S.cur={libId:null,fromFile:true}; $('#addLib').hidden=false;
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -416,7 +417,10 @@ async function loadGuide(file){
 }
 async function loadBack(file){
   stop(); setStatus('Loading '+file.name+'…');
-  try{ S.backBuf=await decode(await file.arrayBuffer()); normalize(); S.stretch=null; $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime(); setStatus('Backing loaded. Press Play and sing along.'); }
+  try{ S.backBuf=await decode(await file.arrayBuffer()); normalize(); S.stretch=null; S.curBackBlob=file; $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime();
+    let msg='Backing loaded. Press Play and sing along.';
+    if(S.cur.libId!=null){ try{ await libUpdate(S.cur.libId,{backBlob:file,backName:file.name.replace(/\.[a-z0-9]+$/i,'')}); await renderLib(); msg='Backing loaded and kept with this song in the library.'; }catch(e){ msg='Backing loaded, but it could not be saved in the library (storage may be full).'; } }
+    setStatus(msg); }
   catch(err){ setStatus('Could not read this audio file. Try an MP3, M4A or WAV file.',true); }
 }
 function updateDur(){
@@ -589,16 +593,33 @@ const libList=()=>idbDo('songs','readonly',st=>st.getAll()).catch(()=>[]);
 const libGet=id=>idbDo('songs','readonly',st=>st.get(id));
 const libPut=rec=>idbDo('songs','readwrite',st=>st.put(rec));
 const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id));
+async function libUpdate(id,patch){ const s=await libGet(id); if(!s) return; Object.assign(s,patch); await libPut(s); }
+async function encodeMp3(buf,kbps,onProg,mono=true){
+  if(!window.lamejs) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js');
+  const sr=buf.sampleRate, n=buf.length; let chs;
+  if(mono||buf.numberOfChannels<2){ const a=buf.getChannelData(0); if(buf.numberOfChannels>1){ const b=buf.getChannelData(1), m=new Float32Array(n); for(let i=0;i<n;i++) m[i]=0.5*(a[i]+b[i]); chs=[m]; } else chs=[a]; }
+  else chs=[buf.getChannelData(0),buf.getChannelData(1)];
+  const nc=chs.length;
+  const enc=new lamejs.Mp3Encoder(nc,sr,kbps), parts=[], step=1152*16;
+  const toI=(x,a,b)=>{ const o=new Int16Array(b-a); for(let i=a;i<b;i++){ const v=Math.max(-1,Math.min(1,x[i])); o[i-a]=v<0?v*32768:v*32767; } return o; };
+  for(let i=0;i<n;i+=step){
+    const j=Math.min(n,i+step), L=toI(chs[0],i,j), mp=nc===2?enc.encodeBuffer(L,toI(chs[1],i,j)):enc.encodeBuffer(L);
+    if(mp.length) parts.push(new Uint8Array(mp));
+    if((i/step)%40===0){ onProg&&onProg(i/n); await new Promise(r=>setTimeout(r,0)); }
+  }
+  const end=enc.flush(); if(end.length) parts.push(new Uint8Array(end));
+  return new Blob(parts,{type:'audio/mpeg'});
+}
 const fileGet=k=>idbDo('files','readonly',st=>st.get(k)).catch(()=>null);
 const filePut=(k,v)=>idbDo('files','readwrite',st=>st.put(v,k)).catch(()=>{});
 
 async function renderLib(){
-  const songs=(await libList()).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur})).sort((a,b)=>b.created-a.created);
+  const songs=(await libList()).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur,back:!!s.backBlob})).sort((a,b)=>b.created-a.created);
   const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0;
   for(const s of songs){
     const row=document.createElement('div'); row.className='song-row';
     const d=new Date(s.created);
-    row.innerHTML=`<div class="take-info"><b></b><span>${fmtT(s.dur)} · added ${d.toLocaleDateString()}</span></div>`;
+    row.innerHTML=`<div class="take-info"><b></b><span>${fmtT(s.dur)} · ${s.back?'vocals + backing':'vocals only'} · added ${d.toLocaleDateString()}</span></div>`;
     row.querySelector('b').textContent=s.name;
     const mk=(label,fn,cls)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; if(cls) b.className=cls; b.addEventListener('click',()=>fn(b)); row.appendChild(b); return b; };
     mk('Practise',()=>openLibSong(s.id),'primary');
@@ -613,10 +634,13 @@ async function openLibSong(id){
     const s=await libGet(id); if(!s) throw new Error('song not found');
     const pcm=new Int16Array(s.pcm), f=new Float32Array(pcm.length); for(let i=0;i<pcm.length;i++) f[i]=pcm[i]/32768;
     ensureCtx(); const buf=new AudioBuffer({numberOfChannels:1,length:f.length,sampleRate:s.sr}); buf.copyToChannel(f,0);
-    const mm=new Float32Array(s.contour), tt=new Float32Array(mm.length); for(let i=0;i<mm.length;i++) tt[i]=i*s.hop+s.t0;
-    S.guideBuf=buf; S.backBuf=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
+    const mm=new Float32Array(s.contour); let tt;
+    if(s.tt) tt=new Float32Array(s.tt); else { tt=new Float32Array(mm.length); for(let i=0;i<mm.length;i++) tt[i]=i*s.hop+s.t0; }
+    S.guideBuf=buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
+    if(s.backBlob){ try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await s.backBlob.arrayBuffer()); S.curBackBlob=s.backBlob; $('#backName').textContent=(s.backName||'Backing')+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
+    S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true;
     setTarget(tt,mm); songReady(s.name,s.name+' (vocals, from library)');
-    setStatus('Ready. The vocals are the guide. Load a backing track too if you have one.');
+    setStatus(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.');
     window.scrollTo({top:0,behavior:'smooth'});
   }catch(err){ setStatus('Could not open this song: '+((err&&err.message)||'unknown error')+'.',true); }
 }
@@ -723,12 +747,19 @@ async function separateSong(file){
     for(let i=0;i<n;i++){ bl[i]=oL[i]-VL[i]; br[i]=oR[i]-VR[i]; } back.copyToChannel(bl,0); back.copyToChannel(br,1);
     const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1));
     S.guideBuf=voc; S.backBuf=back; $('#backName').textContent='Backing from the separation (this time only)'; $('#backClear').hidden=false;
+    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; $('#addLib').hidden=false;
     setTarget(pl.tt,pl.mm); songReady(name,name+' (separated vocals)');
     let note='';
     if($('#keepLib').checked){
       sepUI('Saving to the library…',1);
-      try{ const pcm=await toInt16(voc,LIB_SR); await libPut({name,created:Date.now(),dur:voc.duration,sr:LIB_SR,pcm:pcm.buffer,contour:pl.mm,hop:pl.hop,t0:pl.t0}); await renderLib(); note=' Saved in the library.'; }
-      catch(err){ note=' It could not be saved in the library (the browser storage may be full).'; }
+      try{
+        const pcm=await toInt16(voc,LIB_SR);
+        const id=await libPut({name,created:Date.now(),dur:voc.duration,sr:LIB_SR,pcm:pcm.buffer,contour:pl.mm,hop:pl.hop,t0:pl.t0});
+        S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; note=' Saved in the library.';
+        try{ const bb=await encodeMp3(back,96,p=>sepUI('Saving the backing track to the library… '+Math.round(p*100)+'%',1)); await libUpdate(id,{backBlob:bb,backName:name+' backing'}); S.curBackBlob=bb; note=' Vocals and backing saved in the library.'; }
+        catch(e){ note=' Vocals saved in the library (the backing could not be saved).'; }
+        await renderLib();
+      }catch(err){ note=' It could not be saved in the library (the browser storage may be full).'; }
     }
     S.sep.last={voc,name}; $('#sepSave').hidden=false;
     sepUI('Done in '+fmtLeft((performance.now()-t0)/1000)+'.'+note,1); $('#sepCancel').hidden=true;
@@ -1080,6 +1111,24 @@ $('#tempo').addEventListener('change',async e=>{
   if(S.rate===1){ S.stretch=null; setStatus('Normal tempo.'); if(was) play(); return; }
   const ok=await prepareTempo(); if(ok&&was) play();
 });
+async function addCurrentToLib(btn){
+  if(!S.guideBuf||!S.tT) return;
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Saving…';
+  try{
+    const name=$('#songName').textContent.trim()||'Song';
+    const pcm=await toInt16(S.guideBuf,LIB_SR);
+    const id=await libPut({name,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),tt:Float32Array.from(S.tT)});
+    let note='Added to the library.';
+    if(S.backBuf){
+      try{ const bb=S.curBackBlob||await encodeMp3(S.backBuf,96,p=>setStatus('Saving the backing track… '+Math.round(p*100)+'%'));
+        await libUpdate(id,{backBlob:bb,backName:((S.curBackBlob&&S.curBackBlob.name)||($('#backName').textContent||'Backing').replace(/ \((this time only|from library)\)$/,'')).replace(/\.[a-z0-9]+$/i,'')}); note='Added to the library with its backing track.'; }
+      catch(e){ note='Added to the library (the backing could not be saved).'; }
+    }
+    S.cur={libId:id,fromFile:false}; btn.hidden=true; await renderLib(); setStatus(note);
+  }catch(err){ setStatus('Could not add it to the library: '+((err&&err.message)||'storage may be full')+'.',true); }
+  finally{ btn.disabled=false; btn.textContent=old; }
+}
+$('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
 $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
@@ -1095,7 +1144,7 @@ $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop()
 $('#micOn').addEventListener('change',async e=>{ if(e.target.checked){ const ok=await startMic(); if(!ok) e.target.checked=false; } else stopMic(); });
 $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadGuide(f).finally(()=>e.target.value=''); });
 $('#backFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadBack(f).finally(()=>e.target.value=''); });
-$('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
+$('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBackBlob=null; S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
 const pct=v=>Math.round(v*100)+'%';
 $('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); });
 $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
