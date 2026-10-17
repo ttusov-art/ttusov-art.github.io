@@ -17,3 +17,6 @@ Recordings stay until you reload or close the page, so save the takes you want t
 
 
 The first time you separate a song, it downloads the model (67 MB) from Hugging Face, a public site for AI models, and keeps it on that device
+
+
+Storage: the library lives in the browser on that device. If you clear the browser's site data for the page, the library is cleared too.
