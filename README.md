@@ -20,3 +20,11 @@ The first time you separate a song, it downloads the model (67 MB) from Hugging 
 
 
 Storage: the library lives in the browser on that device. If you clear the browser's site data for the page, the library is cleared too.
+
+
+Part Coach now supports lyrics, with line-by-line timing.
+How to use it:
+Open a song, then open the new Lyrics section, below the loop bar.
+Paste or type the lyrics, one line per sung phrase, and tap Use these lines. The app places each line on a sung phrase automatically. It looks for breath pauses and also considers how long each line of text is.
+Play the song to check the timing. To fix a single line, use − / + (0.2 s steps), Now (sets the line to the playhead), or ▶ (plays from just before that line).
+If many lines are off, tap Tap to time. The song plays, the lyrics bar turns into a big tap button, and you tap it (or press Space on a laptop) when each line starts. It starts from the first line without a time, so you can re-time just part of a song.
