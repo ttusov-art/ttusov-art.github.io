@@ -28,3 +28,15 @@ Open a song, then open the new Lyrics section, below the loop bar.
 Paste or type the lyrics, one line per sung phrase, and tap Use these lines. The app places each line on a sung phrase automatically. It looks for breath pauses and also considers how long each line of text is.
 Play the song to check the timing. To fix a single line, use − / + (0.2 s steps), Now (sets the line to the playhead), or ▶ (plays from just before that line).
 If many lines are off, tap Tap to time. The song plays, the lyrics bar turns into a big tap button, and you tap it (or press Space on a laptop) when each line starts. It starts from the first line without a time, so you can re-time just part of a song.
+
+
+Measure delay (in Settings, under Delay compensation)
+Put in your earbuds, choose the microphone you normally use, and tap Measure delay.
+You hear two low beeps to count you in, then eight high beeps. Clap, or sing a short "ta", exactly on each high beep.
+The app measures how late each clap arrives and sets Delay compensation to the result. It also tells you how steady your claps were. If it says "a bit uneven", just run it again.
+Run it once per setup. If you switch between Bluetooth earbuds and wired headphones, measure again, because they have very different delays. The slider now goes up to 600 ms.
+2. Voice timing slider for takes
+When you play a take ("Voice only" or "With backing"), a Voice timing slider appears in the recordings panel:
+Adjusting: slide left (earlier) or right (later) until your voice locks in with the backing. Playback restarts at the same spot, so you hear the change right away.
+Pitch line and score move along with your voice.
+Use this for new recordings copies the corrected value into Delay compensation, so live scoring and future takes are aligned too.
