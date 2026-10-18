@@ -15,6 +15,7 @@
   --lane-bg:#fbfcfc; --lane-alt:#edf1f3; --lane-line:#dfe5e8; --lane-c:#b5c1c8;
   --target:rgba(12,113,101,.30); --target-edge:rgba(12,113,101,.55);
   --loop:rgba(200,111,12,.10); --loop-edge:#c86f0c; --ghost:rgba(59,91,219,.30);
+  --lyr-bg:rgba(255,255,255,.85);
   --good:#1d8a4a; --near:#c48a0a; --off:#c2412d; --you-idle:#3b5bdb; --label-bg:#f0f3f5;
   --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
   --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -27,6 +28,7 @@
   --lane-bg:#111a20; --lane-alt:#17222a; --lane-line:#1f2b34; --lane-c:#344651;
   --target:rgba(59,182,164,.28); --target-edge:rgba(59,182,164,.6);
   --loop:rgba(240,160,60,.10); --loop-edge:#f0a03c; --ghost:rgba(138,164,255,.30);
+  --lyr-bg:rgba(17,26,32,.85);
   --good:#4cc77d; --near:#e5b33a; --off:#f06a55; --you-idle:#8aa4ff; --label-bg:#151e25;
   color-scheme:dark; } }
 *{box-sizing:border-box}
@@ -103,6 +105,23 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .song-row .take-info{flex:1 1 220px}
 .song-row button{padding:7px 12px}
 .danger{color:var(--off);border-color:var(--off)}
+.lyr{padding:10px 14px 8px;border-bottom:1px solid var(--line);min-height:62px;display:flex;flex-direction:column;justify-content:center;gap:2px;background:var(--surface)}
+.lyr-now{font-family:var(--font-display);font-weight:700;font-size:clamp(18px,3.6vw,24px);line-height:1.25;min-height:1.25em;overflow-wrap:anywhere;color:var(--fg)}
+.lyr-now.waiting{color:var(--muted)}
+.lyr-next{font-size:14px;color:var(--muted);min-height:1.4em;overflow-wrap:anywhere}
+.lyr.tap{cursor:pointer;background:var(--accent-soft);border-bottom-color:var(--accent);user-select:none;-webkit-user-select:none}
+.lyr.tap .lyr-now{color:var(--accent)}
+.lyr-edit{padding:0}
+.lyr-edit>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
+.lyr-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
+.lyr-body textarea{font:inherit;font-size:15px;line-height:1.5;width:100%;min-height:140px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);resize:vertical}
+.lyr-list{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.lyr-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--line)}
+.lyr-row:first-child{border-top:0}
+.lyr-row.cur{background:var(--accent-soft)}
+.lyr-t{font-family:var(--font-mono);font-size:13px;width:6ch;flex:none;font-variant-numeric:tabular-nums;color:var(--muted)}
+.lyr-x{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lyr-row button{padding:4px 8px;font-size:13px}
 .takes{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .takes h2{font-family:var(--font-display);font-size:18px;margin:0}
 .take{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 0;border-top:1px solid var(--line)}
@@ -133,6 +152,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </section>
 
   <section class="panel lane">
+    <div class="lyr" id="lyrBar" hidden role="button" tabindex="-1"><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div>
     <canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas>
     <div class="lane-foot">
       <div class="legend">
@@ -194,6 +214,23 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div id="songList"></div>
     <span class="small" id="libEmpty">Choose a song (for example your part MP3). The app separates the voice, finds the pitch line and keeps the vocals here for next time.</span>
   </section>
+
+  <details class="panel lyr-edit" id="lyrPanel">
+    <summary>Lyrics</summary>
+    <div class="lyr-body">
+      <span class="small">Paste or type the lyrics with one line per sung phrase. Blank lines are ignored.</span>
+      <textarea id="lyrText" placeholder="First line of the song&#10;Second line&#10;…"></textarea>
+      <div class="row">
+        <button id="lyrApply" type="button" class="primary">Use these lines</button>
+        <button id="lyrAuto" type="button">Place lines automatically</button>
+        <button id="lyrTap" type="button">Tap to time</button>
+        <button id="lyrClear" type="button">Remove lyrics</button>
+      </div>
+      <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
+      <div class="lyr-list" id="lyrList" hidden></div>
+      <span class="small" id="lyrHint">After placing the lines, play the song and check them. Use − and + to move a line by 0.2 s, or Now to set it to the playhead.</span>
+    </div>
+  </details>
 
   <section class="panel takes" id="takesPanel" hidden>
     <h2>Your recordings</h2>
@@ -306,7 +343,7 @@ const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
   tT:null,tM:null, // target times (song seconds) and midi (NaN = none)
   pos:0,pos0:0,startAt:0,playing:false,srcs:[],
   mic:null,micBuf:null,micHist:[],pts:[],stat:{n:0,hit:0,sum:0},
-  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
+  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,lyrics:[],tap:null,lyrShow:true,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
 
 function ensureCtx(){
   if(!S.ctx){
@@ -388,7 +425,7 @@ async function pitchLineOf(buf,onProg){
 function songReady(name,label){
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
-  updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
+  updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
 }
 async function loadGuide(file){
   stop(); setStatus('Loading '+file.name+'…');
@@ -408,7 +445,7 @@ async function loadGuide(file){
       const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'));
       setTarget(pl.tt,pl.mm);
     }
-    normalize(); S.stretch=null; S.cur={libId:null,fromFile:true}; $('#addLib').hidden=false;
+    normalize(); S.stretch=null; S.cur={libId:null,fromFile:true}; $('#addLib').hidden=false; S.lyrics=[];
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -638,7 +675,7 @@ async function openLibSong(id){
     if(s.tt) tt=new Float32Array(s.tt); else { tt=new Float32Array(mm.length); for(let i=0;i<mm.length;i++) tt[i]=i*s.hop+s.t0; }
     S.guideBuf=buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
     if(s.backBlob){ try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await s.backBlob.arrayBuffer()); S.curBackBlob=s.backBlob; $('#backName').textContent=(s.backName||'Backing')+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
-    S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true;
+    S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
     setTarget(tt,mm); songReady(s.name,s.name+' (vocals, from library)');
     setStatus(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.');
     window.scrollTo({top:0,behavior:'smooth'});
@@ -747,7 +784,7 @@ async function separateSong(file){
     for(let i=0;i<n;i++){ bl[i]=oL[i]-VL[i]; br[i]=oR[i]-VR[i]; } back.copyToChannel(bl,0); back.copyToChannel(br,1);
     const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1));
     S.guideBuf=voc; S.backBuf=back; $('#backName').textContent='Backing from the separation (this time only)'; $('#backClear').hidden=false;
-    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; $('#addLib').hidden=false;
+    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; $('#addLib').hidden=false; S.lyrics=[];
     setTarget(pl.tt,pl.mm); songReady(name,name+' (separated vocals)');
     let note='';
     if($('#keepLib').checked){
@@ -774,6 +811,127 @@ async function separateSong(file){
 }
 function cancelSeparation(){ S.sep.token++; if(S.sep.worker){ S.sep.worker.terminate(); S.sep.worker=null; } sepUI('Cancelled.',null); $('#sepCancel').hidden=true; $('#sepFile').disabled=false; }
 
+// ===== lyrics =====
+function lyrSorted(){ return S.lyrics; }
+let lyrSaveTimer=null;
+function saveLyrics(){
+  if(S.cur.libId==null) return;
+  clearTimeout(lyrSaveTimer);
+  lyrSaveTimer=setTimeout(()=>{ libUpdate(S.cur.libId,{lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); },400);
+}
+function lyricIndexAt(t){ let k=-1; for(let i=0;i<S.lyrics.length;i++){ const L=S.lyrics[i]; if(L.t!=null&&L.t<=t) k=i; } return k; }
+function nextTimedAfter(i){ for(let j=i+1;j<S.lyrics.length;j++) if(S.lyrics[j].t!=null) return j; return -1; }
+function renderLyrics(fillText){
+  const has=S.lyrics.length>0;
+  if(fillText) $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n');
+  const list=$('#lyrList'); list.hidden=!has; list.innerHTML='';
+  S.lyrics.forEach((L,i)=>{
+    const row=document.createElement('div'); row.className='lyr-row'; row.dataset.i=i;
+    row.innerHTML=`<span class="lyr-t">${L.t==null?'—':fmtT1(L.t)}</span><span class="lyr-x"></span>`;
+    row.querySelector('.lyr-x').textContent=L.text;
+    const mk=(label,title,fn)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; b.title=title; b.setAttribute('aria-label',title); b.addEventListener('click',fn); row.appendChild(b); };
+    mk('−','Move line 0.2 s earlier',()=>nudgeLine(i,-0.2));
+    mk('+','Move line 0.2 s later',()=>nudgeLine(i,0.2));
+    mk('Now','Set line start to the playhead',()=>{ S.lyrics[i].t=Math.max(0,Math.round(songTime()*100)/100); lyrChanged(); });
+    mk('▶','Play from just before this line',()=>{ if(S.lyrics[i].t!=null) seek(Math.max(0,S.lyrics[i].t-1.5)); if(!S.playing&&!S.review) play(); });
+    list.appendChild(row);
+  });
+  $('#lyrAuto').disabled=!has; $('#lyrTap').disabled=!has; $('#lyrClear').disabled=!has;
+  S.lyrBarKey=null; updateLyricBar(songTime());
+}
+function nudgeLine(i,d){ const L=S.lyrics[i]; if(L.t==null) return; L.t=Math.max(0,Math.round((L.t+d)*100)/100); lyrChanged(); }
+function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); }
+function applyLyricText(){
+  const lines=$('#lyrText').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  const old=S.lyrics;
+  S.lyrics=lines.map((text,i)=>({text,t:old[i]&&old.length===lines.length?old[i].t:null}));
+  if(S.lyrics.length&&S.lyrics.every(l=>l.t==null)&&S.tT){ autoPlace(true); return; }
+  lyrChanged(); setStatus(S.lyrics.length?S.lyrics.length+' lyric lines ready.':'Lyrics removed.');
+}
+// sung phrases from the target pitch line
+function phrasesOf(){
+  const T=S.tT,M=S.tM,segs=[]; if(!T) return segs;
+  let s=null,last=null;
+  for(let i=0;i<T.length;i++){ if(isNaN(M[i])) continue; const t=T[i];
+    if(s===null) s=t; else if(t-last>0.25){ segs.push([s,last]); s=t; } last=t; }
+  if(s!==null) segs.push([s,last]);
+  return segs.filter(g=>g[1]-g[0]>=0.2);
+}
+function autoPlace(silent){
+  const N=S.lyrics.length; if(!N) return;
+  const segs=phrasesOf(); if(!segs.length){ setStatus('No sung phrases found to place the lines on.',true); return; }
+  let starts;
+  if(segs.length>=N){
+    // dynamic programming: group consecutive phrases into N lines, preferring long pauses between lines
+    // and line durations proportional to the amount of text in each line
+    const P=segs.length, span=segs[P-1][1]-segs[0][0];
+    const lens=S.lyrics.map(l=>Math.max(4,l.text.replace(/\s+/g,' ').length)), tot=lens.reduce((a,b)=>a+b,0);
+    const exp=lens.map(n=>span*n/tot), gapB=k=>k>0?Math.min(3,segs[k][0]-segs[k-1][1]):0;
+    const NEG=-1e18, best=[...Array(N+1)].map(()=>new Float64Array(P+1).fill(NEG)), from=[...Array(N+1)].map(()=>new Int32Array(P+1));
+    best[0][0]=0;
+    for(let i=1;i<=N;i++){
+      for(let b=i;b<=P-(N-i);b++){            // line i covers phrases a..b-1
+        for(let a=i-1;a<b;a++){
+          if(best[i-1][a]===NEG) continue;
+          const d=Math.max(0.3,segs[b-1][1]-segs[a][0]), r=Math.log(d/exp[i-1]);
+          const sc=best[i-1][a]-r*r+(a>0?1.5*gapB(a):0);
+          if(sc>best[i][b]){ best[i][b]=sc; from[i][b]=a; }
+        }
+      }
+    }
+    const firsts=[]; let b=P; for(let i=N;i>=1;i--){ const a=from[i][b]; firsts.unshift(a); b=a; }
+    starts=firsts.map(a=>segs[a][0]);
+  }else{
+    const pieces=segs.map(g=>[g[0],g[1]]);
+    while(pieces.length<N){ let bi=0; pieces.forEach((p,i)=>{ if(p[1]-p[0]>pieces[bi][1]-pieces[bi][0]) bi=i; }); const p=pieces[bi], mid=(p[0]+p[1])/2; pieces.splice(bi,1,[p[0],mid],[mid,p[1]]); }
+    starts=pieces.map(p=>p[0]);
+  }
+  S.lyrics.forEach((L,i)=>{ L.t=Math.max(0,Math.round((starts[i]-0.05)*100)/100); });
+  lyrChanged();
+  setStatus((silent?'Lines placed automatically on the sung phrases. ':'')+'Play the song to check them, then fix any line with Tap to time or the − / + buttons.');
+}
+// tap-to-time
+function startTap(){
+  if(!S.lyrics.length) return;
+  let i=S.lyrics.findIndex(l=>l.t==null); if(i<0) i=0;
+  const prev=i>0?S.lyrics[i-1].t:null, from=prev!=null?Math.max(0,prev-1):Math.max(0,(S.lyrics[i].t!=null?S.lyrics[i].t:0)-4);
+  S.loop.on=false; $('#loopOn').checked=false; updateLoopUI();
+  S.tap={i}; $('#lyrBar').classList.add('tap'); $('#lyrBar').hidden=false; $('#lyrTap').textContent='Stop timing';
+  S.lyrBarKey=null; updateLyricBar(from);
+  setStatus('Tap the lyrics bar (or press Space) at the start of each line.');
+  seek(from); if(!S.playing) play();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function stopTap(){ if(!S.tap) return; S.tap=null; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; S.lyrBarKey=null; updateLyricBar(songTime()); }
+function tapNow(){
+  if(!S.tap||!S.playing) return;
+  const lat=((S.ctx&&S.ctx.outputLatency)||0)+0.12;
+  const t=Math.max(0,Math.round((songTime()-lat*S.rate)*100)/100);
+  S.lyrics[S.tap.i].t=t; S.tap.i++;
+  for(let j=S.tap.i;j<S.lyrics.length;j++){ if(S.lyrics[j].t!=null&&S.lyrics[j].t<t) S.lyrics[j].t=null; }
+  if(S.tap.i>=S.lyrics.length){ stopTap(); setStatus('All lines timed. Play the song to check them.'); }
+  lyrChanged();
+}
+function updateLyricBar(now){
+  const bar=$('#lyrBar'), show=S.lyrShow&&S.lyrics.length>0;
+  if(!show&&!S.tap){ bar.hidden=true; return; }
+  bar.hidden=false;
+  let key, nowTxt, nextTxt, waiting=false;
+  if(S.tap){ const L=S.lyrics[S.tap.i]; key='tap'+S.tap.i; nowTxt=L?L.text:''; nextTxt='Tap here when this line starts'+(S.lyrics[S.tap.i+1]?' · then: '+S.lyrics[S.tap.i+1].text:''); }
+  else{
+    const i=lyricIndexAt(now+0.05), j=nextTimedAfter(i);
+    const cur=i>=0?S.lyrics[i]:null, nxt=j>=0?S.lyrics[j]:null;
+    if(cur&&nxt==null&&now-cur.t>8){ key='end'; nowTxt=''; nextTxt=''; }
+    else if(!cur){ key='pre'+j; nowTxt=nxt?nxt.text:''; nextTxt=nxt&&nxt.t-now<60?'starts in '+Math.max(0,Math.ceil(nxt.t-now))+' s':''; waiting=true; }
+    else { key='l'+i+'-'+j; nowTxt=cur.text; nextTxt=nxt?nxt.text:''; }
+    if(!cur&&nxt) key+='-'+Math.max(0,Math.ceil(nxt.t-now));
+  }
+  if(key===S.lyrBarKey) return; S.lyrBarKey=key;
+  $('#lyrNow').textContent=nowTxt; $('#lyrNext').textContent=nextTxt; $('#lyrNow').classList.toggle('waiting',waiting);
+  const li=S.tap?S.tap.i:lyricIndexAt(now+0.05);
+  document.querySelectorAll('.lyr-row').forEach(r=>r.classList.toggle('cur',+r.dataset.i===li));
+}
+
 // ===== voice recording =====
 const REC_SRC=`class PcRec extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(2048);this.n=0;this.t=0;}
 process(inp){const c=inp[0]&&inp[0][0];if(c){if(this.n===0)this.t=currentTime;this.b.set(c,this.n);this.n+=c.length;if(this.n>=2048){this.port.postMessage({t:this.t,d:this.b.slice(0,this.n)});this.n=0;}}return true;}}
@@ -798,7 +956,7 @@ function onRecChunk(t,d){
   }
 }
 function beginTake(){
-  if(!S.mic||!$('#recOn').checked) return;
+  if(!S.mic||!$('#recOn').checked||S.tap) return;
   S.pending.push({ctx0:S.startAt,ctxEnd:Infinity,song0:S.pos0-S.delay*S.rate,rate:S.rate,delay:S.delay,chunks:[],stat0:{...S.stat},loop:loopActive()});
 }
 function endTake(){
@@ -1086,6 +1244,21 @@ function draw(){
     }
     prev=p;
   }
+  // lyric line starts along the bottom of the lane
+  if(S.lyrShow&&S.lyrics.length){
+    g.font='500 12px '+col('--font-body'); g.textAlign='left'; g.textBaseline='bottom';
+    const timed=S.lyrics.filter(l=>l.t!=null);
+    for(let k=0;k<timed.length;k++){
+      const L=timed[k], x=xOf(L.t); if(x>w||x<LABELW-400) continue;
+      const xn=k+1<timed.length?xOf(timed[k+1].t):w, room=Math.max(0,Math.min(w,xn)-x-10); if(room<24) continue;
+      let txt=L.text; while(txt.length>1&&g.measureText(txt).width>room-8) txt=txt.slice(0,-2)+'…';
+      const tw=g.measureText(txt).width, x0=Math.max(LABELW+2,x);
+      g.fillStyle=col('--lane-c'); if(x>=LABELW) g.fillRect(Math.round(x),h-22,1,22);
+      g.fillStyle=col('--lyr-bg'); g.fillRect(x0+3,h-20,tw+8,17);
+      g.fillStyle=col('--fg'); g.fillText(txt,x0+7,h-6);
+    }
+  }
+  updateLyricBar(now);
   // playhead
   g.fillStyle=col('--warm'); g.fillRect(Math.round(headX)-1,0,2,h);
   // labels
@@ -1117,7 +1290,7 @@ async function addCurrentToLib(btn){
   try{
     const name=$('#songName').textContent.trim()||'Song';
     const pcm=await toInt16(S.guideBuf,LIB_SR);
-    const id=await libPut({name,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),tt:Float32Array.from(S.tT)});
+    const id=await libPut({name,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),tt:Float32Array.from(S.tT),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
     let note='Added to the library.';
     if(S.backBuf){
       try{ const bb=S.curBackBlob||await encodeMp3(S.backBuf,96,p=>setStatus('Saving the backing track… '+Math.round(p*100)+'%'));
@@ -1128,6 +1301,17 @@ async function addCurrentToLib(btn){
   }catch(err){ setStatus('Could not add it to the library: '+((err&&err.message)||'storage may be full')+'.',true); }
   finally{ btn.disabled=false; btn.textContent=old; }
 }
+$('#lyrApply').addEventListener('click',applyLyricText);
+$('#lyrAuto').addEventListener('click',()=>autoPlace(false));
+$('#lyrTap').addEventListener('click',()=>S.tap?stopTap():startTap());
+$('#lyrClear').addEventListener('click',e=>{ const b=e.currentTarget; if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to remove'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Remove lyrics'; },4000); return; } delete b.dataset.armed; b.textContent='Remove lyrics'; stopTap(); S.lyrics=[]; renderLyrics(true); saveLyrics(); draw(); setStatus('Lyrics removed.'); });
+$('#lyrShow').addEventListener('change',e=>{ S.lyrShow=e.target.checked; try{localStorage.setItem('pc-lyr',S.lyrShow?'1':'0')}catch(x){} S.lyrBarKey=null; draw(); });
+$('#lyrBar').addEventListener('pointerdown',e=>{ if(S.tap){ e.preventDefault(); tapNow(); } });
+document.addEventListener('keydown',e=>{ if(S.tap&&e.code==='Space'&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); tapNow(); } });
+try{ if(localStorage.getItem('pc-lyr')==='0'){ S.lyrShow=false; $('#lyrShow').checked=false; } }catch(x){}
+try{ const o=localStorage.getItem('pc-lyr-open'); if(o==='1') $('#lyrPanel').open=true; }catch(x){}
+$('#lyrPanel').addEventListener('toggle',e=>{ try{localStorage.setItem('pc-lyr-open',e.target.open?'1':'0')}catch(x){} });
+renderLyrics(true);
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
