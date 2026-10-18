@@ -234,6 +234,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 
   <section class="panel takes" id="takesPanel" hidden>
     <h2>Your recordings</h2>
+    <div class="field" id="alignRow" hidden>
+      <label for="alignR" id="alignLbl">Voice timing</label>
+      <div class="field-row"><span class="small">earlier</span><input id="alignR" type="range" min="-300" max="300" step="10" value="0"><span class="small">later</span><span class="val" id="alignV">0 ms</span></div>
+      <div class="row"><button id="alignUse" type="button">Use this for new recordings</button><span class="small" id="alignHint">Slide until your voice locks in with the backing. The pitch line and score follow.</span></div>
+    </div>
     <div id="takeList"></div>
     <span class="small">Recordings stay here until you reload the page. Save the ones you want to keep.</span>
   </section>
@@ -276,8 +281,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <h2>Settings</h2>
       <div class="field">
         <label for="delay">Delay compensation</label>
-        <div class="field-row"><input id="delay" type="range" min="0" max="500" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
-        <span class="small">If your line always looks slightly late compared with the target, raise this. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
+        <div class="field-row"><input id="delay" type="range" min="0" max="600" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
+        <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Measures your headphones and microphone in about 10 seconds.</span></div>
+        <span class="small">If your line always looks slightly late compared with the target, raise this or tap Measure delay. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
       </div>
       <div class="field" id="micSelField" hidden>
         <label for="micSel">Microphone</label>
@@ -950,6 +956,7 @@ async function attachRecorder(src){
 }
 function onRecChunk(t,d){
   const sr=S.ctx.sampleRate, t1=t+d.length/sr;
+  if(S.cal&&t1>=S.cal.from&&t<=S.cal.to) S.cal.chunks.push({t,d:d.slice()});
   for(const k of S.pending){
     const a=Math.max(t,k.ctx0), b=Math.min(t1,k.ctxEnd); if(b<=a) continue;
     k.chunks.push(d.subarray(Math.round((a-t)*sr),Math.round((b-t)*sr)));
@@ -957,7 +964,7 @@ function onRecChunk(t,d){
 }
 function beginTake(){
   if(!S.mic||!$('#recOn').checked||S.tap) return;
-  S.pending.push({ctx0:S.startAt,ctxEnd:Infinity,song0:S.pos0-S.delay*S.rate,rate:S.rate,delay:S.delay,chunks:[],stat0:{...S.stat},loop:loopActive()});
+  S.pending.push({ctx0:S.startAt,ctxEnd:Infinity,pos0:S.pos0,song0:S.pos0-S.delay*S.rate,rate:S.rate,delay:S.delay,chunks:[],stat0:{...S.stat},loop:loopActive()});
 }
 function endTake(){
   const open=S.pending.filter(k=>k.ctxEnd===Infinity); if(!open.length) return;
@@ -976,7 +983,7 @@ function finishTakes(){
   for(const k of done){
     const n=k.chunks.reduce((a,c)=>a+c.length,0); if(n<S.ctx.sampleRate*1.5) continue;
     const data=new Float32Array(n); let o=0; for(const c of k.chunks){ data.set(c,o); o+=c.length; }
-    S.takes.push({no:++S.takeNo,song0:k.song0,song1:k.song1,rate:k.rate,score:k.score,pts:k.pts,data,sr:S.ctx.sampleRate,song:$('#songName').textContent});
+    S.takes.push({no:++S.takeNo,pos0:k.pos0,delay:k.delay,delay0:k.delay,song0:k.song0,song1:k.song1,rate:k.rate,score:k.score,pts:k.pts,data,sr:S.ctx.sampleRate,song:$('#songName').textContent});
   }
   let total=0; for(let i=S.takes.length-1;i>=0;i--){ total+=S.takes[i].data.length; if(i<S.takes.length-15||total>S.ctx.sampleRate*1500){ S.takes.splice(0,i+1); break; } }
   renderTakes();
@@ -995,20 +1002,94 @@ function renderTakes(){
     list.appendChild(row);
   });
 }
+// ===== take alignment =====
+function showAlign(k){
+  S.alignTake=k; $('#alignRow').hidden=false;
+  $('#alignLbl').textContent='Voice timing for take '+k.no;
+  const rel=Math.round((k.delay-k.delay0)*-1000); // positive = later
+  $('#alignR').value=String(Math.max(-300,Math.min(300,rel))); $('#alignV').textContent=(rel>0?'+':'')+rel+' ms';
+}
+function setTakeDelay(k,newDelay){
+  const d=newDelay-k.delay; if(Math.abs(d)<1e-6) return;
+  const shift=-d*k.rate; // song-time shift of the voice
+  k.delay=newDelay; k.song0+=shift; k.song1+=shift;
+  let n=0,hit=0;
+  for(const p of k.pts){ p.t+=shift; if(isNaN(p.m)){ p.c=null; continue; } const tg=targetAt(p.t); if(isNaN(tg)){ p.c=null; continue; } const c=grade(centsDiff(p.m,tg)); p.c=c; n++; if(c==='good') hit++; }
+  k.score=n>=20?Math.round(100*hit/n):null;
+}
+let alignTimer=null;
+function onAlign(){
+  const k=S.alignTake; if(!k) return;
+  const rel=+$('#alignR').value; $('#alignV').textContent=(rel>0?'+':'')+rel+' ms';
+  setTakeDelay(k,k.delay0-rel/1000);
+  draw();
+  clearTimeout(alignTimer);
+  alignTimer=setTimeout(()=>{
+    if(S.review&&S.review.take===k){ const v=S.review.voiceOff+(S.ctx.currentTime-S.review.at), wb=S.review.withBacking; stopReview(); reviewTake(k,wb,Math.max(0,v)); }
+    else renderTakes();
+  },250);
+}
+function useAlignForNew(){
+  const k=S.alignTake; if(!k) return;
+  const ms=Math.max(0,Math.min(600,Math.round(k.delay*1000/10)*10));
+  setDelay(ms); setStatus('Delay compensation set to '+ms+' ms for new recordings and live scoring.');
+}
+function setDelay(ms){ $('#delay').value=String(ms); S.delay=ms/1000; $('#delayV').textContent=ms+' ms'; try{localStorage.setItem('pc-delay',String(ms))}catch(x){} }
+
+// ===== delay measurement: beeps, user claps or sings "ta" on each =====
+async function measureDelay(){
+  if(S.cal) return;
+  stop(); if(S.review) stopReview();
+  const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
+  if(!S.mic){ const ok=await startMic(); if(!ok){ $('#calText').textContent='The microphone is needed for this test.'; return; } $('#micOn').checked=true; }
+  const btn=$('#calBtn'), txt=$('#calText'); btn.disabled=true;
+  const N=10, beat=0.6, t0=ctx.currentTime+2.2, beeps=[];
+  S.cal={chunks:[],from:t0-0.3,to:t0+N*beat+1.0};
+  for(let i=0;i<N;i++){
+    const t=t0+i*beat, o=ctx.createOscillator(), g=ctx.createGain();
+    o.frequency.value=i<2?660:990; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.7,t+0.004); g.gain.exponentialRampToValueAtTime(0.001,t+0.09);
+    o.connect(g).connect(S.limiter); o.start(t); o.stop(t+0.1); beeps.push(t);
+  }
+  txt.textContent='Listen: two low beeps count you in, then clap or sing “ta” exactly on each high beep.';
+  const iv=setInterval(()=>{ const k=Math.floor((ctx.currentTime-t0)/beat)+1; if(k>=1&&k<=N) txt.textContent=(k<=2?'Get ready… ':'Clap on each beep · ')+k+' of '+N; },100);
+  await new Promise(r=>setTimeout(r,(S.cal.to-ctx.currentTime)*1000+400));
+  clearInterval(iv);
+  const cal=S.cal; S.cal=null; btn.disabled=false;
+  const res=analyseCalibration(cal,beeps.slice(2),ctx.sampleRate);
+  if(!res.ok){ txt.textContent=res.msg+' Tap Measure delay to try again.'; return; }
+  setDelay(res.ms);
+  txt.textContent='Measured '+res.ms+' ms ('+res.n+' of '+(N-2)+' beats, '+(res.spread<=25?'very steady':res.spread<=50?'steady':'a bit uneven — try again for a better value')+'). Delay compensation is now '+res.ms+' ms.';
+}
+function analyseCalibration(cal,beeps,sr){
+  if(!cal.chunks.length) return {ok:false,msg:'No sound came from the microphone.'};
+  const t0=cal.chunks[0].t, n=cal.chunks.reduce((a,c)=>a+c.d.length,0), x=new Float32Array(n);
+  let o=0; for(const c of cal.chunks){ x.set(c.d,o); o+=c.d.length; }
+  const hop=Math.round(sr*0.002), m=Math.floor(n/hop), env=new Float32Array(m);
+  for(let i=0;i<m;i++){ let s=0; for(let j=0;j<hop;j++){ const v=x[i*hop+j]; s+=v*v; } env[i]=Math.sqrt(s/hop); }
+  const sorted=Array.from(env).sort((a,b)=>a-b), floor=sorted[Math.floor(m*0.3)]||0, peak=sorted[Math.floor(m*0.995)]||0;
+  if(peak<0.01) return {ok:false,msg:'The claps were too quiet for the microphone.'};
+  const th=Math.max(floor*4,peak*0.25), onsets=[];
+  for(let i=1;i<m;i++){ if(env[i]>=th&&env[i-1]<th){ const t=t0+i*hop/sr; if(!onsets.length||t-onsets[onsets.length-1]>0.25) onsets.push(t); } }
+  const lags=[];
+  for(const b of beeps){ let best=null; for(const t of onsets){ const d=t-b; if(d>-0.15&&d<0.55&&(best===null||Math.abs(d-0.2)<Math.abs(best-0.2))) best=d; } if(best!==null) lags.push(best); }
+  if(lags.length<5) return {ok:false,msg:'Only '+lags.length+' claps were heard clearly.'};
+  const med=median(lags), spread=Math.round(median(lags.map(v=>Math.abs(v-med)))*1000);
+  const ms=Math.max(0,Math.min(600,Math.round(med*100)*10));
+  return {ok:true,ms,n:lags.length,spread};
+}
 function takeBuffer(k){
   if(k.buf) return k.buf;
   const b=new AudioBuffer({numberOfChannels:1,length:k.data.length,sampleRate:k.sr}); b.copyToChannel(k.data,0);
   let e=0,c=0; for(let i=0;i<k.data.length;i+=4){ e+=k.data[i]*k.data[i]; c++; } const rms=Math.sqrt(e/Math.max(1,c));
   k.gain=rms>1e-5?Math.min(20,0.08/rms):1; k.buf=b; return b;
 }
-async function reviewTake(k,withBacking){
+async function reviewTake(k,withBacking,startVoice=0){
   stop(); if(S.review) stopReview();
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
   if(withBacking&&k.rate!==S.rate){ S.rate=k.rate; $('#tempo').value=String(k.rate); }
   if(withBacking&&S.rate!==1&&!(S.stretch&&S.stretch.rate===S.rate)){ const ok=await prepareTempo(); if(!ok) return; }
   const at=ctx.currentTime+0.08, srcs=[];
-  let voiceOff=0, song0=k.song0;
-  if(song0<0){ voiceOff=-song0/k.rate; song0=0; }
+  let voiceOff=Math.max(startVoice,k.song0<0?-k.song0/k.rate:0), song0=k.song0+voiceOff*k.rate;
   const vg=ctx.createGain(); vg.gain.value=takeBuffer(k)&&k.gain; vg.connect(S.limiter);
   const vs=ctx.createBufferSource(); vs.buffer=k.buf; vs.connect(vg); vs.start(at,voiceOff); srcs.push(vs,vg);
   if(withBacking){
@@ -1017,7 +1098,8 @@ async function reviewTake(k,withBacking){
     const b=buf||(st?st.guide:S.guideBuf);
     if(b){ const s=ctx.createBufferSource(); s.buffer=b; const gg=ctx.createGain(); gg.gain.value=fallback?0.5:1; s.connect(gg).connect(fallback?S.gGuide:g); s.start(at,st?song0/k.rate:song0); srcs.push(s,gg); }
   }
-  S.review={take:k,at,song0,rate:k.rate,srcs,end:at+(k.buf.duration-voiceOff)};
+  S.review={take:k,at,song0,rate:k.rate,srcs,end:at+(k.buf.duration-voiceOff),withBacking,voiceOff};
+  showAlign(k);
   $('#playLbl').textContent='Stop listening'; setStatus('Playing take '+k.no+(withBacking?' with the backing.':', your voice only.'));
   renderTakes(); startBg(); mediaOn(); requestAnimationFrame(reviewTick);
 }
@@ -1334,7 +1416,10 @@ $('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.
 $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
 $('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; applyGains(); });
 $('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; if(was) play(); });
-$('#delay').addEventListener('input',e=>{ S.delay=+e.target.value/1000; $('#delayV').textContent=e.target.value+' ms'; try{localStorage.setItem('pc-delay',e.target.value)}catch(x){} });
+$('#delay').addEventListener('input',e=>setDelay(+e.target.value));
+$('#calBtn').addEventListener('click',measureDelay);
+$('#alignR').addEventListener('input',onAlign);
+$('#alignUse').addEventListener('click',useAlignForNew);
 $('#zoom').addEventListener('input',e=>{ S.win=+e.target.value; $('#zoomV').textContent=S.win+' s'; draw(); });
 $('#ignoreOct').addEventListener('change',e=>{ S.ignoreOct=e.target.checked; });
 try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
