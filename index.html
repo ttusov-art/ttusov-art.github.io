@@ -98,8 +98,10 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .loop select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 .loop-info{font-family:var(--font-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:1 1 220px;min-width:0}
 .loop-info b{color:var(--fg);font-weight:600}
-.lib{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
-.lib h2{font-family:var(--font-display);font-size:18px;margin:0}
+.fold{padding:0}
+.fold>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
+.fold>summary .count{font-family:var(--font-body);font-weight:500;font-size:14px;color:var(--muted);margin-left:6px}
+.fold-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .lib-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
 .sep-box{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:8px;background:var(--lane-alt)}
 .sep-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
@@ -128,8 +130,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-t{font-family:var(--font-mono);font-size:13px;width:6ch;flex:none;font-variant-numeric:tabular-nums;color:var(--muted)}
 .lyr-x{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lyr-row button{padding:4px 8px;font-size:13px}
-.takes{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
-.takes h2{font-family:var(--font-display);font-size:18px;margin:0}
 .take{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 0;border-top:1px solid var(--line)}
 .take:first-of-type{border-top:0}
 .take-info{flex:1 1 220px;min-width:0;display:flex;flex-direction:column}
@@ -218,9 +218,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div id="resultText"></div>
   </section>
 
-  <section class="panel lib" id="libPanel">
+  <details class="panel fold" id="libPanel" open>
+    <summary>Song library<span class="count" id="libCount"></span></summary>
+    <div class="fold-body">
     <div class="lib-head">
-      <h2>Song library</h2>
+      <span class="small">Separated songs and songs you added are kept here on this device.</span>
       <span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span>
     </div>
     <div class="sep-box" id="sepBox" hidden>
@@ -235,7 +237,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div id="songList"></div>
     <span class="small" id="libEmpty">Choose a song (for example your part MP3). The app separates the voice, finds the pitch line and keeps the vocals here for next time.</span>
-  </section>
+    </div>
+  </details>
 
   <details class="panel lyr-edit" id="lyrPanel">
     <summary>Lyrics</summary>
@@ -254,8 +257,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
   </details>
 
-  <section class="panel takes" id="takesPanel" hidden>
-    <h2>Your recordings</h2>
+  <details class="panel fold" id="takesPanel" open hidden>
+    <summary>Your recordings<span class="count" id="takeCount"></span></summary>
+    <div class="fold-body">
     <div class="field" id="alignRow" hidden>
       <label for="alignR" id="alignLbl">Voice timing</label>
       <div class="field-row"><span class="small">earlier</span><input id="alignR" type="range" min="-300" max="300" step="10" value="0"><span class="small">later</span><span class="val" id="alignV">0 ms</span></div>
@@ -263,7 +267,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div id="takeList"></div>
     <span class="small">Recordings stay here until you reload the page. Save the ones you want to keep.</span>
-  </section>
+    </div>
+  </details>
 
   <section class="grid2">
     <div class="panel setup">
@@ -680,7 +685,7 @@ const filePut=(k,v)=>idbDo('files','readwrite',st=>st.put(v,k)).catch(()=>{});
 
 async function renderLib(){
   const songs=(await libList()).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur,back:!!s.backBlob})).sort((a,b)=>b.created-a.created);
-  const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0;
+  const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0; $('#libCount').textContent=songs.length?'('+songs.length+')':'';
   for(const s of songs){
     const row=document.createElement('div'); row.className='song-row';
     const d=new Date(s.created);
@@ -776,7 +781,7 @@ async function getModel(my){
 async function separateSong(file){
   if(S.sep.worker) return;
   stop(); const my=++S.sep.token, name=file.name.replace(/\.(mp3|m4a|wav|ogg|aac|flac)$/i,'').replace(/_/g,' ');
-  $('#sepBox').hidden=false; $('#sepSave').hidden=true; $('#sepName').textContent=name; $('#engine').hidden=true; $('#sepCancel').hidden=false; $('#sepFile').disabled=true;
+  $('#libPanel').open=true; $('#sepBox').hidden=false; $('#sepSave').hidden=true; $('#sepName').textContent=name; $('#engine').hidden=true; $('#sepCancel').hidden=false; $('#sepFile').disabled=true;
   let wake=null, wurl=null;
   try{ if(navigator.wakeLock) wake=await navigator.wakeLock.request('screen'); }catch(e){}
   try{
@@ -1066,7 +1071,7 @@ function finishTakes(){
   renderTakes();
 }
 function renderTakes(){
-  const list=$('#takeList'); $('#takesPanel').hidden=!S.takes.length;
+  const list=$('#takeList'); $('#takesPanel').hidden=!S.takes.length; $('#takeCount').textContent=S.takes.length?'('+S.takes.length+')':'';
   list.innerHTML='';
   [...S.takes].reverse().forEach(k=>{
     const row=document.createElement('div'); row.className='take'+(S.review&&S.review.take===k?' now':'');
@@ -1498,6 +1503,11 @@ try{ if(localStorage.getItem('pc-lyr')==='0'){ S.lyrShow=false; $('#lyrShow').ch
 try{ const o=localStorage.getItem('pc-lyr-open'); if(o==='1') $('#lyrPanel').open=true; }catch(x){}
 $('#lyrPanel').addEventListener('toggle',e=>{ try{localStorage.setItem('pc-lyr-open',e.target.open?'1':'0')}catch(x){} });
 renderLyrics(true);
+for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes']]){
+  const el=document.getElementById(id);
+  try{ const v=localStorage.getItem(key); if(v==='0') el.open=false; if(v==='1') el.open=true; }catch(x){}
+  el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
+}
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
