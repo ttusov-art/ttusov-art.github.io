@@ -57,6 +57,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .edit-info{flex:1 1 100%;font-size:13px;color:var(--fg);font-variant-numeric:tabular-nums}
 .edit-info b{font-family:var(--font-mono)}
 .edit-sep{width:1px;height:24px;background:var(--line);margin:0 2px}
+.snd{gap:6px;flex:1 1 100%}
+.snd button{padding:7px 9px;font-size:14px}
 .guide-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 #editBtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .lane-foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
@@ -178,7 +180,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <button id="edReset" type="button">Reset to original</button>
     </div>
     <div class="lane-foot">
-      <button id="guideBtn" type="button" aria-pressed="true" class="guide-on">Guide voice: on</button>
+      <div class="row snd" role="group" aria-label="Sound on or off">
+        <button id="guideBtn" type="button" aria-pressed="true" class="guide-on" title="Guide voice">Voice: on</button>
+        <button id="backBtn" type="button" aria-pressed="true" class="guide-on">Backing: on</button>
+        <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone: off</button>
+      </div>
       <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Drag it to move in the song while stopped.</span></span>
     </div>
   </section>
@@ -403,8 +409,8 @@ function ensureCtx(){
 function applyGains(){
   if(!S.gGuide) return;
   S.gGuide.gain.value=S.guideMuted?0:+$('#volGuide').value*(S.normGuide||1);
-  S.gBack.gain.value=+$('#volBack').value*(S.normBack||1);
-  S.gTone.gain.value=+$('#volTone').value*0.35;
+  S.gBack.gain.value=S.backMuted?0:+$('#volBack').value*(S.normBack||1);
+  S.gTone.gain.value=S.toneMuted?0:+$('#volTone').value*0.35;
 }
 // loudness of the louder passages (90th percentile of 50 ms RMS)
 function loudness(buf){
@@ -1629,8 +1635,21 @@ async function addCurrentToLib(btn){
   }catch(err){ setStatus('Could not add it to the library: '+((err&&err.message)||'storage may be full')+'.',true); }
   finally{ btn.disabled=false; btn.textContent=old; }
 }
-function setGuideMuted(m){ S.guideMuted=m; const b=$('#guideBtn'); b.setAttribute('aria-pressed',String(!m)); b.classList.toggle('guide-on',!m); b.textContent='Guide voice: '+(m?'off':'on'); applyGains(); try{localStorage.setItem('pc-guide-muted',m?'1':'0')}catch(x){} }
+function setGuideMuted(m){ S.guideMuted=m; const b=$('#guideBtn'); b.setAttribute('aria-pressed',String(!m)); b.classList.toggle('guide-on',!m); b.textContent='Voice: '+(m?'off':'on'); applyGains(); try{localStorage.setItem('pc-guide-muted',m?'1':'0')}catch(x){} }
 $('#guideBtn').addEventListener('click',()=>{ setGuideMuted(!S.guideMuted); setStatus(S.guideMuted?'Guide voice off. Sing the part on your own.':'Guide voice on.'); });
+function paintToggle(id,label,on){ const b=$('#'+id); b.setAttribute('aria-pressed',String(on)); b.classList.toggle('guide-on',on); b.textContent=label+': '+(on?'on':'off'); }
+function setBackMuted(m){ S.backMuted=m; paintToggle('backBtn','Backing',!m); applyGains(); try{localStorage.setItem('pc-back-muted',m?'1':'0')}catch(x){} }
+function toneIsOn(){ return !S.toneMuted&&+$('#volTone').value>0; }
+function setToneOn(on){
+  if(on){ S.toneMuted=false; if(+$('#volTone').value<=0){ const r=$('#volTone'); r.value='0.4'; $('#volToneV').textContent=pct(0.4); } }
+  else S.toneMuted=true;
+  paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){}
+}
+$('#backBtn').addEventListener('click',()=>{ setBackMuted(!S.backMuted); setStatus(S.backMuted?'Backing off.':'Backing on.'+(S.backBuf?'':' (No backing track is loaded for this song.)')); });
+$('#toneBtn').addEventListener('click',()=>{ setToneOn(!toneIsOn()); setStatus(toneIsOn()?'Guide tone on.':'Guide tone off.'); });
+try{ if(localStorage.getItem('pc-back-muted')==='1') setBackMuted(true); }catch(x){}
+S.toneMuted=true; try{ if(localStorage.getItem('pc-tone-muted')==='0') setToneOn(true); }catch(x){}
+paintToggle('toneBtn','Tone',toneIsOn());
 try{ if(localStorage.getItem('pc-guide-muted')==='1') setGuideMuted(true); }catch(x){}
 $('#editBtn').addEventListener('click',()=>setEditMode(!S.editMode));
 $('#edOne').addEventListener('click',edOneNote);
@@ -1686,7 +1705,7 @@ $('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBack
 const pct=v=>Math.round(v*100)+'%';
 $('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); });
 $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
-$('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; applyGains(); });
+$('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; S.toneMuted=v<=0; try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){} paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); });
 $('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; if(was) play(); });
 $('#delay').addEventListener('input',e=>setDelay(+e.target.value));
 $('#calBtn').addEventListener('click',measureDelay);
