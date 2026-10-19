@@ -57,6 +57,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .edit-info{flex:1 1 100%;font-size:13px;color:var(--fg);font-variant-numeric:tabular-nums}
 .edit-info b{font-family:var(--font-mono)}
 .edit-sep{width:1px;height:24px;background:var(--line);margin:0 2px}
+.guide-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 #editBtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .lane-foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
@@ -177,13 +178,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <button id="edReset" type="button">Reset to original</button>
     </div>
     <div class="lane-foot">
-      <div class="legend">
-        <span><i class="sw" style="background:var(--target-edge)"></i>Target</span>
-        <span><i class="sw" style="background:var(--good)"></i>Within 50 ¢</span>
-        <span><i class="sw" style="background:var(--near)"></i>Within 1 semitone</span>
-        <span><i class="sw" style="background:var(--off)"></i>Further off</span>
-        <span><i class="sw" style="background:var(--ghost)"></i>Previous pass</span>
-      </div>
+      <button id="guideBtn" type="button" aria-pressed="true" class="guide-on">Guide voice: on</button>
       <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Drag it to move in the song while stopped.</span></span>
     </div>
   </section>
@@ -335,6 +330,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
       <ul class="tips">
+        <li>Your line is green within 50 cents of the target, amber within a semitone and red further off. The faint blue line is your previous loop pass.</li>
         <li>Score counts only moments where both the target and you have a clear pitch.</li>
         <li>Turn the guide voice down once you know the part, and sing it alone over the backing.</li>
         <li>You can turn the screen off while singing. The song, scoring and recording keep going, and lock-screen controls can pause it.</li>
@@ -406,7 +402,7 @@ function ensureCtx(){
 }
 function applyGains(){
   if(!S.gGuide) return;
-  S.gGuide.gain.value=+$('#volGuide').value*(S.normGuide||1);
+  S.gGuide.gain.value=S.guideMuted?0:+$('#volGuide').value*(S.normGuide||1);
   S.gBack.gain.value=+$('#volBack').value*(S.normBack||1);
   S.gTone.gain.value=+$('#volTone').value*0.35;
 }
@@ -1633,6 +1629,9 @@ async function addCurrentToLib(btn){
   }catch(err){ setStatus('Could not add it to the library: '+((err&&err.message)||'storage may be full')+'.',true); }
   finally{ btn.disabled=false; btn.textContent=old; }
 }
+function setGuideMuted(m){ S.guideMuted=m; const b=$('#guideBtn'); b.setAttribute('aria-pressed',String(!m)); b.classList.toggle('guide-on',!m); b.textContent='Guide voice: '+(m?'off':'on'); applyGains(); try{localStorage.setItem('pc-guide-muted',m?'1':'0')}catch(x){} }
+$('#guideBtn').addEventListener('click',()=>{ setGuideMuted(!S.guideMuted); setStatus(S.guideMuted?'Guide voice off. Sing the part on your own.':'Guide voice on.'); });
+try{ if(localStorage.getItem('pc-guide-muted')==='1') setGuideMuted(true); }catch(x){}
 $('#editBtn').addEventListener('click',()=>setEditMode(!S.editMode));
 $('#edOne').addEventListener('click',edOneNote);
 $('#edUp').addEventListener('click',()=>edShift(1));
