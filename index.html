@@ -184,7 +184,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <span><i class="sw" style="background:var(--off)"></i>Further off</span>
         <span><i class="sw" style="background:var(--ghost)"></i>Previous pass</span>
       </div>
-      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Drag the lane to move in the song while stopped.</span></span>
+      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Drag it to move in the song while stopped.</span></span>
     </div>
   </section>
 
@@ -1046,7 +1046,7 @@ function selectFragmentAt(t){
 }
 function setEditMode(on){
   S.editMode=on; $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select, tap a fragment to select it.':'Drag the lane to move in the song while stopped.';
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select, tap a fragment to select it.':'Tap the lane to play or pause. Drag it to move in the song while stopped.';
   if(!on) S.sel=null; updateSelInfo(); draw();
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return songTime()+(clientX-rect.left-headX)/pps; }
@@ -1600,10 +1600,11 @@ function draw(){
 let drag=null;
 canvas.addEventListener('pointerdown',e=>{
   if(S.editMode){ const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t}; S.sel={a:t,b:t}; canvas.setPointerCapture(e.pointerId); draw(); return; }
-  if(S.playing) return; drag={x:e.clientX,pos:S.pos}; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointermove',e=>{ if(!drag) return; if(drag.edit){ S.sel.b=laneTimeAt(e.clientX); updateSelInfo(); draw(); return; } const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
+  drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review}; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove',e=>{ if(!drag) return; if(drag.edit){ S.sel.b=laneTimeAt(e.clientX); updateSelInfo(); draw(); return; } if(Math.abs(e.clientX-drag.x)>6) drag.moved=true; if(!drag.moved||drag.busy||S.playing) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
-  if(drag&&drag.edit&&ev==='pointerup'&&Math.abs(e.clientX-drag.x)<6) selectFragmentAt(drag.t0);
+  if(drag&&!drag.edit&&ev==='pointerup'&&!drag.moved){ (S.playing||S.review)?stop():play(); }
+  else if(drag&&drag.edit&&ev==='pointerup'&&Math.abs(e.clientX-drag.x)<6) selectFragmentAt(drag.t0);
   else if(drag&&drag.edit) updateSelInfo();
   drag=null; }));
 
