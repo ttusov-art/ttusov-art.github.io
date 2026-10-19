@@ -236,6 +236,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="small">Keep this page open and the screen on while it works. On a laptop this takes a few minutes; on a phone it can take much longer.</span>
     </div>
     <div id="songList"></div>
+    <div class="sep-row" style="border-top:1px solid var(--line);padding-top:10px">
+      <button id="bkSave" type="button">Back up library</button>
+      <span class="btn">Restore from backup<input id="bkFile" type="file" aria-label="Choose a Part Coach backup file"></span>
+      <span class="small" id="bkText"></span>
+    </div>
+    <span class="small" id="storeText"></span>
     <span class="small" id="libEmpty">Choose a song (for example your part MP3). The app separates the voice, finds the pitch line and keeps the vocals here for next time.</span>
     </div>
   </details>
@@ -667,7 +673,9 @@ function libDb(){ return new Promise((res,rej)=>{ try{ const r=indexedDB.open('p
 async function idbDo(store,mode,fn){ const db=await libDb(); return await new Promise((res,rej)=>{ const tx=db.transaction(store,mode), st=tx.objectStore(store); let out; const q=fn(st); if(q) q.onsuccess=()=>{ out=q.result; }; tx.oncomplete=()=>res(out); tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error||new Error('storage full')); }); }
 const libList=()=>idbDo('songs','readonly',st=>st.getAll()).catch(()=>[]);
 const libGet=id=>idbDo('songs','readonly',st=>st.get(id));
-const libPut=rec=>idbDo('songs','readwrite',st=>st.put(rec));
+const newUid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const libPutRaw=rec=>idbDo('songs','readwrite',st=>st.put(rec));
+const libPut=rec=>{ if(!rec.uid) rec.uid=newUid(); rec.updated=Date.now(); return libPutRaw(rec); };
 const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id));
 function backsOf(s){ if(!s) return []; if(Array.isArray(s.backs)) return s.backs; if(s.backBlob) return [{name:s.backName||'Backing',blob:s.backBlob}]; return []; }
 async function libSetBacks(id,backs,sel){ const s=await libGet(id); if(!s) return; s.backs=backs; s.backSel=sel; delete s.backBlob; delete s.backName; await libPut(s); }
@@ -727,7 +735,106 @@ async function encodeMp3(buf,kbps,onProg,mono=true){
 const fileGet=k=>idbDo('files','readonly',st=>st.get(k)).catch(()=>null);
 const filePut=(k,v)=>idbDo('files','readwrite',st=>st.put(v,k)).catch(()=>{});
 
+// ===== storage info, backup and restore =====
+const fmtMB=b=>b>=1e9?(b/1e9).toFixed(1)+' GB':Math.max(0.1,b/1e6).toFixed(b<1e7?1:0)+' MB';
+async function showStorage(){
+  try{ if(!navigator.storage||!navigator.storage.estimate) return; const e=await navigator.storage.estimate();
+    $('#storeText').textContent='Part Coach uses '+fmtMB(e.usage||0)+' on this device'+(e.quota?' · room for about '+fmtMB(Math.max(0,e.quota-(e.usage||0)))+' more':'')+'.'; }catch(x){}
+}
+const CRC_T=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; } return t; })();
+async function crc32Blob(b){
+  let c=0xFFFFFFFF; const step=4<<20;
+  for(let o=0;o<b.size;o+=step){ const u=new Uint8Array(await b.slice(o,o+step).arrayBuffer()); for(let i=0;i<u.length;i++) c=CRC_T[(c^u[i])&255]^(c>>>8); }
+  return (c^0xFFFFFFFF)>>>0;
+}
+// minimal ZIP writer (stored, no compression; audio does not compress)
+async function zipBlob(entries,onProg){
+  const enc=new TextEncoder(), parts=[], central=[]; let off=0;
+  const d=new Date(), dosT=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1), dosD=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+  for(let i=0;i<entries.length;i++){
+    const e=entries[i], name=enc.encode(e.name), blob=e.data instanceof Blob?e.data:new Blob([e.data]), crc=await crc32Blob(blob), size=blob.size;
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true); lh.setUint16(8,0,true); lh.setUint16(10,dosT,true); lh.setUint16(12,dosD,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,size,true); lh.setUint32(22,size,true); lh.setUint16(26,name.length,true); lh.setUint16(28,0,true);
+    parts.push(lh.buffer,name,blob);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true); ch.setUint16(8,0x0800,true); ch.setUint16(10,0,true); ch.setUint16(12,dosT,true); ch.setUint16(14,dosD,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,size,true); ch.setUint32(24,size,true); ch.setUint16(28,name.length,true); ch.setUint32(42,off,true);
+    central.push(ch.buffer,name);
+    off+=30+name.length+size; if(off>0xFFFFFFF0) throw new Error('the library is larger than 4 GB, too big for one backup file');
+    onProg&&onProg((i+1)/entries.length);
+  }
+  const cdSize=central.reduce((a,p)=>a+(p.byteLength||p.length),0), eo=new DataView(new ArrayBuffer(22));
+  eo.setUint32(0,0x06054b50,true); eo.setUint16(8,entries.length,true); eo.setUint16(10,entries.length,true); eo.setUint32(12,cdSize,true); eo.setUint32(16,off,true);
+  return new Blob([...parts,...central,eo.buffer],{type:'application/zip'});
+}
+// ZIP reader that slices the file instead of loading it whole
+async function openZip(file){
+  const tailStart=Math.max(0,file.size-66000), tail=new DataView(await file.slice(tailStart).arrayBuffer());
+  let e=-1; for(let i=tail.byteLength-22;i>=0;i--){ if(tail.getUint32(i,true)===0x06054b50){ e=i; break; } }
+  if(e<0) throw new Error('this is not a Part Coach backup file');
+  const count=tail.getUint16(e+10,true), cdSize=tail.getUint32(e+12,true), cdOff=tail.getUint32(e+16,true);
+  const cd=new DataView(await file.slice(cdOff,cdOff+cdSize).arrayBuffer()), dec=new TextDecoder(), map={};
+  let p=0;
+  for(let k=0;k<count;k++){
+    const method=cd.getUint16(p+10,true), csize=cd.getUint32(p+20,true), nl=cd.getUint16(p+28,true), xl=cd.getUint16(p+30,true), cl=cd.getUint16(p+32,true), lo=cd.getUint32(p+42,true);
+    const name=dec.decode(new Uint8Array(cd.buffer,cd.byteOffset+p+46,nl)); map[name]={method,csize,lo}; p+=46+nl+xl+cl;
+  }
+  return {names:Object.keys(map), async get(name){ const en=map[name]; if(!en) return null; const lh=new DataView(await file.slice(en.lo,en.lo+30).arrayBuffer()); const ds=en.lo+30+lh.getUint16(26,true)+lh.getUint16(28,true); const b=file.slice(ds,ds+en.csize); return en.method===0?b:new Blob([await inflateRaw(new Uint8Array(await b.arrayBuffer()))]); }};
+}
+const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
+async function backupLibrary(){
+  const btn=$('#bkSave'), txt=$('#bkText'); btn.disabled=true;
+  try{
+    const songs=await libList(); if(!songs.length){ txt.textContent='The library is empty.'; return; }
+    const entries=[], man={app:'part-coach',version:1,created:Date.now(),songs:[]};
+    for(const s0 of songs){
+      let s=s0; if(!s.uid){ s.uid=newUid(); await libPutRaw(s); }
+      const dir='songs/'+s.uid+'/', m={uid:s.uid,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
+      entries.push({name:dir+'vocals.pcm',data:s.pcm}); m.files.pcm=dir+'vocals.pcm';
+      if(s.contour){ entries.push({name:dir+'contour.f32',data:f32buf(s.contour)}); m.files.contour=dir+'contour.f32'; }
+      if(s.contourOrig){ entries.push({name:dir+'contour-original.f32',data:f32buf(s.contourOrig)}); m.files.contourOrig=dir+'contour-original.f32'; }
+      if(s.tt){ entries.push({name:dir+'times.f32',data:f32buf(s.tt)}); m.files.tt=dir+'times.f32'; }
+      m.backs=backsOf(s).map((b,i)=>{ const f=dir+'backing'+i+'.'+blobExt(b.blob,b.name); entries.push({name:f,data:b.blob}); return {name:b.name,sep:!!b.sep,type:b.blob.type||'',file:f}; });
+      man.songs.push(m);
+    }
+    entries.unshift({name:'part-coach-backup.json',data:new TextEncoder().encode(JSON.stringify(man))});
+    const zip=await zipBlob(entries,p=>{ txt.textContent='Preparing the backup… '+Math.round(p*100)+'%'; });
+    const d=new Date(), name='Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
+    const a=document.createElement('a'); a.href=URL.createObjectURL(zip); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },5000);
+    txt.textContent='Saved '+name+' ('+fmtMB(zip.size)+', '+songs.length+' song'+(songs.length>1?'s':'')+') to your downloads.';
+  }catch(err){ txt.textContent='Backup failed: '+((err&&err.message)||'unknown error')+'.'; }
+  finally{ btn.disabled=false; }
+}
+async function restoreLibrary(file){
+  const txt=$('#bkText'); txt.textContent='Reading '+file.name+'…';
+  try{
+    const z=await openZip(file), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
+    const man=JSON.parse(await mb.text()); if(man.app!=='part-coach') throw new Error('this is not a Part Coach backup file');
+    const existing=await libList(), byUid={}; existing.forEach(s=>{ if(s.uid) byUid[s.uid]=s; });
+    let added=0,updated=0,skipped=0,i=0;
+    for(const m of man.songs){
+      i++; txt.textContent='Restoring song '+i+' of '+man.songs.length+'…';
+      const cur=byUid[m.uid];
+      if(cur&&(cur.updated||cur.created)>=(m.updated||m.created)){ skipped++; continue; }
+      const rd=async f=>f?await (await z.get(f)).arrayBuffer():null;
+      const rec={uid:m.uid,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:await rd(m.files.pcm)};
+      if(m.hop!=null) rec.hop=m.hop; if(m.t0!=null) rec.t0=m.t0;
+      const c=await rd(m.files.contour); if(c) rec.contour=new Float32Array(c);
+      const co=await rd(m.files.contourOrig); if(co) rec.contourOrig=new Float32Array(co);
+      const tt=await rd(m.files.tt); if(tt) rec.tt=new Float32Array(tt);
+      rec.backs=[]; for(const b of (m.backs||[])){ const bl=await z.get(b.file); if(bl) rec.backs.push({name:b.name,sep:!!b.sep,blob:new Blob([bl],{type:b.type||'audio/mpeg'})}); }
+      rec.backSel=rec.backs.length?Math.max(0,Math.min(rec.backs.length-1,m.backSel||0)):-1;
+      if(cur) rec.id=cur.id;
+      await libPutRaw(rec); if(cur) updated++; else added++;
+    }
+    await renderLib();
+    const parts=[]; if(added) parts.push(added+' added'); if(updated) parts.push(updated+' updated'); if(skipped) parts.push(skipped+' already up to date');
+    txt.textContent='Restore finished: '+(parts.join(', ')||'nothing to restore')+'.';
+  }catch(err){ txt.textContent='Restore failed: '+((err&&err.message)||'unknown error')+'.'; }
+}
 async function renderLib(){
+  showStorage();
   const songs=(await libList()).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur,nb:backsOf(s).length})).sort((a,b)=>b.created-a.created);
   const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0; $('#libCount').textContent=songs.length?'('+songs.length+')':'';
   for(const s of songs){
@@ -1554,6 +1661,8 @@ for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes']
   try{ const v=localStorage.getItem(key); if(v==='0') el.open=false; if(v==='1') el.open=true; }catch(x){}
   el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
 }
+$('#bkSave').addEventListener('click',backupLibrary);
+$('#bkFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) restoreLibrary(f).finally(()=>e.target.value=''); });
 $('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) useBacking(i); });
 $('#backSave').addEventListener('click',saveBacking);
 $('#backDel').addEventListener('click',e=>deleteBacking(e.currentTarget));
