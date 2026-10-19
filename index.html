@@ -288,6 +288,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
           <button id="backClear" type="button" hidden>Remove</button>
         </div>
         <span class="file-name" id="backName">None loaded.</span>
+        <div class="row" id="backPick" hidden>
+          <label class="small" for="backSel">Kept backings</label>
+          <select id="backSel" class="sel" style="flex:1 1 180px;min-width:0"></select>
+          <button id="backSave" type="button">Save</button>
+          <button id="backDel" type="button">Delete</button>
+        </div>
       </div>
       <div class="field">
         <label for="volGuide">Guide voice volume</label>
@@ -376,7 +382,7 @@ const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
   tT:null,tM:null, // target times (song seconds) and midi (NaN = none)
   pos:0,pos0:0,startAt:0,playing:false,srcs:[],
   mic:null,micBuf:null,micHist:[],pts:[],stat:{n:0,hit:0,sum:0},
-  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,lyrics:[],tap:null,lyrShow:true,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
+  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,lyrics:[],tap:null,lyrShow:true,curBacks:[],curBackSel:-1,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
 
 function ensureCtx(){
   if(!S.ctx){
@@ -478,7 +484,7 @@ async function loadGuide(file){
       const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'));
       setTarget(pl.tt,pl.mm);
     }
-    normalize(); S.stretch=null; S.cur={libId:null,fromFile:true}; $('#addLib').hidden=false; S.lyrics=[];
+    normalize(); S.stretch=null; S.cur={libId:null,fromFile:true}; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -489,7 +495,7 @@ async function loadBack(file){
   stop(); setStatus('Loading '+file.name+'…');
   try{ S.backBuf=await decode(await file.arrayBuffer()); normalize(); S.stretch=null; S.curBackBlob=file; $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime();
     let msg='Backing loaded. Press Play and sing along.';
-    if(S.cur.libId!=null){ try{ await libUpdate(S.cur.libId,{backBlob:file,backName:file.name.replace(/\.[a-z0-9]+$/i,'')}); await renderLib(); msg='Backing loaded and kept with this song in the library.'; }catch(e){ msg='Backing loaded, but it could not be saved in the library (storage may be full).'; } }
+    if(S.cur.libId!=null){ try{ const r=await libAddBacking(S.cur.libId,file.name.replace(/\.[a-z0-9]+$/i,''),file,false); if(r){ S.curBacks=r.backs; S.curBackSel=r.sel; renderBackPick(); } await renderLib(); msg=S.curBacks.length>1?'Backing added to this song. Switch between its '+S.curBacks.length+' backings in the Kept backings menu.':'Backing loaded and kept with this song in the library.'; }catch(e){ msg='Backing loaded, but it could not be saved in the library (storage may be full).'; } }
     setStatus(msg); }
   catch(err){ setStatus('Could not read this audio file. Try an MP3, M4A or WAV file.',true); }
 }
@@ -663,6 +669,44 @@ const libList=()=>idbDo('songs','readonly',st=>st.getAll()).catch(()=>[]);
 const libGet=id=>idbDo('songs','readonly',st=>st.get(id));
 const libPut=rec=>idbDo('songs','readwrite',st=>st.put(rec));
 const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id));
+function backsOf(s){ if(!s) return []; if(Array.isArray(s.backs)) return s.backs; if(s.backBlob) return [{name:s.backName||'Backing',blob:s.backBlob}]; return []; }
+async function libSetBacks(id,backs,sel){ const s=await libGet(id); if(!s) return; s.backs=backs; s.backSel=sel; delete s.backBlob; delete s.backName; await libPut(s); }
+async function libAddBacking(id,name,blob,sep){
+  const s=await libGet(id); if(!s) return null;
+  const backs=backsOf(s).slice(); let i=backs.findIndex(b=>!b.sep&&!sep&&b.name===name);
+  if(i>=0) backs[i]={name,blob,sep:!!sep}; else { backs.push({name,blob,sep:!!sep}); i=backs.length-1; }
+  await libSetBacks(id,backs,i); return {backs,sel:i};
+}
+function renderBackPick(){
+  const show=S.cur.libId!=null&&S.curBacks.length>0, sel=$('#backSel'); $('#backPick').hidden=!show; if(!show) return;
+  sel.innerHTML=''; S.curBacks.forEach((b,i)=>{ const o=document.createElement('option'); o.value=String(i); o.textContent=b.name+(b.sep?' · separated in the app':''); if(i===S.curBackSel) o.selected=true; sel.appendChild(o); });
+  if(S.curBackSel<0){ const o=document.createElement('option'); o.value='-1'; o.textContent='(none playing)'; o.selected=true; sel.prepend(o); }
+}
+async function useBacking(i){
+  const b=S.curBacks[i]; if(!b) return;
+  stop(); setStatus('Opening '+b.name+'…');
+  try{ S.backBuf=await decode(await b.blob.arrayBuffer()); S.curBackBlob=b.blob; S.curBackSel=i; normalize(); S.stretch=null; updateDur(); updateTime();
+    $('#backName').textContent=b.name+' (from library)'; $('#backClear').hidden=false; renderBackPick();
+    if(S.cur.libId!=null) libSetBacks(S.cur.libId,S.curBacks,i).catch(()=>{});
+    setStatus('Backing: '+b.name+'.'); }
+  catch(e){ setStatus('Could not open this backing.',true); }
+}
+function blobExt(b,name){ const t=(b.type||'').toLowerCase(); if(t.includes('mpeg')) return 'mp3'; if(t.includes('wav')) return 'wav'; if(t.includes('ogg')) return 'ogg'; if(t.includes('mp4')||t.includes('aac')||t.includes('m4a')) return 'm4a'; const m=(b.name||name||'').match(/\.([a-z0-9]{2,4})$/i); return m?m[1]:'mp3'; }
+function saveBacking(){
+  const b=S.curBacks[S.curBackSel]; if(!b) return;
+  const name=(b.name.replace(/\.[a-z0-9]{2,4}$/i,'')+'.'+blobExt(b.blob,b.name)).replace(/[\\/:*?"<>|]/g,'');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(b.blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000);
+  setStatus('Saved '+name+' to your downloads.');
+}
+async function deleteBacking(btn){
+  const i=S.curBackSel; if(i<0||!S.curBacks[i]) return;
+  if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent='Tap again to delete'; setTimeout(()=>{ delete btn.dataset.armed; btn.textContent='Delete'; },4000); return; }
+  delete btn.dataset.armed; btn.textContent='Delete';
+  const gone=S.curBacks[i].name; S.curBacks=S.curBacks.filter((_,k)=>k!==i);
+  if(S.curBacks.length){ await libSetBacks(S.cur.libId,S.curBacks,0); await useBacking(0); }
+  else { await libSetBacks(S.cur.libId,[],-1); stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); renderBackPick(); }
+  renderLib(); setStatus('Deleted '+gone+' from this song.');
+}
 async function libUpdate(id,patch){ const s=await libGet(id); if(!s) return; Object.assign(s,patch); await libPut(s); }
 async function encodeMp3(buf,kbps,onProg,mono=true){
   if(!window.lamejs) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js');
@@ -684,12 +728,12 @@ const fileGet=k=>idbDo('files','readonly',st=>st.get(k)).catch(()=>null);
 const filePut=(k,v)=>idbDo('files','readwrite',st=>st.put(v,k)).catch(()=>{});
 
 async function renderLib(){
-  const songs=(await libList()).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur,back:!!s.backBlob})).sort((a,b)=>b.created-a.created);
+  const songs=(await libList()).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur,nb:backsOf(s).length})).sort((a,b)=>b.created-a.created);
   const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0; $('#libCount').textContent=songs.length?'('+songs.length+')':'';
   for(const s of songs){
     const row=document.createElement('div'); row.className='song-row';
     const d=new Date(s.created);
-    row.innerHTML=`<div class="take-info"><b></b><span>${fmtT(s.dur)} · ${s.back?'vocals + backing':'vocals only'} · added ${d.toLocaleDateString()}</span></div>`;
+    row.innerHTML=`<div class="take-info"><b></b><span>${fmtT(s.dur)} · ${s.nb>1?'vocals + '+s.nb+' backings':s.nb?'vocals + backing':'vocals only'} · added ${d.toLocaleDateString()}</span></div>`;
     row.querySelector('b').textContent=s.name;
     const mk=(label,fn,cls)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; if(cls) b.className=cls; b.addEventListener('click',()=>fn(b)); row.appendChild(b); return b; };
     mk('Practise',()=>openLibSong(s.id),'primary');
@@ -707,8 +751,9 @@ async function openLibSong(id){
     const mm=new Float32Array(s.contour); let tt;
     if(s.tt) tt=new Float32Array(s.tt); else { tt=new Float32Array(mm.length); for(let i=0;i<mm.length;i++) tt[i]=i*s.hop+s.t0; }
     S.guideBuf=buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
-    if(s.backBlob){ try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await s.backBlob.arrayBuffer()); S.curBackBlob=s.backBlob; $('#backName').textContent=(s.backName||'Backing')+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
-    S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
+    S.curBacks=backsOf(s).slice(); S.curBackSel=S.curBacks.length?Math.max(0,Math.min(S.curBacks.length-1,s.backSel==null?0:s.backSel)):-1;
+    if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
+    S.cur={libId:id,fromFile:false}; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
     setTarget(tt,mm,s.contourOrig); songReady(s.name,s.name+' (vocals, from library)');
     setStatus(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.');
     window.scrollTo({top:0,behavior:'smooth'});
@@ -817,7 +862,7 @@ async function separateSong(file){
     for(let i=0;i<n;i++){ bl[i]=oL[i]-VL[i]; br[i]=oR[i]-VR[i]; } back.copyToChannel(bl,0); back.copyToChannel(br,1);
     const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1));
     S.guideBuf=voc; S.backBuf=back; $('#backName').textContent='Backing from the separation (this time only)'; $('#backClear').hidden=false;
-    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; $('#addLib').hidden=false; S.lyrics=[];
+    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     setTarget(pl.tt,pl.mm); songReady(name,name+' (separated vocals)');
     let note='';
     if($('#keepLib').checked){
@@ -826,7 +871,7 @@ async function separateSong(file){
         const pcm=await toInt16(voc,LIB_SR);
         const id=await libPut({name,created:Date.now(),dur:voc.duration,sr:LIB_SR,pcm:pcm.buffer,contour:pl.mm,hop:pl.hop,t0:pl.t0});
         S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; note=' Saved in the library.';
-        try{ const bb=await encodeMp3(back,96,p=>sepUI('Saving the backing track to the library… '+Math.round(p*100)+'%',1)); await libUpdate(id,{backBlob:bb,backName:name+' backing'}); S.curBackBlob=bb; note=' Vocals and backing saved in the library.'; }
+        try{ const bb=await encodeMp3(back,96,p=>sepUI('Saving the backing track to the library… '+Math.round(p*100)+'%',1)); S.curBacks=[{name:name+' backing',blob:bb,sep:true}]; S.curBackSel=0; await libSetBacks(id,S.curBacks,0); S.curBackBlob=bb; renderBackPick(); note=' Vocals and backing saved in the library.'; }
         catch(e){ note=' Vocals saved in the library (the backing could not be saved).'; }
         await renderLib();
       }catch(err){ note=' It could not be saved in the library (the browser storage may be full).'; }
@@ -1472,10 +1517,11 @@ async function addCurrentToLib(btn){
     let note='Added to the library.';
     if(S.backBuf){
       try{ const bb=S.curBackBlob||await encodeMp3(S.backBuf,96,p=>setStatus('Saving the backing track… '+Math.round(p*100)+'%'));
-        await libUpdate(id,{backBlob:bb,backName:((S.curBackBlob&&S.curBackBlob.name)||($('#backName').textContent||'Backing').replace(/ \((this time only|from library)\)$/,'')).replace(/\.[a-z0-9]+$/i,'')}); note='Added to the library with its backing track.'; }
+        const bn=((S.curBackBlob&&S.curBackBlob.name)||($('#backName').textContent||'Backing').replace(/ \((this time only|from library)\)$/,'')).replace(/\.[a-z0-9]+$/i,'');
+        S.curBacks=[{name:bn,blob:bb,sep:!S.curBackBlob}]; S.curBackSel=0; await libSetBacks(id,S.curBacks,0); note='Added to the library with its backing track.'; }
       catch(e){ note='Added to the library (the backing could not be saved).'; }
     }
-    S.cur={libId:id,fromFile:false}; btn.hidden=true; await renderLib(); setStatus(note);
+    S.cur={libId:id,fromFile:false}; btn.hidden=true; renderBackPick(); await renderLib(); setStatus(note);
   }catch(err){ setStatus('Could not add it to the library: '+((err&&err.message)||'storage may be full')+'.',true); }
   finally{ btn.disabled=false; btn.textContent=old; }
 }
@@ -1508,6 +1554,9 @@ for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes']
   try{ const v=localStorage.getItem(key); if(v==='0') el.open=false; if(v==='1') el.open=true; }catch(x){}
   el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
 }
+$('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) useBacking(i); });
+$('#backSave').addEventListener('click',saveBacking);
+$('#backDel').addEventListener('click',e=>deleteBacking(e.currentTarget));
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
@@ -1524,7 +1573,7 @@ $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop()
 $('#micOn').addEventListener('change',async e=>{ if(e.target.checked){ const ok=await startMic(); if(!ok) e.target.checked=false; } else stopMic(); });
 $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadGuide(f).finally(()=>e.target.value=''); });
 $('#backFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadBack(f).finally(()=>e.target.value=''); });
-$('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBackBlob=null; S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
+$('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; renderBackPick(); S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
 const pct=v=>Math.round(v*100)+'%';
 $('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); });
 $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
