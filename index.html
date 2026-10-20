@@ -42,12 +42,12 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .small{font-size:13px;color:var(--muted)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
 
-.readout{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;padding:0}
+.readout{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;padding:0}
 .readout>div{padding:10px 14px;display:flex;flex-direction:column;min-width:0}
 .readout>div+div{border-left:1px solid var(--line)}
 .readout b{font-family:var(--font-mono);font-size:clamp(18px,4.2vw,26px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
 .readout span{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
-@media (max-width:560px){.readout{grid-template-columns:repeat(2,minmax(0,1fr))}.readout>div:nth-child(3){border-left:0}.readout>div:nth-child(n+3){border-top:1px solid var(--line)}}
+@media (max-width:560px){.readout{grid-template-columns:repeat(6,minmax(0,1fr))}.readout>div{grid-column:span 2;padding:8px 10px}.readout>div:nth-child(n+4){grid-column:span 3;border-top:1px solid var(--line)}.readout>div:nth-child(4){border-left:0}}
 .c-good{color:var(--good)}.c-near{color:var(--near)}.c-off{color:var(--off)}
 
 .lane{overflow:hidden;position:relative}
@@ -158,6 +158,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div><span>You</span><b id="rYou">–</b></div>
     <div><span>Off by</span><b id="rCents">–</b></div>
     <div><span>On pitch</span><b id="rScore">–</b></div>
+    <div><span>On time</span><b id="rTime">–</b></div>
   </section>
 
   <section class="panel lane">
@@ -338,6 +339,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <ul class="tips">
         <li>Your line is green within 50 cents of the target, amber within a semitone and red further off. The faint blue line is your previous loop pass.</li>
         <li>Score counts only moments where both the target and you have a clear pitch.</li>
+        <li>On time: at each note start the app checks when you reached the new note. Within 80 ms is on time (green), up to 200 ms is amber, more is red with the offset in ms (+ late, − early). Grey ticks show upcoming note starts.</li>
         <li>Turn the guide voice down once you know the part, and sing it alone over the backing.</li>
         <li>You can turn the screen off while singing. The song, scoring and recording keep going, and lock-screen controls can pause it.</li>
       </ul>
@@ -390,7 +392,7 @@ const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
   tT:null,tM:null, // target times (song seconds) and midi (NaN = none)
   pos:0,pos0:0,startAt:0,playing:false,srcs:[],
   mic:null,micBuf:null,micHist:[],pts:[],stat:{n:0,hit:0,sum:0},
-  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,lyrics:[],tap:null,lyrShow:true,curBacks:[],curBackSel:-1,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
+  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,onsets:[],tim:{next:0,res:new Map()},timStat:{n:0,good:0,sum:0,list:[]},timPass:{n:0,good:0},tPasses:[],takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,lyrics:[],tap:null,lyrShow:true,curBacks:[],curBackSel:-1,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
 
 function ensureCtx(){
   if(!S.ctx){
@@ -456,7 +458,7 @@ async function readZip(ab){
 }
 
 // ===== guide loading =====
-function setTarget(times,midis,orig){ S.tT=times; S.tM=midis; S.tMorig=orig&&orig.length===midis.length?new Float32Array(orig):Float32Array.from(midis); S.undo=[]; S.sel=null; if(typeof updateSelInfo==='function') updateSelInfo(); computeView(); }
+function setTarget(times,midis,orig){ S.tT=times; S.tM=midis; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()}; S.tMorig=orig&&orig.length===midis.length?new Float32Array(orig):Float32Array.from(midis); S.undo=[]; S.sel=null; if(typeof updateSelInfo==='function') updateSelInfo(); computeView(); }
 async function pitchLineOf(buf,onProg){
   const len=Math.ceil(buf.duration*11025), oc=new OfflineAudioContext(1,len,11025);
   const src=oc.createBufferSource(); src.buffer=buf;
@@ -472,7 +474,7 @@ async function pitchLineOf(buf,onProg){
 function songReady(name,label){
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
-  updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
+  updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
 }
 async function loadGuide(file){
   stop(); setStatus('Loading '+file.name+'…');
@@ -495,7 +497,7 @@ async function loadGuide(file){
     normalize(); S.stretch=null; S.cur={libId:null,fromFile:true}; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
-    updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
+    updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
     setStatus(S.backBuf? 'Ready. Press Play and sing along.' : 'Ready. Load the backing track too if you have it, then press Play.');
   }catch(err){ setStatus('Could not load this file: '+((err&&err.message)||'unknown error')+'.',true); }
 }
@@ -542,7 +544,9 @@ async function play(){
   startTone();
   S.playing=true;
   S.pts=S.pts.filter(p=>p.t<S.pos-0.02); S.micHist=[];
-  if(S.pos<0.5) S.stat={n:0,hit:0,sum:0};
+  if(S.pos<0.5){ S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; }
+  S.tim.next=lowerOnset(S.pos-S.delay*S.rate+0.05); for(const k of [...S.tim.res.keys()]) if(k>=S.tim.next) S.tim.res.delete(k);
+  S.timPass={n:0,good:0};
   $('#playLbl').textContent='Pause'; $('#result').hidden=true;
   setStatus(S.mic?'Listening. Sing along with the target line.':'Playing without the microphone.');
   startBg(); mediaOn();
@@ -609,11 +613,12 @@ function inLoop(t){ return S.loop.a!=null&&S.loop.b!=null&&t>=S.loop.a&&t<=S.loo
 function loopRestart(){
   endTake();
   const L=S.loop;
-  if(S.pass.n>=20) S.passes.push(Math.round(100*S.pass.hit/S.pass.n));
+  if(S.pass.n>=20){ S.passes.push(Math.round(100*S.pass.hit/S.pass.n)); S.tPasses.push(S.timPass.n?Math.round(100*S.timPass.good/S.timPass.n):null); }
   S.ghost=S.pts.filter(p=>p.t>=L.a-0.05&&p.t<=L.b+0.05);
   const st=loopStart();
   S.pts=S.pts.filter(p=>p.t<st-0.02||p.t>L.b+0.05);
-  S.pass={n:0,hit:0,sum:0}; S.micHist=[];
+  S.pass={n:0,hit:0,sum:0}; S.micHist=[]; S.timPass={n:0,good:0};
+  S.tim.next=lowerOnset(st); for(const k of [...S.tim.res.keys()]){ const o=S.onsets[k]; if(o&&o.t>=st-0.05&&o.t<=L.b+0.05) S.tim.res.delete(k); }
   startSources(st); beginTake(); updateLoopUI();
 }
 function setLoopPoint(which){
@@ -622,7 +627,7 @@ function setLoopPoint(which){
   L[which]=t;
   if(L.a!=null&&L.b!=null&&L.b<L.a){ const x=L.a; L.a=L.b; L.b=x; }
   if(L.a!=null&&L.b!=null&&L.b-L.a>=0.5&&!L.on&&which==='b'){ L.on=true; $('#loopOn').checked=true; }
-  S.passes=[]; S.ghost=[]; updateLoopUI(); draw();
+  S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw();
 }
 function updateLoopUI(){
   const L=S.loop, ready=L.a!=null&&L.b!=null&&L.b-L.a>=0.5;
@@ -632,7 +637,7 @@ function updateLoopUI(){
   if(L.a==null&&L.b==null){ el.textContent='Move to where a phrase starts and tap Set start, then Set end where it finishes.'; return; }
   let s=(L.a!=null?fmtT1(L.a):'…')+' – '+(L.b!=null?fmtT1(L.b):'…');
   if(L.a!=null&&L.b!=null&&L.b-L.a<0.5) s+=' · make the section longer';
-  if(S.passes.length) s+=' · passes: '+S.passes.slice(-6).map((v,i,a)=>i===a.length-1?'<b>'+v+'%</b>':v+'%').join(' · ');
+  if(S.passes.length){ s+=' · passes: '+S.passes.slice(-6).map((v,i,a)=>i===a.length-1?'<b>'+v+'%</b>':v+'%').join(' · '); const tl=S.tPasses[S.tPasses.length-1]; if(tl!=null) s+=' · timing last pass <b>'+tl+'%</b>'; }
   el.innerHTML=s;
 }
 const fmtT1=t=>{ const m=Math.floor(t/60), s=t-m*60; return m+':'+(s<10?'0':'')+s.toFixed(1); };
@@ -664,7 +669,7 @@ function updateTone(now){
   if(m!==T.m){ T.o.frequency.setTargetAtTime(m2f(m),c.currentTime,isNaN(T.m)?0.001:0.015); if(isNaN(T.m)) T.env.gain.setTargetAtTime(1,c.currentTime,0.01); T.m=m; }
 }
 function seek(t){ const was=S.playing; if(was) stop(); S.pos=Math.max(0,Math.min(S.dur,t)); if(was) play(); else { updateTime(); draw(); } }
-function resetRun(clearPts){ if(clearPts) S.pts=[]; S.stat={n:0,hit:0,sum:0}; $('#rScore').textContent='–'; $('#result').hidden=true; }
+function resetRun(clearPts){ if(clearPts){ S.pts=[]; S.tim.res=new Map(); } S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; $('#rScore').textContent='–'; $('#rTime').textContent='–'; $('#result').hidden=true; }
 function updateTime(){ $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur); }
 
 // ===== song library (IndexedDB) =====
@@ -1014,6 +1019,7 @@ function updateSelInfo(){
 function pushUndo(){ S.undo.push(Float32Array.from(S.tM)); if(S.undo.length>30) S.undo.shift(); }
 let edSaveTimer=null;
 function targetEdited(msg){
+  S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
   computeViewKeep(); updateSelInfo(); draw();
   if(msg) setStatus(msg);
   if(S.cur.libId!=null){ clearTimeout(edSaveTimer); const id=S.cur.libId; edSaveTimer=setTimeout(()=>{ libUpdate(id,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig)}).catch(()=>{}); },500); }
@@ -1038,7 +1044,7 @@ function edReset(btn){
   if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent='Tap again to reset'; setTimeout(()=>{ delete btn.dataset.armed; btn.textContent='Reset to original'; },4000); return; }
   delete btn.dataset.armed; btn.textContent='Reset to original'; pushUndo(); S.tM=Float32Array.from(S.tMorig); targetEdited('The whole target line is back to the original.');
 }
-function edLoop(){ const r=selRange(); if(!r) return; S.loop.a=Math.round(r.a*10)/10; S.loop.b=Math.round(Math.max(r.b,r.a+0.5)*10)/10; S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); setStatus('Loop set to the selection. Press Play.'); }
+function edLoop(){ const r=selRange(); if(!r) return; S.loop.a=Math.round(r.a*10)/10; S.loop.b=Math.round(Math.max(r.b,r.a+0.5)*10)/10; S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); setStatus('Loop set to the selection. Press Play.'); }
 function selectFragmentAt(t){
   if(!S.tT) return;
   let k=-1,bd=1e9; for(let i=0;i<S.tT.length;i++){ if(isNaN(S.tM[i])) continue; const d=Math.abs(S.tT[i]-t); if(d<bd){ bd=d; k=i; } }
@@ -1052,6 +1058,62 @@ function setEditMode(on){
   if(!on) S.sel=null; updateSelInfo(); draw();
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return songTime()+(clientX-rect.left-headX)/pps; }
+
+// ===== timing: note starts from the target line, scored against your pitch line =====
+function computeOnsets(){
+  const T=S.tT,M=S.tM,out=[]; if(!T||!T.length) return out;
+  const n=T.length, sm=new Float32Array(n).fill(NaN);
+  for(let i=0;i<n;i++){ if(isNaN(M[i])) continue; const w=[]; for(let k=i-2;k<=i+2;k++) if(k>=0&&k<n&&!isNaN(M[k])) w.push(M[k]); sm[i]=median(w); }
+  let ref=null,lastV=-1e9,dev=-1;
+  for(let i=0;i<n;i++){
+    const v=sm[i]; if(isNaN(v)) continue; const t=T[i];
+    if(ref===null||t-lastV>0.12){ out.push({t,i,kind:'entry'}); ref=v; dev=-1; }
+    else if(Math.abs(v-ref)>0.6){ if(dev<0) dev=i; if(t-T[dev]>=0.07){ out.push({t:T[dev],i:dev,kind:'change'}); const w=[]; for(let k=dev;k<=i;k++) if(!isNaN(sm[k])) w.push(sm[k]); ref=median(w); dev=-1; } }
+    else { dev=-1; ref=0.9*ref+0.1*v; }
+    lastV=t;
+  }
+  // note of each onset, drop glides, too-short notes and near-duplicates
+  const res=[];
+  for(let k=0;k<out.length;k++){
+    const o=out[k], tEnd=k+1<out.length?out[k+1].t:o.t+1, w=[];
+    for(let i=o.i;i<n&&T[i]<Math.min(o.t+0.18,tEnd);i++) if(!isNaN(sm[i])) w.push(sm[i]);
+    let voicedDur=0; for(let i=o.i;i<n&&T[i]<tEnd;i++) if(!isNaN(sm[i])) voicedDur+=(i+1<n?T[i+1]-T[i]:0.01);
+    if(w.length<3||voicedDur<0.1) continue;
+    const m=Math.round(median(w)), prev=res.length?res[res.length-1]:null;
+    if(o.kind==='change'&&prev&&prev.m===m) continue;
+    if(prev&&o.t-prev.t<0.1) continue;
+    res.push({t:o.t,m,kind:o.kind});
+  }
+  return res;
+}
+function lowerOnset(t){ let a=0,b=S.onsets.length; while(a<b){ const c=(a+b)>>1; if(S.onsets[c].t<t) a=c+1; else b=c; } return a; }
+function lowerPt(t){ const P=S.pts; let a=0,b=P.length; while(a<b){ const c=(a+b)>>1; if(P[c].t<t) a=c+1; else b=c; } return a; }
+function evalOnset(o){
+  const P=S.pts; let i=lowerPt(o.t-0.3), runStart=null, first=null, attempted=false;
+  for(;i<P.length&&P[i].t<=o.t+0.8;i++){
+    const p=P[i]; if(isNaN(p.m)){ runStart=null; continue; } attempted=true;
+    if(p.t>o.t+0.5||first!==null) continue;
+    if(Math.abs(centsDiff(p.m,o.m))<=75){ if(runStart===null) runStart=p.t; if(p.t-runStart>=0.05) first=runStart; } else runStart=null;
+  }
+  if(first!==null){ const off=first-o.t, a=Math.abs(off); return {off,g:a<=0.08?'good':a<=0.2?'near':'off'}; }
+  return attempted?{off:null,g:'off'}:null;
+}
+function scoreOnsets(tSung){
+  while(S.tim.next<S.onsets.length&&S.onsets[S.tim.next].t+0.55<tSung){
+    const k=S.tim.next++, o=S.onsets[k], r=evalOnset(o); if(!r) continue;
+    S.tim.res.set(k,r);
+    S.timStat.n++; if(r.g==='good') S.timStat.good++; if(r.off!==null) S.timStat.sum+=r.off; S.timStat.list.push({t:o.t,off:r.off});
+    if(loopActive()&&inLoop(o.t)){ S.timPass.n++; if(r.g==='good') S.timPass.good++; }
+  }
+}
+function timingSummary(){
+  const s=S.timStat; if(s.n<3) return '';
+  const pct=Math.round(100*s.good/s.n), hits=s.list.filter(x=>x.off!==null), avg=hits.length?Math.round(1000*hits.reduce((a,x)=>a+x.off,0)/hits.length):0;
+  const tend=Math.abs(avg)<=25?'On average you came in right on time.':avg>0?`On average you came in ${avg} ms late.`:`On average you came in ${-avg} ms early.`;
+  const worst=[...s.list].sort((a,b)=>(b.off===null?9:Math.abs(b.off))-(a.off===null?9:Math.abs(a.off))).filter(x=>x.off===null||Math.abs(x.off)>0.2).slice(0,3);
+  const w=worst.length?' Check: '+worst.map(x=>fmtT(x.t)+' ('+(x.off===null?'missed':(x.off>0?Math.round(x.off*1000)+' ms late':Math.round(-x.off*1000)+' ms early'))+')').join(', ')+'.':'';
+  return `<br><b>${pct}%</b> of ${s.n} note starts were on time (within 80 ms). ${tend}${w}`;
+}
 
 // ===== lyrics =====
 function lyrSorted(){ return S.lyrics; }
@@ -1439,6 +1501,7 @@ function step(){
       if(!isNaN(tg)){ const d=centsDiff(you,tg); c=grade(d); S.stat.n++; S.stat.sum+=d; if(c==='good') S.stat.hit++; if(loopActive()&&inLoop(tSung)){ S.pass.n++; S.pass.sum+=d; if(c==='good') S.pass.hit++; } }
       S.pts.push({t:tSung,m:you,c});
     } else if(tSung>=0) S.pts.push({t:tSung,m:NaN,c:null});
+    scoreOnsets(tSung);
   }
   // readout
   const tgShow=targetAt(now-S.delay*S.rate);
@@ -1451,6 +1514,7 @@ function step(){
   } else { ry.textContent=S.mic?'–':'mic off'; rc.textContent='–'; rc.className=''; }
   if(document.hidden) return;
   const st=loopActive()?S.pass:S.stat; $('#rScore').textContent=st.n>20? Math.round(100*st.hit/st.n)+'%':'–';
+  const ts=loopActive()?S.timPass:S.timStat; $('#rTime').textContent=ts.n>=2? Math.round(100*ts.good/ts.n)+'%':'–';
   updateTime(); draw();
 }
 // background driver: keeps the song logic running while the screen is off
@@ -1495,7 +1559,8 @@ function showResult(){
   const pct=Math.round(100*S.stat.hit/S.stat.n), avg=Math.round(S.stat.sum/S.stat.n), secs=Math.round(S.stat.n/60);
   const tend=Math.abs(avg)<10?'Your average was right on the target.':avg>0?`On average you were ${avg} cents sharp (too high).`:`On average you were ${-avg} cents flat (too low).`;
   $('#resultText').innerHTML=`<b>${pct}%</b> of the compared time was within 50 cents of the target. ${tend} <span class="small">(${secs} s of singing compared${S.ignoreOct?', octave ignored':''})</span>`;
-  if(S.passes.length) $('#resultText').innerHTML+='<br>Loop passes: '+S.passes.join('% · ')+'%.';
+  $('#resultText').innerHTML+=timingSummary();
+  if(S.passes.length) $('#resultText').innerHTML+='<br>Loop passes (pitch): '+S.passes.join('% · ')+'%.';
   $('#result').hidden=false;
 }
 
@@ -1550,6 +1615,18 @@ function draw(){
         if(pen) g.lineTo(x,y); else { g.moveTo(x,y); pen=true; }
       }
       g.stroke();
+    }
+  }
+  // note starts: faint ticks ahead, coloured markers once scored
+  if(S.onsets.length){
+    const gcol={good:col('--good'),near:col('--near'),off:col('--off')};
+    g.textAlign='center'; g.textBaseline='bottom'; g.font='600 11px '+col('--font-mono');
+    for(let k=lowerOnset(t0-0.2);k<S.onsets.length&&S.onsets[k].t<=t1;k++){
+      const o=S.onsets[k], x=xOf(o.t), y=yOf(o.m), r=S.tim.res.get(k);
+      if(x<LABELW) continue;
+      if(!r){ g.fillStyle=col('--lane-c'); g.fillRect(Math.round(x),y-rh*0.9,1.5,rh*1.8); continue; }
+      g.fillStyle=gcol[r.g]; g.fillRect(Math.round(x)-1,y-rh*1.3,3,rh*2.6);
+      if(r.g!=='good'){ const lab=r.off===null?'×':(r.off>0?'+':'−')+Math.round(Math.abs(r.off)*1000); g.fillText(lab,x,y-rh*1.4); }
     }
   }
   // previous loop pass (faint)
@@ -1692,9 +1769,9 @@ $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) ret
 renderLib();
 $('#setA').addEventListener('click',()=>setLoopPoint('a'));
 $('#setB').addEventListener('click',()=>setLoopPoint('b'));
-$('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
+$('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
-$('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.ghost=[]; updateLoopUI(); draw(); });
+$('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); });
 $('#play').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 $('#back').addEventListener('click',()=>seek(songTime()-5));
 $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop(); resetRun(true); S.pos=0; if(was) play(); else { updateTime(); draw(); } });
