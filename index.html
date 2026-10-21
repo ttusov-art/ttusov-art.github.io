@@ -66,6 +66,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .sync .val{min-width:5ch;text-align:center}
 .sync button{padding:5px 10px}
 .snd button{padding:7px 9px;font-size:14px}
+.icon-btn{padding:8px 12px;line-height:0}
 .guide-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 #editBtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .lane-foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
@@ -211,7 +212,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 
   <section class="panel transport">
     <button class="primary" id="play" type="button"><span id="playLbl">Play</span></button>
-    <button id="back" type="button">−5 s</button>
+    <button id="songLoop" type="button" aria-pressed="false" aria-label="Repeat the whole song" title="Repeat the whole song: off" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
     <button id="restart" type="button">Start over</button>
     <span class="time" id="time">0:00 / 0:00</span>
     <label class="small" for="tempo">Tempo</label>
@@ -226,7 +227,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <span class="lbl">Loop</span>
     <button id="setA" type="button">Set start</button>
     <button id="setB" type="button">Set end</button>
-    <button id="loopAll" type="button">Whole song</button>
     <label class="loop-on" for="loopOn"><input id="loopOn" type="checkbox" disabled>Repeat</label>
     <label class="small" for="lead">Lead-in</label>
     <select id="lead"><option value="0">0 s</option><option value="1">1 s</option><option value="2" selected>2 s</option><option value="3">3 s</option></select>
@@ -682,7 +682,10 @@ function setLoopPoint(which,at){
   if(L.a!=null&&L.b!=null&&L.b-L.a>=0.5&&!L.on&&which==='b'){ L.on=true; $('#loopOn').checked=true; }
   S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw();
 }
+function isWholeLoop(){ const L=S.loop; return L.on&&L.a!=null&&L.b!=null&&L.a<=0.05&&L.b>=S.dur-0.5; }
+function paintSongLoop(){ const b=document.getElementById('songLoop'); if(!b) return; const on=isWholeLoop(); b.setAttribute('aria-pressed',String(on)); b.classList.toggle('guide-on',on); b.title='Repeat the whole song: '+(on?'on':'off'); }
 function updateLoopUI(){
+  paintSongLoop();
   const L=S.loop, ready=L.a!=null&&L.b!=null&&L.b-L.a>=0.5;
   $('#loopOn').disabled=!ready; if(!ready){ L.on=false; $('#loopOn').checked=false; }
   $('#clearLoop').hidden=L.a==null&&L.b==null;
@@ -1951,13 +1954,12 @@ $('#sepCancel').addEventListener('click',cancelSeparation);
 $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
 renderLib();
 $('#setA').addEventListener('click',()=>setLoopPoint('a'));
-$('#loopAll').addEventListener('click',loopWholeSong);
 $('#setB').addEventListener('click',()=>setLoopPoint('b'));
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
 $('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); });
 $('#play').addEventListener('click',()=>(S.playing||S.review)?stop():play());
-$('#back').addEventListener('click',()=>seek(songTime()-5));
+$('#songLoop').addEventListener('click',()=>{ if(isWholeLoop()){ S.loop.a=S.loop.b=null; S.loop.on=false; $('#loopOn').checked=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); setStatus('The song plays once.'); } else loopWholeSong(); });
 $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop(); resetRun(true); S.pos=0; if(was) play(); else { updateTime(); draw(); } });
 $('#micOn').addEventListener('change',async e=>{ if(e.target.checked){ const ok=await startMic(); if(!ok) e.target.checked=false; } else stopMic(); });
 $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadGuide(f).finally(()=>e.target.value=''); });
