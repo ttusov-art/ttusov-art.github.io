@@ -15,6 +15,7 @@
   --lane-bg:#fbfcfc; --lane-alt:#edf1f3; --lane-line:#dfe5e8; --lane-c:#b5c1c8;
   --target:rgba(12,113,101,.30); --target-edge:rgba(12,113,101,.55);
   --loop:rgba(200,111,12,.10); --loop-edge:#c86f0c; --ghost:rgba(59,91,219,.30);
+  --beat:rgba(90,106,118,.38); --halfbeat:rgba(90,106,118,.16);
   --lyr-bg:rgba(255,255,255,.85); --sel:rgba(12,113,101,.14); --orig:rgba(90,106,118,.55);
   --good:#1d8a4a; --near:#c48a0a; --off:#c2412d; --you-idle:#3b5bdb; --label-bg:#f0f3f5;
   --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
@@ -28,6 +29,7 @@
   --lane-bg:#111a20; --lane-alt:#17222a; --lane-line:#1f2b34; --lane-c:#344651;
   --target:rgba(59,182,164,.28); --target-edge:rgba(59,182,164,.6);
   --loop:rgba(240,160,60,.10); --loop-edge:#f0a03c; --ghost:rgba(138,164,255,.30);
+  --beat:rgba(147,163,174,.34); --halfbeat:rgba(147,163,174,.14);
   --lyr-bg:rgba(17,26,32,.85); --sel:rgba(59,182,164,.16); --orig:rgba(147,163,174,.55);
   --good:#4cc77d; --near:#e5b33a; --off:#f06a55; --you-idle:#8aa4ff; --label-bg:#151e25;
   color-scheme:dark; } }
@@ -54,6 +56,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 #lane{display:block;width:100%;touch-action:none;cursor:grab}
 .edit-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--accent-soft)}
 .edit-bar button{padding:6px 10px;font-size:14px}
+.beat-row{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:6px;border-top:1px solid var(--line)}
+.beat-row input[type=number]{font:inherit;width:5.2em;padding:5px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 .edit-info{flex:1 1 100%;font-size:13px;color:var(--fg);font-variant-numeric:tabular-nums}
 .edit-info b{font-family:var(--font-mono)}
 .edit-sep{width:1px;height:24px;background:var(--line);margin:0 2px}
@@ -179,6 +183,17 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="edit-sep"></span>
       <button id="edUndo" type="button">Undo</button>
       <button id="edReset" type="button">Reset to original</button>
+      <div class="beat-row" id="beatRow">
+        <span class="small">Beats</span>
+        <input id="bpmIn" type="number" min="30" max="240" step="0.1" aria-label="Tempo in beats per minute"><span class="small">BPM</span>
+        <button id="bShiftL" type="button" title="Move the beat grid earlier" aria-label="Move the beat grid earlier">◀</button>
+        <button id="bShiftR" type="button" title="Move the beat grid later" aria-label="Move the beat grid later">▶</button>
+        <button id="bHalf" type="button" title="Half the tempo">÷2</button>
+        <button id="bDouble" type="button" title="Double the tempo">×2</button>
+        <button id="bDetect" type="button">Detect</button>
+        <label class="check" for="snapOn"><input id="snapOn" type="checkbox" checked>Snap</label>
+        <span class="small" id="beatInfo"></span>
+      </div>
     </div>
     <div class="lane-foot">
       <div class="row snd" role="group" aria-label="Sound on or off">
@@ -393,7 +408,7 @@ const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
   tT:null,tM:null, // target times (song seconds) and midi (NaN = none)
   pos:0,pos0:0,startAt:0,playing:false,srcs:[],
   mic:null,micBuf:null,micHist:[],pts:[],stat:{n:0,hit:0,sum:0},
-  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,onsets:[],tim:{next:0,res:new Map()},timStat:{n:0,good:0,sum:0,list:[]},timPass:{n:0,good:0},tPasses:[],takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,lyrics:[],tap:null,lyrShow:true,curBacks:[],curBackSel:-1,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
+  view:{lo:48,hi:72},loop:{a:null,b:null,on:false,lead:2},rate:1,stretch:null,beat:null,snap:true,beatTok:0,onsets:[],tim:{next:0,res:new Map()},timStat:{n:0,good:0,sum:0,list:[]},timPass:{n:0,good:0},tPasses:[],takes:[],pending:[],takeNo:0,review:null,cur:{libId:null,fromFile:false},curBackBlob:null,lyrics:[],tap:null,lyrShow:true,curBacks:[],curBackSel:-1,pass:{n:0,hit:0,sum:0},passes:[],ghost:[],win:8,delay:0.08,ignoreOct:false,wake:null,lastYou:NaN};
 
 function ensureCtx(){
   if(!S.ctx){
@@ -473,6 +488,7 @@ async function pitchLineOf(buf,onProg){
   return {tt,mm,hop:tr.hop,t0:tr.t0};
 }
 function songReady(name,label){
+  setTimeout(()=>scheduleBeatDetect(false),50);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
   updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
@@ -495,7 +511,7 @@ async function loadGuide(file){
       const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'));
       setTarget(pl.tt,pl.mm);
     }
-    normalize(); S.stretch=null; S.cur={libId:null,fromFile:true}; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    normalize(); S.stretch=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -504,7 +520,7 @@ async function loadGuide(file){
 }
 async function loadBack(file){
   stop(); setStatus('Loading '+file.name+'…');
-  try{ S.backBuf=await decode(await file.arrayBuffer()); normalize(); S.stretch=null; S.curBackBlob=file; $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime();
+  try{ S.backBuf=await decode(await file.arrayBuffer()); if(!S.beat||S.beat.auto){ S.beat=null; setTimeout(()=>scheduleBeatDetect(false),50); } normalize(); S.stretch=null; S.curBackBlob=file; $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime();
     let msg='Backing loaded. Press Play and sing along.';
     if(S.cur.libId!=null){ try{ const r=await libAddBacking(S.cur.libId,file.name.replace(/\.[a-z0-9]+$/i,''),file,false); if(r){ S.curBacks=r.backs; S.curBackSel=r.sel; renderBackPick(); } await renderLib(); msg=S.curBacks.length>1?'Backing added to this song. Switch between its '+S.curBacks.length+' backings in the Kept backings menu.':'Backing loaded and kept with this song in the library.'; }catch(e){ msg='Backing loaded, but it could not be saved in the library (storage may be full).'; } }
     setStatus(msg); }
@@ -814,7 +830,7 @@ async function backupLibrary(){
     const entries=[], man={app:'part-coach',version:1,created:Date.now(),songs:[]};
     for(const s0 of songs){
       let s=s0; if(!s.uid){ s.uid=newUid(); await libPutRaw(s); }
-      const dir='songs/'+s.uid+'/', m={uid:s.uid,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
+      const dir='songs/'+s.uid+'/', m={uid:s.uid,beat:s.beat||null,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
       entries.push({name:dir+'vocals.pcm',data:s.pcm}); m.files.pcm=dir+'vocals.pcm';
       if(s.contour){ entries.push({name:dir+'contour.f32',data:f32buf(s.contour)}); m.files.contour=dir+'contour.f32'; }
       if(s.contourOrig){ entries.push({name:dir+'contour-original.f32',data:f32buf(s.contourOrig)}); m.files.contourOrig=dir+'contour-original.f32'; }
@@ -842,7 +858,7 @@ async function restoreLibrary(file){
       const cur=byUid[m.uid];
       if(cur&&(cur.updated||cur.created)>=(m.updated||m.created)){ skipped++; continue; }
       const rd=async f=>f?await (await z.get(f)).arrayBuffer():null;
-      const rec={uid:m.uid,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:await rd(m.files.pcm)};
+      const rec={uid:m.uid,beat:m.beat||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:await rd(m.files.pcm)};
       if(m.hop!=null) rec.hop=m.hop; if(m.t0!=null) rec.t0=m.t0;
       const c=await rd(m.files.contour); if(c) rec.contour=new Float32Array(c);
       const co=await rd(m.files.contourOrig); if(co) rec.contourOrig=new Float32Array(co);
@@ -884,7 +900,7 @@ async function openLibSong(id){
     S.guideBuf=buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
     S.curBacks=backsOf(s).slice(); S.curBackSel=S.curBacks.length?Math.max(0,Math.min(S.curBacks.length-1,s.backSel==null?0:s.backSel)):-1;
     if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
-    S.cur={libId:id,fromFile:false}; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
+    S.cur={libId:id,fromFile:false}; S.beat=s.beat?{...s.beat}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
     setTarget(tt,mm,s.contourOrig); songReady(s.name,s.name+' (vocals, from library)');
     setStatus(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.');
     window.scrollTo({top:0,behavior:'smooth'});
@@ -994,6 +1010,7 @@ async function separateSong(file){
     const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1));
     S.guideBuf=voc; S.backBuf=back; $('#backName').textContent='Backing from the separation (this time only)'; $('#backClear').hidden=false;
     S.curBackBlob=null; S.cur={libId:null,fromFile:true}; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    S.beat=null; S.beatTok++;
     setTarget(pl.tt,pl.mm); songReady(name,name+' (separated vocals)');
     let note='';
     if($('#keepLib').checked){
@@ -1019,6 +1036,91 @@ async function separateSong(file){
   }
 }
 function cancelSeparation(){ S.sep.token++; if(S.sep.worker){ S.sep.worker.terminate(); S.sep.worker=null; } sepUI('Cancelled.',null); $('#sepCancel').hidden=true; $('#sepFile').disabled=false; }
+
+// ===== beat grid (steady tempo, detected from the backing) =====
+// Beat grid detection for a steady-tempo song. Pure functions, shared by the app and tests.
+// detectBeatGrid(x, sr) -> {bpm, offset, conf}; beats at offset + k*60/bpm (seconds)
+function fftRadix2(re, im){
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j){ let t=re[i]; re[i]=re[j]; re[j]=t; t=im[i]; im[i]=im[j]; im[j]=t; } }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){ let cr=1,ci=0;
+      for(let k=0;k<len/2;k++){ const a=i+k,b=a+len/2, xr=re[b]*cr-im[b]*ci, xi=re[b]*ci+im[b]*cr;
+        re[b]=re[a]-xr; im[b]=im[a]-xi; re[a]+=xr; im[a]+=xi; const t=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=t; } }
+  }
+}
+async function onsetEnvelope(x, sr, onProg){
+  const N=512, hop=128, frames=Math.max(0,Math.floor((x.length-N)/hop)), env=new Float32Array(frames);
+  const win=new Float64Array(N); for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
+  const re=new Float64Array(N), im=new Float64Array(N), prev=new Float64Array(N/2), kMax=Math.min(N/2,Math.round(5000/sr*N));
+  for(let f=0;f<frames;f++){
+    const s=f*hop; for(let i=0;i<N;i++){ re[i]=x[s+i]*win[i]; im[i]=0; }
+    fftRadix2(re,im); let flux=0;
+    for(let k=1;k<kMax;k++){ const m=Math.log1p(100*Math.hypot(re[k],im[k])); const d=m-prev[k]; if(d>0) flux+=d; prev[k]=m; }
+    env[f]=flux;
+    if(onProg&&f%3000===0){ onProg(f/frames); await new Promise(r=>setTimeout(r,0)); }
+  }
+  // remove slow trend (local mean over ~0.5 s) and keep the positive part
+  const fps=sr/hop, w=Math.round(fps*0.25), out=new Float32Array(frames); let acc=0;
+  const cs=new Float64Array(frames+1); for(let i=0;i<frames;i++) cs[i+1]=cs[i]+env[i];
+  for(let i=0;i<frames;i++){ const a=Math.max(0,i-w), b=Math.min(frames,i+w+1); const mean=(cs[b]-cs[a])/(b-a); out[i]=Math.max(0,env[i]-mean); }
+  return {env:out,fps};
+}
+function combScore(env,fps,P,o){
+  let s=0,n=0; for(let t=o;;t+=P){ const x=t*fps; const i=Math.floor(x); if(i+1>=env.length) break; const f=x-i; s+=env[i]*(1-f)+env[i+1]*f; n++; }
+  return n?s/n:0;
+}
+async function detectBeatGrid(x, sr, onProg){
+  const {env,fps}=await onsetEnvelope(x,sr,onProg);
+  if(env.length<fps*8) return null;
+  // tempo candidates from autocorrelation, weighted towards ~110 BPM
+  const lmin=Math.floor(fps*60/200), lmax=Math.ceil(fps*60/55), ac=new Float64Array(lmax+2);
+  for(let L=lmin;L<=lmax+1;L++){ let s=0; for(let i=0;i+L<env.length;i++) s+=env[i]*env[i+L]; ac[L]=s/(env.length-L); }
+  let bestL=lmin,bestV=-1;
+  for(let L=lmin+1;L<=lmax;L++){ if(!(ac[L]>=ac[L-1]&&ac[L]>=ac[L+1])) continue; const bpm=60*fps/L, wgt=Math.exp(-0.5*Math.pow(Math.log2(bpm/110)/0.8,2)), v=ac[L]*wgt; if(v>bestV){ bestV=v; bestL=L; } }
+  const a=ac[bestL-1],b=ac[bestL],c=ac[bestL+1],den=a-2*b+c; const Lr=bestL+(den<0?0.5*(a-c)/den:0);
+  let P0=Lr/fps;
+  // refine period and phase together with a comb over the whole song
+  let best={s:-1,P:P0,o:0};
+  for(let r=-0.02;r<=0.02001;r+=0.0004){ const P=P0*(1+r); for(let o=0;o<P;o+=0.01){ const s=combScore(env,fps,P,o); if(s>best.s) best={s,P,o}; } }
+  for(let r=-0.0006;r<=0.00061;r+=0.00005){ const P=best.P*(1+r); for(let o=best.o-0.012;o<=best.o+0.012;o+=0.002){ const oo=((o%P)+P)%P, s=combScore(env,fps,P,oo); if(s>best.s) best={s,P,o:oo}; } }
+  // confidence: comb score on the beats vs. half a beat off
+  const off=combScore(env,fps,best.P,(best.o+best.P/2)%best.P);
+  return {bpm:60/best.P, offset:best.o, conf:off>0?best.s/off:9};
+}
+
+
+function beatP(){ return S.beat?60/S.beat.bpm:0; }
+function snapT(t){ if(!S.beat||!S.snap) return t; const st=beatP()/2; return S.beat.offset+Math.round((t-S.beat.offset)/st)*st; }
+let beatSaveTimer=null;
+function saveBeat(){ if(S.cur.libId==null) return; clearTimeout(beatSaveTimer); const id=S.cur.libId, b=S.beat?{...S.beat}:null; beatSaveTimer=setTimeout(()=>{ libUpdate(id,{beat:b}).catch(()=>{}); },400); }
+function renderBeatInfo(msg){
+  const inp=$('#bpmIn'), has=!!S.beat;
+  ['bShiftL','bShiftR','bHalf','bDouble'].forEach(id=>$('#'+id).disabled=!has);
+  if(has&&document.activeElement!==inp) inp.value=S.beat.bpm.toFixed(1); if(!has) inp.value='';
+  $('#beatInfo').textContent=msg||(has?(S.beat.auto?'found from the '+(S.beat.from||'backing'):'adjusted by you'):'no beat grid yet');
+}
+async function scheduleBeatDetect(force){
+  if(S.beat&&!force){ renderBeatInfo(); draw(); return; }
+  const src=S.backBuf||S.guideBuf; if(!src){ renderBeatInfo(); return; }
+  const tok=++S.beatTok; renderBeatInfo('finding the beat…');
+  try{
+    const len=Math.ceil(src.duration*11025), oc=new OfflineAudioContext(1,len,11025); const s=oc.createBufferSource(); s.buffer=src; s.connect(oc.destination); s.start();
+    const x=(await oc.startRendering()).getChannelData(0);
+    const r=await detectBeatGrid(x,11025,p=>{ if(tok===S.beatTok) renderBeatInfo('finding the beat… '+Math.round(p*100)+'%'); });
+    if(tok!==S.beatTok) return;
+    if(!r){ S.beat=null; renderBeatInfo('song too short to find a beat'); return; }
+    S.beat={bpm:Math.round(r.bpm*100)/100,offset:r.offset,auto:true,from:S.backBuf?'backing':'guide voice'};
+    saveBeat(); renderBeatInfo(); draw();
+  }catch(e){ if(tok===S.beatTok) renderBeatInfo('could not find a beat'); }
+}
+function beatEdited(){ if(!S.beat) return; S.beat.auto=false; saveBeat(); renderBeatInfo(); draw(); }
+function setBpm(bpm){
+  if(!S.beat||!(bpm>=30&&bpm<=240)) return;
+  const P=beatP(), now=songTime(), k=Math.round((now-S.beat.offset)/P), anchor=S.beat.offset+k*P, P2=60/bpm; // keep the beat nearest the playhead in place
+  S.beat.bpm=bpm; S.beat.offset=((anchor%P2)+P2)%P2; beatEdited();
+}
 
 // ===== target line editor =====
 S.editMode=false; S.sel=null; S.undo=[];
@@ -1609,8 +1711,14 @@ function draw(){
     g.fillStyle=pc===0?col('--lane-c'):col('--lane-line'); g.fillRect(LABELW,Math.round(yOf(m)+rh/2)-(pc===0?1:0.5),w,pc===0?1:0.5);
   }
   // seconds grid
-  g.fillStyle=col('--lane-line');
-  for(let s=Math.ceil(t0);s<=t1;s++){ const x=Math.round(xOf(s))+0.5; if(x>LABELW) g.fillRect(x,0,1,h); }
+  if(S.beat){
+    const P=beatP(), half=P/2, showHalf=pps*half>=12, cb=col('--beat'), ch=col('--halfbeat');
+    for(let k=Math.ceil((t0-S.beat.offset)/half);;k++){ const t=S.beat.offset+k*half; if(t>t1) break; const x=Math.round(xOf(t))+0.5; if(x<=LABELW) continue;
+      if(k%2===0){ g.fillStyle=cb; g.fillRect(x,0,1,h); } else if(showHalf){ g.fillStyle=ch; g.fillRect(x,0,1,h); } }
+  } else {
+    g.fillStyle=col('--lane-line');
+    for(let s=Math.ceil(t0);s<=t1;s++){ const x=Math.round(xOf(s))+0.5; if(x>LABELW) g.fillRect(x,0,1,h); }
+  }
   // loop region
   const L=S.loop;
   if(L.a!=null||L.b!=null){
@@ -1711,11 +1819,11 @@ canvas.addEventListener('pointerdown',e=>{
   touchPts.set(e.pointerId,e.clientX);
   if(touchPts.size===2){ pinch={d0:pinchDist(),win0:S.win,mid0:pinchMid(),pos0:S.pos}; if(drag){ clearTimeout(drag.timer); drag.moved=true; drag.pinch=true; if(drag.edit&&drag.sel0!==undefined) S.sel=drag.sel0; } canvas.setPointerCapture(e.pointerId); draw(); return; }
   if(touchPts.size>2) return;
-  if(S.editMode){ const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t,sel0:S.sel}; S.sel={a:t,b:t,m:laneNoteAt(e.clientY)}; canvas.setPointerCapture(e.pointerId); draw(); return; }
+  if(S.editMode){ const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t,sel0:S.sel}; S.sel={a:snapT(t),b:snapT(t),m:laneNoteAt(e.clientY)}; canvas.setPointerCapture(e.pointerId); draw(); return; }
   drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX)}; canvas.setPointerCapture(e.pointerId);
   const d=drag; d.timer=setTimeout(()=>{ if(drag===d&&!d.moved){ d.long=true; holdLoopPoint(d.t); } },550); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-canvas.addEventListener('pointermove',e=>{ if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=laneTimeAt(e.clientX); updateSelInfo(); draw(); return; } if(Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); } if(drag.long||!drag.moved||drag.busy||S.playing) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
+canvas.addEventListener('pointermove',e=>{ if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); } if(drag.long||!drag.moved||drag.busy||S.playing) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
   touchPts.delete(e.pointerId);
   if(pinch){ if(touchPts.size<2){ pinch=null; try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } if(touchPts.size>0) return; drag=null; draw(); return; }
@@ -1740,7 +1848,7 @@ async function addCurrentToLib(btn){
   try{
     const name=$('#songName').textContent.trim()||'Song';
     const pcm=await toInt16(S.guideBuf,LIB_SR);
-    const id=await libPut({name,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
+    const id=await libPut({name,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
     let note='Added to the library.';
     if(S.backBuf){
       try{ const bb=S.curBackBlob||await encodeMp3(S.backBuf,96,p=>setStatus('Saving the backing track… '+Math.round(p*100)+'%'));
@@ -1770,6 +1878,15 @@ paintToggle('toneBtn','Tone',toneIsOn());
 try{ if(localStorage.getItem('pc-guide-muted')==='1') setGuideMuted(true); }catch(x){}
 $('#editBtn').addEventListener('click',()=>setEditMode(!S.editMode));
 $('#edOne').addEventListener('click',edOneNote);
+$('#bpmIn').addEventListener('change',e=>{ const v=+e.target.value; if(!S.beat&&v>=30&&v<=240){ S.beat={bpm:v,offset:0,auto:false}; beatEdited(); } else setBpm(v); });
+$('#bShiftL').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=((S.beat.offset-0.02)%P+P)%P; beatEdited(); });
+$('#bShiftR').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=(S.beat.offset+0.02)%P; beatEdited(); });
+$('#bHalf').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm/2); });
+$('#bDouble').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm*2); });
+$('#bDetect').addEventListener('click',()=>{ S.beat=null; scheduleBeatDetect(true); });
+$('#snapOn').addEventListener('change',e=>{ S.snap=e.target.checked; try{localStorage.setItem('pc-snap',S.snap?'1':'0')}catch(x){} });
+try{ if(localStorage.getItem('pc-snap')==='0'){ S.snap=false; $('#snapOn').checked=false; } }catch(x){}
+renderBeatInfo();
 $('#edFill').addEventListener('click',edFill);
 $('#edUp').addEventListener('click',()=>edShift(1));
 $('#edDown').addEventListener('click',()=>edShift(-1));
@@ -1866,7 +1983,7 @@ async function makeDemo(){
 }
 (async()=>{
   size(); draw();
-  try{ ensureCtx(); const d=await makeDemo(); S.guideBuf=d.buf; normalize(); setTarget(d.tt,d.mm); updateDur(); updateTime(); draw(); }catch(e){}
+  try{ ensureCtx(); const d=await makeDemo(); S.guideBuf=d.buf; normalize(); setTarget(d.tt,d.mm); updateDur(); updateTime(); draw(); scheduleBeatDetect(false); }catch(e){}
 })();
 </script>
 <script type="text/plain" id="sepWorkerSrc">
