@@ -186,7 +186,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="backBtn" type="button" aria-pressed="true" class="guide-on">Backing: on</button>
         <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone: off</button>
       </div>
-      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Drag it to move in the song while stopped.</span></span>
+      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped.</span></span>
     </div>
   </section>
 
@@ -207,6 +207,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <span class="lbl">Loop</span>
     <button id="setA" type="button">Set start</button>
     <button id="setB" type="button">Set end</button>
+    <button id="loopAll" type="button">Whole song</button>
     <label class="loop-on" for="loopOn"><input id="loopOn" type="checkbox" disabled>Repeat</label>
     <label class="small" for="lead">Lead-in</label>
     <select id="lead"><option value="0">0 s</option><option value="1">1 s</option><option value="2" selected>2 s</option><option value="3">3 s</option></select>
@@ -607,6 +608,20 @@ async function prepareTempo(){
   finally{ sel.disabled=false; $('#play').disabled=false; }
 }
 // ===== loop =====
+function loopWholeSong(){
+  if(!S.dur) return;
+  S.loop.a=0; S.loop.b=Math.max(0.5,Math.floor((S.dur-0.1)*10)/10); S.loop.on=true; $('#loopOn').checked=true;
+  S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw();
+  setStatus('The whole song repeats. Untick Repeat to stop looping.');
+}
+// hold on the lane: first hold sets the start, the next sets the end
+function holdLoopPoint(t){
+  const L=S.loop, which=(L.a!=null&&L.b==null)?'b':'a';
+  if(which==='a'){ L.b=null; L.on=false; $('#loopOn').checked=false; }
+  setLoopPoint(which,t);
+  try{ navigator.vibrate&&navigator.vibrate(30); }catch(e){}
+  setStatus(which==='a'?'Loop start set at '+fmtT1(L.a)+'. Hold again where the loop should end.':'Loop set '+fmtT1(L.a)+' – '+fmtT1(L.b)+'. Repeat is on.');
+}
 function loopActive(){ const L=S.loop; return L.on&&L.a!=null&&L.b!=null&&L.b-L.a>=0.5; }
 function loopStart(){ return Math.max(0,S.loop.a-S.loop.lead); }
 function inLoop(t){ return S.loop.a!=null&&S.loop.b!=null&&t>=S.loop.a&&t<=S.loop.b; }
@@ -621,9 +636,9 @@ function loopRestart(){
   S.tim.next=lowerOnset(st); for(const k of [...S.tim.res.keys()]){ const o=S.onsets[k]; if(o&&o.t>=st-0.05&&o.t<=L.b+0.05) S.tim.res.delete(k); }
   startSources(st); beginTake(); updateLoopUI();
 }
-function setLoopPoint(which){
+function setLoopPoint(which,at){
   if(!S.dur) return;
-  const t=Math.round(songTime()*10)/10, L=S.loop;
+  const t=Math.round(Math.max(0,Math.min(S.dur,at==null?songTime():at))*10)/10, L=S.loop;
   L[which]=t;
   if(L.a!=null&&L.b!=null&&L.b<L.a){ const x=L.a; L.a=L.b; L.b=x; }
   if(L.a!=null&&L.b!=null&&L.b-L.a>=0.5&&!L.on&&which==='b'){ L.on=true; $('#loopOn').checked=true; }
@@ -1054,7 +1069,7 @@ function selectFragmentAt(t){
 }
 function setEditMode(on){
   S.editMode=on; $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select, tap a fragment to select it.':'Tap the lane to play or pause. Drag it to move in the song while stopped.';
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select, tap a fragment to select it.':'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped.';
   if(!on) S.sel=null; updateSelInfo(); draw();
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return songTime()+(clientX-rect.left-headX)/pps; }
@@ -1679,10 +1694,14 @@ function draw(){
 let drag=null;
 canvas.addEventListener('pointerdown',e=>{
   if(S.editMode){ const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t}; S.sel={a:t,b:t}; canvas.setPointerCapture(e.pointerId); draw(); return; }
-  drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review}; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointermove',e=>{ if(!drag) return; if(drag.edit){ S.sel.b=laneTimeAt(e.clientX); updateSelInfo(); draw(); return; } if(Math.abs(e.clientX-drag.x)>6) drag.moved=true; if(!drag.moved||drag.busy||S.playing) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
+  drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX)}; canvas.setPointerCapture(e.pointerId);
+  const d=drag; d.timer=setTimeout(()=>{ if(drag===d&&!d.moved){ d.long=true; holdLoopPoint(d.t); } },550); });
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('pointermove',e=>{ if(!drag) return; if(drag.edit){ S.sel.b=laneTimeAt(e.clientX); updateSelInfo(); draw(); return; } if(Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); } if(drag.long||!drag.moved||drag.busy||S.playing) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
-  if(drag&&!drag.edit&&ev==='pointerup'&&!drag.moved){ (S.playing||S.review)?stop():play(); }
+  if(drag&&drag.timer) clearTimeout(drag.timer);
+  if(drag&&!drag.edit&&drag.long){}
+  else if(drag&&!drag.edit&&ev==='pointerup'&&!drag.moved){ (S.playing||S.review)?stop():play(); }
   else if(drag&&drag.edit&&ev==='pointerup'&&Math.abs(e.clientX-drag.x)<6) selectFragmentAt(drag.t0);
   else if(drag&&drag.edit) updateSelInfo();
   drag=null; }));
@@ -1768,6 +1787,7 @@ $('#sepCancel').addEventListener('click',cancelSeparation);
 $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
 renderLib();
 $('#setA').addEventListener('click',()=>setLoopPoint('a'));
+$('#loopAll').addEventListener('click',loopWholeSong);
 $('#setB').addEventListener('click',()=>setLoopPoint('b'));
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
