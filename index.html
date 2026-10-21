@@ -95,6 +95,16 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 .grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
 @media (max-width:760px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.pick-wrap{position:relative}
+.vh{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden}
+.pick-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:30;width:min(340px,calc(100vw - 32px));max-height:min(60vh,420px);overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:6px}
+.pick-menu button{display:flex;width:100%;justify-content:space-between;align-items:center;gap:10px;border:0;border-radius:6px;background:none;padding:10px;text-align:left}
+.pick-menu button:hover,.pick-menu button:focus-visible{background:var(--lane-alt);outline:none}
+.pick-menu button.cur{background:var(--accent-soft)}
+.pick-menu .pm-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-menu .pm-meta{font-family:var(--font-mono);font-size:12px;color:var(--muted);flex:none}
+.pick-menu .pm-add{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;color:var(--accent);font-weight:600}
+.pick-menu .pm-empty{padding:10px;color:var(--muted);font-size:13px}
 .setup{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .setup h2{font-family:var(--font-display);font-size:18px;margin:0}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
@@ -313,7 +323,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="field">
         <span class="lbl">Guide (target line)</span>
         <div class="row">
-          <span class="btn primary">Load session or vocals<input id="guideFile" type="file" aria-label="Load a .ntpsession file or a vocals-only audio file"></span>
+          <div class="pick-wrap">
+            <button id="guidePick" type="button" class="primary" aria-haspopup="menu" aria-expanded="false">Choose song<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="pick-menu" id="guideMenu" role="menu" hidden></div>
+            <input id="guideFile" class="vh" type="file" tabindex="-1" aria-label="Load a .ntpsession file or a vocals-only audio file">
+          </div>
           <button id="addLib" type="button" hidden>Add to library</button>
         </div>
         <span class="file-name" id="guideName">A .ntpsession file, or a vocals-only MP3.</span>
@@ -1985,6 +1999,21 @@ $('#songLoop').addEventListener('click',()=>{ if(isWholeLoop()){ S.loop.a=S.loop
 $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop(); resetRun(true); S.pos=0; if(was) play(); else { updateTime(); draw(); } });
 function paintMic(){ const on=$('#micOn').checked, l=$('#micLbl'); l.classList.toggle('guide-on',on); l.title='Sing with microphone: '+(on?'on':'off'); }
 $('#micOn').addEventListener('change',async e=>{ paintMic(); if(e.target.checked){ const ok=await startMic(); if(!ok){ e.target.checked=false; paintMic(); } } else stopMic(); });
+async function openGuideMenu(){
+  const m=$('#guideMenu'); m.innerHTML='';
+  let songs=[]; try{ songs=(await libList()).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})).sort((a,b)=>b.created-a.created); }catch(e){}
+  const item=(html,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','menuitem'); if(cls) b.className=cls; b.innerHTML=html; b.addEventListener('click',()=>{ closeGuideMenu(); fn(); }); m.appendChild(b); return b; };
+  if(!songs.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent='Your library is empty. Songs you separate or add are listed here.'; m.appendChild(e); }
+  for(const x of songs){ const b=item('<span class="pm-name"></span><span class="pm-meta">'+fmtT(x.dur)+'</span>',S.cur&&S.cur.libId===x.id?'cur':'',()=>openLibSong(x.id)); b.querySelector('.pm-name').textContent=x.name; }
+  item('<span class="pm-name">+ Add vocals from this device…</span>','pm-add',()=>$('#guideFile').click());
+  m.hidden=false; $('#guidePick').setAttribute('aria-expanded','true');
+  const c=m.querySelector('button.cur')||m.querySelector('button'); if(c) c.focus({preventScroll:true});
+  m.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
+$('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
+document.addEventListener('click',e=>{ if(!$('#guideMenu').hidden&&!e.target.closest('.pick-wrap')) closeGuideMenu(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#guideMenu').hidden){ closeGuideMenu(); $('#guidePick').focus(); } });
 $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadGuide(f).finally(()=>e.target.value=''); });
 $('#backFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadBack(f).finally(()=>e.target.value=''); });
 $('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; renderBackPick(); S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
