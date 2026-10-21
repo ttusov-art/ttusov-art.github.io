@@ -594,7 +594,14 @@ function startSources(pos){
   S.startAt=at; S.pos0=pos;
 }
 // ===== tempo (WSOLA time-stretch, keeps pitch) =====
+// bring a buffer to the audio context's sample rate (library voices are stored at 24 kHz)
+async function toCtxRate(buf){
+  if(!buf) return null; const sr=S.ctx.sampleRate; if(buf.sampleRate===sr) return buf;
+  const oc=new OfflineAudioContext(buf.numberOfChannels,Math.max(1,Math.ceil(buf.duration*sr)),sr);
+  const s=oc.createBufferSource(); s.buffer=buf; s.connect(oc.destination); s.start(); return await oc.startRendering();
+}
 async function wsola(bufs,rate,onProg){
+  bufs=await Promise.all(bufs.map(toCtxRate));
   const N=2048,Hs=1024,D=8,tol=512,Ha=Hs*rate,Nd=N/D,td=tol/D;
   const len=Math.max(...bufs.map(b=>b?b.length:0)), sr=S.ctx.sampleRate;
   const mono=bufs.map(b=>{ if(!b) return null; if(b.numberOfChannels===1) return b.getChannelData(0);
