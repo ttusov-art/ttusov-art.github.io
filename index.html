@@ -105,6 +105,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pick-menu .pm-meta{font-family:var(--font-mono);font-size:12px;color:var(--muted);flex:none}
 .pick-menu .pm-add{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;color:var(--accent);font-weight:600}
 .pick-menu .pm-empty{padding:10px;color:var(--muted);font-size:13px}
+.file-name:empty{display:none}
 .setup{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .setup h2{font-family:var(--font-display);font-size:18px;margin:0}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
@@ -255,6 +256,50 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div id="resultText"></div>
   </section>
 
+  <div class="panel setup" id="songPanel">
+    <h2>Song</h2>
+    <div class="field">
+      <span class="lbl">Guide (target line)</span>
+      <div class="row">
+        <div class="pick-wrap">
+          <button id="guidePick" type="button" class="primary" aria-haspopup="menu" aria-expanded="false">Choose song<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="pick-menu" id="guideMenu" role="menu" hidden></div>
+          <input id="guideFile" class="vh" type="file" tabindex="-1" aria-label="Load a .ntpsession file or a vocals-only audio file">
+        </div>
+        <button id="addLib" type="button" hidden>Add to library</button>
+      </div>
+      <span class="file-name" id="guideName"></span>
+    </div>
+    <div class="field">
+      <span class="lbl">Backing track (optional)</span>
+      <div class="row">
+        <span class="btn">Load backing<input id="backFile" type="file" aria-label="Load a backing track"></span>
+        <button id="backClear" type="button" hidden>Remove</button>
+      </div>
+      <span class="file-name" id="backName">None loaded.</span>
+      <div class="row" id="backPick" hidden>
+        <label class="small" for="backSel">Kept backings</label>
+        <select id="backSel" class="sel" style="flex:1 1 180px;min-width:0"></select>
+        <button id="backSave" type="button">Save</button>
+        <button id="backDel" type="button">Delete</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="volGuide">Guide voice volume</label>
+      <div class="field-row"><input id="volGuide" type="range" min="0" max="4" step="0.1" value="1.5"><span class="val" id="volGuideV">150%</span></div>
+    </div>
+    <div class="field">
+      <label for="volBack">Backing volume</label>
+      <div class="field-row"><input id="volBack" type="range" min="0" max="2" step="0.05" value="0.8"><span class="val" id="volBackV">80%</span></div>
+    </div>
+    <div class="field">
+      <label for="volTone">Guide tone volume</label>
+      <div class="field-row"><input id="volTone" type="range" min="0" max="1" step="0.05" value="0"><span class="val" id="volToneV">off</span></div>
+      <span class="small">A clean tone that plays the target note. Easier to hear than the voice when the backing is busy.</span>
+    </div>
+  </div>
+
+
   <details class="panel fold" id="libPanel" open>
     <summary>Song library<span class="count" id="libCount"></span></summary>
     <div class="fold-body">
@@ -317,50 +362,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
   </details>
 
-  <section class="grid2">
-    <div class="panel setup">
-      <h2>Song</h2>
-      <div class="field">
-        <span class="lbl">Guide (target line)</span>
-        <div class="row">
-          <div class="pick-wrap">
-            <button id="guidePick" type="button" class="primary" aria-haspopup="menu" aria-expanded="false">Choose song<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-            <div class="pick-menu" id="guideMenu" role="menu" hidden></div>
-            <input id="guideFile" class="vh" type="file" tabindex="-1" aria-label="Load a .ntpsession file or a vocals-only audio file">
-          </div>
-          <button id="addLib" type="button" hidden>Add to library</button>
-        </div>
-        <span class="file-name" id="guideName">A .ntpsession file, or a vocals-only MP3.</span>
-      </div>
-      <div class="field">
-        <span class="lbl">Backing track (optional)</span>
-        <div class="row">
-          <span class="btn">Load backing<input id="backFile" type="file" aria-label="Load a backing track"></span>
-          <button id="backClear" type="button" hidden>Remove</button>
-        </div>
-        <span class="file-name" id="backName">None loaded.</span>
-        <div class="row" id="backPick" hidden>
-          <label class="small" for="backSel">Kept backings</label>
-          <select id="backSel" class="sel" style="flex:1 1 180px;min-width:0"></select>
-          <button id="backSave" type="button">Save</button>
-          <button id="backDel" type="button">Delete</button>
-        </div>
-      </div>
-      <div class="field">
-        <label for="volGuide">Guide voice volume</label>
-        <div class="field-row"><input id="volGuide" type="range" min="0" max="4" step="0.1" value="1.5"><span class="val" id="volGuideV">150%</span></div>
-      </div>
-      <div class="field">
-        <label for="volBack">Backing volume</label>
-        <div class="field-row"><input id="volBack" type="range" min="0" max="2" step="0.05" value="0.8"><span class="val" id="volBackV">80%</span></div>
-      </div>
-      <div class="field">
-        <label for="volTone">Guide tone volume</label>
-        <div class="field-row"><input id="volTone" type="range" min="0" max="1" step="0.05" value="0"><span class="val" id="volToneV">off</span></div>
-        <span class="small">A clean tone that plays the target note. Easier to hear than the voice when the backing is busy.</span>
-      </div>
-    </div>
-
+  <section>
     <div class="panel setup">
       <h2>Settings</h2>
       <div class="field">
