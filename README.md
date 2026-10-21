@@ -40,3 +40,5 @@ When you play a take ("Voice only" or "With backing"), a Voice timing slider app
 Adjusting: slide left (earlier) or right (later) until your voice locks in with the backing. Playback restarts at the same spot, so you hear the change right away.
 Pitch line and score move along with your voice.
 Use this for new recordings copies the corrected value into Delay compensation, so live scoring and future takes are aligned too.
+
+Panning in the editor now works only with two fingers (or shift + mouse wheel on a laptop).
