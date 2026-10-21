@@ -342,7 +342,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <h2>Settings</h2>
       <div class="field">
         <label for="delay">Delay compensation</label>
-        <div class="field-row"><input id="delay" type="range" min="0" max="600" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
+        <div class="field-row"><input id="delay" type="range" min="0" max="800" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
       </div>
       <div class="field">
         <label for="pdelay">Picture delay</label>
@@ -350,6 +350,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <span class="small">Moves the playhead and lane to match what you hear. Raise it if the playhead runs ahead of the music (Bluetooth: often 150–300 ms). Also under the lane as Picture − / +.</span>
       </div>
       <div class="field">
+        <span class="small warn" id="delayHint" hidden></span>
         <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Measures your headphones and microphone in about 10 seconds.</span></div>
         <span class="small">If your line always looks slightly late compared with the target, raise this or tap Measure delay. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
       </div>
@@ -1254,13 +1255,18 @@ function scoreOnsets(tSung){
     if(loopActive()&&inLoop(o.t)){ S.timPass.n++; if(r.g==='good') S.timPass.good++; }
   }
 }
+const ANA_LAG=0.05; // the live pitch reading describes the voice about 50 ms ago
 function timingSummary(){
   const s=S.timStat; if(s.n<3) return '';
   const pct=Math.round(100*s.good/s.n), hits=s.list.filter(x=>x.off!==null), avg=hits.length?Math.round(1000*hits.reduce((a,x)=>a+x.off,0)/hits.length):0;
   const tend=Math.abs(avg)<=25?'On average you came in right on time.':avg>0?`On average you came in ${avg} ms late.`:`On average you came in ${-avg} ms early.`;
   const worst=[...s.list].sort((a,b)=>(b.off===null?9:Math.abs(b.off))-(a.off===null?9:Math.abs(a.off))).filter(x=>x.off===null||Math.abs(x.off)>0.2).slice(0,3);
   const w=worst.length?' Check: '+worst.map(x=>fmtT(x.t)+' ('+(x.off===null?'missed':(x.off>0?Math.round(x.off*1000)+' ms late':Math.round(-x.off*1000)+' ms early'))+')').join(', ')+'.':'';
-  return `<br><b>${pct}%</b> of ${s.n} note starts were on time (within 80 ms). ${tend}${w}`;
+  let fix='';
+  if(hits.length>=8){ const offs=hits.map(x=>x.off).sort((a,b)=>a-b), med=offs[offs.length>>1], mad=median(offs.map(v=>Math.abs(v-med)));
+    const ms=Math.round(med/S.rate*100)*10;
+    if(Math.abs(ms)>=60&&mad<=0.15){ fix=`<br><span class="small">Your note starts were ${ms>0?'late':'early'} by a similar amount almost everywhere, which usually means the delay setting is off rather than your singing.</span> <button type="button" class="fix-delay" data-ms="${ms}">${ms>0?'Add':'Remove'} ${Math.abs(ms)} ms ${ms>0?'to':'from'} Delay compensation</button>`; } }
+  return `<br><b>${pct}%</b> of ${s.n} note starts were on time (within 80 ms). ${tend}${w}${fix}`;
 }
 
 // ===== lyrics =====
@@ -1480,7 +1486,8 @@ function useAlignForNew(){
   const ms=Math.max(0,Math.min(600,Math.round(k.delay*1000/10)*10));
   setDelay(ms); setStatus('Delay compensation set to '+ms+' ms for new recordings and live scoring.');
 }
-function setDelay(ms){ $('#delay').value=String(ms); S.delay=ms/1000; $('#delayV').textContent=ms+' ms'; try{localStorage.setItem('pc-delay',String(ms))}catch(x){} }
+function setDelay(ms){ $('#delay').value=String(ms); S.delay=ms/1000; $('#delayV').textContent=ms+' ms'; try{localStorage.setItem('pc-delay',String(ms))}catch(x){} delayHint(); }
+function delayHint(){ const el=document.getElementById('delayHint'); if(!el) return; const d=Math.round((S.delay||0)*1000), p=Math.round((S.pdelay||0)*1000); el.hidden=!(p>=100&&d<p-30); el.textContent='This is lower than your Picture delay ('+p+' ms). With headphones it is usually a bit higher than the Picture delay, so it is probably too low.'; }
 
 // ===== delay measurement: beeps, user claps or sings "ta" on each =====
 async function measureDelay(){
@@ -1489,15 +1496,15 @@ async function measureDelay(){
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
   if(!S.mic){ const ok=await startMic(); if(!ok){ $('#calText').textContent='The microphone is needed for this test.'; return; } $('#micOn').checked=true; }
   const btn=$('#calBtn'), txt=$('#calText'); btn.disabled=true;
-  const N=10, beat=0.6, t0=ctx.currentTime+2.2, beeps=[];
+  const N=10, beat=1.0, t0=ctx.currentTime+2.2, beeps=[];
   S.cal={chunks:[],from:t0-0.3,to:t0+N*beat+1.0};
   for(let i=0;i<N;i++){
     const t=t0+i*beat, o=ctx.createOscillator(), g=ctx.createGain();
     o.frequency.value=i<2?660:990; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.7,t+0.004); g.gain.exponentialRampToValueAtTime(0.001,t+0.09);
     o.connect(g).connect(S.limiter); o.start(t); o.stop(t+0.1); beeps.push(t);
   }
-  txt.textContent='Listen: two low beeps count you in, then clap or sing “ta” exactly on each high beep.';
-  const iv=setInterval(()=>{ const k=Math.floor((ctx.currentTime-t0)/beat)+1; if(k>=1&&k<=N) txt.textContent=(k<=2?'Get ready… ':'Clap on each beep · ')+k+' of '+N; },100);
+  txt.textContent='Listen: two low beeps count you in, then clap or sing “ta” exactly on each of the 8 high beeps you hear. Go by your ears, not the screen.';
+  const iv=setInterval(()=>{},1000);
   await new Promise(r=>setTimeout(r,(S.cal.to-ctx.currentTime)*1000+400));
   clearInterval(iv);
   const cal=S.cal; S.cal=null; btn.disabled=false;
@@ -1517,10 +1524,10 @@ function analyseCalibration(cal,beeps,sr){
   const th=Math.max(floor*4,peak*0.25), onsets=[];
   for(let i=1;i<m;i++){ if(env[i]>=th&&env[i-1]<th){ const t=t0+i*hop/sr; if(!onsets.length||t-onsets[onsets.length-1]>0.25) onsets.push(t); } }
   const lags=[];
-  for(const b of beeps){ let best=null; for(const t of onsets){ const d=t-b; if(d>-0.15&&d<0.55&&(best===null||Math.abs(d-0.2)<Math.abs(best-0.2))) best=d; } if(best!==null) lags.push(best); }
+  for(const b of beeps){ let best=null; for(const t of onsets){ const d=t-b; if(d>-0.15&&d<0.85&&best===null) best=d; } if(best!==null) lags.push(best); }
   if(lags.length<5) return {ok:false,msg:'Only '+lags.length+' claps were heard clearly.'};
   const med=median(lags), spread=Math.round(median(lags.map(v=>Math.abs(v-med)))*1000);
-  const ms=Math.max(0,Math.min(600,Math.round(med*100)*10));
+  const ms=Math.max(0,Math.min(800,Math.round(med*100)*10));
   return {ok:true,ms,n:lags.length,spread};
 }
 function takeBuffer(k){
@@ -1643,7 +1650,7 @@ function step(){
     S.micHist.push(raw); if(S.micHist.length>5) S.micHist.shift();
     const ok=S.micHist.filter(v=>!isNaN(v));
     if(!isNaN(raw)&&ok.length>=3){ you=median(ok); }
-    const tSung=now-S.delay*S.rate;
+    const tSung=now-(S.delay+ANA_LAG)*S.rate;
     if(!isNaN(you)&&tSung>=0){
       const tg=targetAt(tSung); let c=null;
       if(!isNaN(tg)){ const d=centsDiff(you,tg); c=grade(d); S.stat.n++; S.stat.sum+=d; if(c==='good') S.stat.hit++; if(loopActive()&&inLoop(tSung)){ S.pass.n++; S.pass.sum+=d; if(c==='good') S.pass.hit++; } }
@@ -1652,7 +1659,7 @@ function step(){
     scoreOnsets(tSung);
   }
   // readout
-  const tgShow=targetAt(now-S.delay*S.rate);
+  const tgShow=targetAt(now-(S.delay+ANA_LAG)*S.rate);
   $('#rTarget').textContent=isNaN(tgShow)?'–':noteName(Math.round(tgShow));
   const ry=$('#rYou'), rc=$('#rCents');
   if(!isNaN(you)){
@@ -1963,7 +1970,8 @@ $('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volTone
 $('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; if(was) play(); });
 $('#delay').addEventListener('input',e=>setDelay(+e.target.value));
 $('#calBtn').addEventListener('click',measureDelay);
-function setPDelay(ms,save){ ms=Math.max(0,Math.min(600,Math.round(ms/10)*10)); S.pdelay=ms/1000; $('#pdelay').value=String(ms); $('#pdelayV').textContent=ms+' ms'; $('#pdV').textContent=ms+' ms'; if(save){ try{localStorage.setItem('pc-pdelay',String(ms))}catch(x){} } draw(); }
+$('#resultText').addEventListener('click',e=>{ const b=e.target.closest('.fix-delay'); if(!b) return; const ms=+b.dataset.ms, nv=Math.max(0,Math.min(600,Math.round((S.delay*1000+ms)/10)*10)); setDelay(nv); b.disabled=true; b.textContent='Delay compensation is now '+nv+' ms'; setStatus('Delay compensation set to '+nv+' ms. Sing the passage again to check.'); });
+function setPDelay(ms,save){ ms=Math.max(0,Math.min(600,Math.round(ms/10)*10)); S.pdelay=ms/1000; setTimeout(delayHint,0); $('#pdelay').value=String(ms); $('#pdelayV').textContent=ms+' ms'; $('#pdV').textContent=ms+' ms'; if(save){ try{localStorage.setItem('pc-pdelay',String(ms))}catch(x){} } draw(); }
 $('#pdelay').addEventListener('input',e=>setPDelay(+e.target.value,true));
 $('#pdDown').addEventListener('click',()=>setPDelay(S.pdelay*1000-20,true));
 $('#pdUp').addEventListener('click',()=>setPDelay(S.pdelay*1000+20,true));
