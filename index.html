@@ -166,8 +166,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas>
     <div class="edit-bar" id="editBar" hidden>
       <span class="edit-info" id="selInfo">Drag across the lane to select a section, or tap a fragment of the line.</span>
-      <button id="edPanL" type="button" aria-label="Move view back">◀</button>
-      <button id="edPanR" type="button" aria-label="Move view forward">▶</button>
+      <button id="edPlay" type="button" class="primary">▶ Play</button>
       <span class="edit-sep"></span>
       <button id="edOne" type="button" class="primary">One note</button>
       <button id="edFill" type="button">Fill</button>
@@ -549,7 +548,7 @@ async function play(){
   if(S.pos<0.5){ S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; }
   S.tim.next=lowerOnset(S.pos-S.delay*S.rate+0.05); for(const k of [...S.tim.res.keys()]) if(k>=S.tim.next) S.tim.res.delete(k);
   S.timPass={n:0,good:0};
-  $('#playLbl').textContent='Pause'; $('#result').hidden=true;
+  setPlayLbl('Pause'); $('#result').hidden=true;
   setStatus(S.mic?'Listening. Sing along with the target line.':'Playing without the microphone.');
   startBg(); mediaOn();
   try{ if(navigator.wakeLock&&!document.hidden) S.wake=await navigator.wakeLock.request('screen'); }catch(e){}
@@ -608,6 +607,8 @@ async function prepareTempo(){
   }catch(err){ setStatus('Could not change the tempo on this device: '+((err&&err.message)||'out of memory')+'.',true); S.rate=1; sel.value='1'; return false; }
   finally{ sel.disabled=false; $('#play').disabled=false; }
 }
+// play button label, mirrored on the editor's play button
+function setPlayLbl(t){ $('#playLbl').textContent=t; const b=document.getElementById('edPlay'); if(b) b.textContent=(t==='Play'?'▶ ':'⏸ ')+t; }
 // ===== loop =====
 function loopWholeSong(){
   if(!S.dur) return;
@@ -664,7 +665,7 @@ function stop(){
   S.pos=Math.min(S.dur,songTime()); S.playing=false;
   S.srcs.forEach(s=>{ try{s.stop()}catch(e){} s.disconnect(); }); S.srcs=[];
   stopTone();
-  $('#playLbl').textContent='Play';
+  setPlayLbl('Play');
   try{ S.wake&&S.wake.release(); }catch(e){} S.wake=null;
   stopBg(); mediaOff();
   showResult(); updateTime(); draw();
@@ -1424,7 +1425,7 @@ async function reviewTake(k,withBacking,startVoice=0){
   }
   S.review={take:k,at,song0,rate:k.rate,srcs,end:at+(k.buf.duration-voiceOff),withBacking,voiceOff};
   showAlign(k);
-  $('#playLbl').textContent='Stop listening'; setStatus('Playing take '+k.no+(withBacking?' with the backing.':', your voice only.'));
+  setPlayLbl('Stop listening'); setStatus('Playing take '+k.no+(withBacking?' with the backing.':', your voice only.'));
   renderTakes(); startBg(); mediaOn(); requestAnimationFrame(reviewTick);
 }
 function reviewTick(){
@@ -1438,7 +1439,7 @@ function stopReview(){
   stopBg(); mediaOff();
   S.pos=Math.min(S.dur,songTime());
   S.review.srcs.forEach(n=>{ try{n.stop&&n.stop()}catch(e){} n.disconnect(); });
-  S.review=null; $('#playLbl').textContent='Play'; setStatus('Stopped.'); renderTakes(); updateTime(); draw();
+  S.review=null; setPlayLbl('Play'); setStatus('Stopped.'); renderTakes(); updateTime(); draw();
 }
 function saveTake(k){
   const n=k.data.length, buf=new ArrayBuffer(44+n*2), v=new DataView(buf), g=k.gain||(takeBuffer(k),k.gain);
@@ -1778,8 +1779,7 @@ $('#edDel').addEventListener('click',edRemove);
 $('#edLoop').addEventListener('click',edLoop);
 $('#edUndo').addEventListener('click',edUndo);
 $('#edReset').addEventListener('click',e=>edReset(e.currentTarget));
-$('#edPanL').addEventListener('click',()=>seek(songTime()-S.win/2));
-$('#edPanR').addEventListener('click',()=>seek(songTime()+S.win/2));
+$('#edPlay').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 updateSelInfo();
 $('#lyrApply').addEventListener('click',applyLyricText);
 $('#lyrAuto').addEventListener('click',()=>autoPlace(false));
