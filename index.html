@@ -285,8 +285,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="lyrClear" type="button">Remove lyrics</button>
       </div>
       <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
+      <div class="row" id="lyrSnapRow" hidden>
+        <label class="check" for="lyrSnapOn"><input id="lyrSnapOn" type="checkbox" checked>Snap lines to beats</label>
+        <button id="lyrSnapAll" type="button">Snap all lines now</button>
+      </div>
       <div class="lyr-list" id="lyrList" hidden></div>
-      <span class="small" id="lyrHint">After placing the lines, play the song and check them. Use − and + to move a line by 0.2 s, or Now to set it to the playhead.</span>
+      <span class="small" id="lyrHint"></span>
     </div>
   </details>
 
@@ -1126,6 +1130,7 @@ function snapT(t){ if(!S.beat||!S.snap) return t; const st=beatP()/2; return S.b
 let beatSaveTimer=null;
 function saveBeat(){ if(S.cur.libId==null) return; clearTimeout(beatSaveTimer); const id=S.cur.libId, b=S.beat?{...S.beat}:null; beatSaveTimer=setTimeout(()=>{ libUpdate(id,{beat:b}).catch(()=>{}); },400); }
 function renderBeatInfo(msg){
+  if(typeof renderLyrSnap==='function'&&document.getElementById('lyrSnapRow')) renderLyrics(false);
   const inp=$('#bpmIn'), has=!!S.beat;
   ['bShiftL','bShiftR','bHalf','bDouble'].forEach(id=>$('#'+id).disabled=!has);
   if(has&&document.activeElement!==inp) inp.value=S.beat.bpm.toFixed(1); if(!has) inp.value='';
@@ -1298,16 +1303,25 @@ function renderLyrics(fillText){
     row.innerHTML=`<span class="lyr-t">${L.t==null?'—':fmtT1(L.t)}</span><span class="lyr-x"></span>`;
     row.querySelector('.lyr-x').textContent=L.text;
     const mk=(label,title,fn)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; b.title=title; b.setAttribute('aria-label',title); b.addEventListener('click',fn); row.appendChild(b); };
-    mk('−','Move line 0.2 s earlier',()=>nudgeLine(i,-0.2));
-    mk('+','Move line 0.2 s later',()=>nudgeLine(i,0.2));
-    mk('Now','Set line start to the playhead',()=>{ S.lyrics[i].t=Math.max(0,Math.round(songTime()*100)/100); lyrChanged(); });
+    mk('−',lyrSnapping()?'Move line half a beat earlier':'Move line 0.2 s earlier',()=>nudgeLine(i,-1));
+    mk('+',lyrSnapping()?'Move line half a beat later':'Move line 0.2 s later',()=>nudgeLine(i,1));
+    mk('Now','Set line start to the playhead',()=>{ S.lyrics[i].t=lyrT(songTime()); lyrChanged(); });
     mk('▶','Play from just before this line',()=>{ if(S.lyrics[i].t!=null) seek(Math.max(0,S.lyrics[i].t-1.5)); if(!S.playing&&!S.review) play(); });
     list.appendChild(row);
   });
   $('#lyrAuto').disabled=!has; $('#lyrTap').disabled=!has; $('#lyrClear').disabled=!has;
-  S.lyrBarKey=null; updateLyricBar(songTime());
+  renderLyrSnap(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
-function nudgeLine(i,d){ const L=S.lyrics[i]; if(L.t==null) return; L.t=Math.max(0,Math.round((L.t+d)*100)/100); lyrChanged(); }
+function lyrSnapping(){ return !!(S.beat&&S.snap); }
+function lyrStep(){ return lyrSnapping()?beatP()/2:0.2; }
+function lyrT(t){ if(lyrSnapping()){ t=snapT(t); if(t<0) t+=beatP()/2; } return Math.max(0,Math.round(t*100)/100); }
+function nudgeLine(i,dir){ const L=S.lyrics[i]; if(L.t==null) return; L.t=lyrT(L.t+dir*lyrStep()); lyrChanged(); }
+function snapAllLines(){ if(!lyrSnapping()) return; S.lyrics.forEach(L=>{ if(L.t!=null) L.t=lyrT(L.t); }); lyrChanged(); setStatus('All timed lines moved to the nearest beat or half beat.'); }
+function renderLyrSnap(){
+  const row=$('#lyrSnapRow'); row.hidden=!S.beat||!S.lyrics.length; $('#lyrSnapOn').checked=!!S.snap; $('#lyrSnapAll').disabled=!S.snap;
+  const st=S.beat?(beatP()/2).toFixed(2)+' s (half a beat)':'0.2 s';
+  $('#lyrHint').textContent='After placing the lines, play the song and check them. Use − and + to move a line by '+(lyrSnapping()?st:'0.2 s')+', or Now to set it to the playhead.'+(lyrSnapping()?' New times land on the nearest beat or half beat.':'');
+}
 function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); }
 function applyLyricText(){
   const lines=$('#lyrText').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
@@ -1354,7 +1368,7 @@ function autoPlace(silent){
     while(pieces.length<N){ let bi=0; pieces.forEach((p,i)=>{ if(p[1]-p[0]>pieces[bi][1]-pieces[bi][0]) bi=i; }); const p=pieces[bi], mid=(p[0]+p[1])/2; pieces.splice(bi,1,[p[0],mid],[mid,p[1]]); }
     starts=pieces.map(p=>p[0]);
   }
-  S.lyrics.forEach((L,i)=>{ L.t=Math.max(0,Math.round((starts[i]-0.05)*100)/100); });
+  S.lyrics.forEach((L,i)=>{ L.t=lyrSnapping()?lyrT(starts[i]):Math.max(0,Math.round((starts[i]-0.05)*100)/100); });
   lyrChanged();
   setStatus((silent?'Lines placed automatically on the sung phrases. ':'')+'Play the song to check them, then fix any line with Tap to time or the − / + buttons.');
 }
@@ -1374,7 +1388,7 @@ function stopTap(){ if(!S.tap) return; S.tap=null; $('#lyrBar').classList.remove
 function tapNow(){
   if(!S.tap||!S.playing) return;
   const lat=(S.pdelay||0)+0.12;
-  const t=Math.max(0,Math.round((songTime()-lat*S.rate)*100)/100);
+  const t=lyrT(songTime()-lat*S.rate);
   S.lyrics[S.tap.i].t=t; S.tap.i++;
   for(let j=S.tap.i;j<S.lyrics.length;j++){ if(S.lyrics[j].t!=null&&S.lyrics[j].t<t) S.lyrics[j].t=null; }
   if(S.tap.i>=S.lyrics.length){ stopTap(); setStatus('All lines timed. Play the song to check them.'); }
@@ -1920,7 +1934,10 @@ $('#bShiftR').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP()
 $('#bHalf').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm/2); });
 $('#bDouble').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm*2); });
 $('#bDetect').addEventListener('click',()=>{ S.beat=null; scheduleBeatDetect(true); });
-$('#snapOn').addEventListener('change',e=>{ S.snap=e.target.checked; try{localStorage.setItem('pc-snap',S.snap?'1':'0')}catch(x){} });
+function setSnap(on){ S.snap=on; $('#snapOn').checked=on; try{localStorage.setItem('pc-snap',on?'1':'0')}catch(x){} renderLyrics(false); }
+$('#snapOn').addEventListener('change',e=>setSnap(e.target.checked));
+$('#lyrSnapOn').addEventListener('change',e=>setSnap(e.target.checked));
+$('#lyrSnapAll').addEventListener('click',snapAllLines);
 try{ if(localStorage.getItem('pc-snap')==='0'){ S.snap=false; $('#snapOn').checked=false; } }catch(x){}
 renderBeatInfo();
 $('#edFill').addEventListener('click',edFill);
