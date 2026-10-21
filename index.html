@@ -232,13 +232,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </section>
   <section class="panel loop" aria-label="Loop a section">
     <span class="lbl">Loop</span>
-    <button id="setA" type="button">Set start</button>
-    <button id="setB" type="button">Set end</button>
-    <label class="loop-on" for="loopOn"><input id="loopOn" type="checkbox" disabled>Repeat</label>
+    <label class="loop-on" for="loopOn" hidden><input id="loopOn" type="checkbox" disabled>Repeat</label>
     <label class="small" for="lead">Lead-in</label>
     <select id="lead"><option value="0">0 s</option><option value="1">1 s</option><option value="2" selected>2 s</option><option value="3">3 s</option></select>
     <button id="clearLoop" type="button" hidden>Clear</button>
-    <span class="loop-info" id="loopInfo">Move to where a phrase starts and tap Set start, then Set end where it finishes.</span>
+    <span class="loop-info" id="loopInfo">Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you tap Clear.</span>
   </section>
   <div class="status" id="status">Use headphones, so the microphone hears only you. Press Play to try the demo.</div>
 
@@ -692,12 +690,14 @@ function setLoopPoint(which,at){
 function isWholeLoop(){ const L=S.loop; return L.on&&L.a!=null&&L.b!=null&&L.a<=0.05&&L.b>=S.dur-0.5; }
 function paintSongLoop(){ const b=document.getElementById('songLoop'); if(!b) return; const on=isWholeLoop(); b.setAttribute('aria-pressed',String(on)); b.classList.toggle('guide-on',on); b.title='Repeat the whole song: '+(on?'on':'off'); }
 function updateLoopUI(){
+  { const L=S.loop; if(L.a!=null&&L.b!=null&&L.b-L.a>=0.5&&!L.on){ L.on=true; $('#loopOn').checked=true; } }
   paintSongLoop();
   const L=S.loop, ready=L.a!=null&&L.b!=null&&L.b-L.a>=0.5;
   $('#loopOn').disabled=!ready; if(!ready){ L.on=false; $('#loopOn').checked=false; }
   $('#clearLoop').hidden=L.a==null&&L.b==null;
   const el=$('#loopInfo');
-  if(L.a==null&&L.b==null){ el.textContent='Move to where a phrase starts and tap Set start, then Set end where it finishes.'; return; }
+  if(L.a==null&&L.b==null){ el.textContent='Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you tap Clear.'; return; }
+  if(L.a!=null&&L.b==null){ el.innerHTML='Start '+fmtT1(L.a)+' · hold again on the lane where the loop should end.'; return; }
   let s=(L.a!=null?fmtT1(L.a):'…')+' – '+(L.b!=null?fmtT1(L.b):'…');
   if(L.a!=null&&L.b!=null&&L.b-L.a<0.5) s+=' · make the section longer';
   if(S.passes.length){ s+=' · passes: '+S.passes.slice(-6).map((v,i,a)=>i===a.length-1?'<b>'+v+'%</b>':v+'%').join(' · '); const tl=S.tPasses[S.tPasses.length-1]; if(tl!=null) s+=' · timing last pass <b>'+tl+'%</b>'; }
@@ -1960,8 +1960,6 @@ $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.fi
 $('#sepCancel').addEventListener('click',cancelSeparation);
 $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
 renderLib();
-$('#setA').addEventListener('click',()=>setLoopPoint('a'));
-$('#setB').addEventListener('click',()=>setLoopPoint('b'));
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
 $('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); });
