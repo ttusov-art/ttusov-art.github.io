@@ -186,7 +186,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="backBtn" type="button" aria-pressed="true" class="guide-on">Backing: on</button>
         <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone: off</button>
       </div>
-      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped.</span></span>
+      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped. Pinch to zoom.</span></span>
     </div>
   </section>
 
@@ -334,7 +334,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="field">
         <label for="zoom">Seconds on screen</label>
-        <div class="field-row"><input id="zoom" type="range" min="4" max="20" step="1" value="8"><span class="val" id="zoomV">8 s</span></div>
+        <div class="field-row"><input id="zoom" type="range" min="2" max="30" step="1" value="8"><span class="val" id="zoomV">8 s</span></div>
       </div>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
       <ul class="tips">
@@ -1069,7 +1069,7 @@ function selectFragmentAt(t){
 }
 function setEditMode(on){
   S.editMode=on; $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select, tap a fragment to select it.':'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped.';
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select, tap a fragment to select it.':'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped. Pinch to zoom.';
   if(!on) S.sel=null; updateSelInfo(); draw();
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return songTime()+(clientX-rect.left-headX)/pps; }
@@ -1692,13 +1692,21 @@ function draw(){
 
 // drag to scrub
 let drag=null;
+const touchPts=new Map(); let pinch=null;
+const pinchDist=()=>{ const v=[...touchPts.values()]; return Math.max(20,Math.abs(v[0]-v[1])); };
 canvas.addEventListener('pointerdown',e=>{
-  if(S.editMode){ const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t}; S.sel={a:t,b:t}; canvas.setPointerCapture(e.pointerId); draw(); return; }
+  touchPts.set(e.pointerId,e.clientX);
+  if(touchPts.size===2){ pinch={d0:pinchDist(),win0:S.win}; if(drag){ clearTimeout(drag.timer); drag.moved=true; drag.pinch=true; if(drag.edit&&drag.sel0!==undefined) S.sel=drag.sel0; } canvas.setPointerCapture(e.pointerId); draw(); return; }
+  if(touchPts.size>2) return;
+  if(S.editMode){ const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t,sel0:S.sel}; S.sel={a:t,b:t}; canvas.setPointerCapture(e.pointerId); draw(); return; }
   drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX)}; canvas.setPointerCapture(e.pointerId);
   const d=drag; d.timer=setTimeout(()=>{ if(drag===d&&!d.moved){ d.long=true; holdLoopPoint(d.t); } },550); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-canvas.addEventListener('pointermove',e=>{ if(!drag) return; if(drag.edit){ S.sel.b=laneTimeAt(e.clientX); updateSelInfo(); draw(); return; } if(Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); } if(drag.long||!drag.moved||drag.busy||S.playing) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
+canvas.addEventListener('pointermove',e=>{ if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=laneTimeAt(e.clientX); updateSelInfo(); draw(); return; } if(Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); } if(drag.long||!drag.moved||drag.busy||S.playing) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
+  touchPts.delete(e.pointerId);
+  if(pinch){ if(touchPts.size<2){ pinch=null; try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } if(touchPts.size>0) return; drag=null; draw(); return; }
+  if(drag&&drag.pinch){ if(touchPts.size===0) drag=null; return; }
   if(drag&&drag.timer) clearTimeout(drag.timer);
   if(drag&&!drag.edit&&drag.long){}
   else if(drag&&!drag.edit&&ev==='pointerup'&&!drag.moved){ (S.playing||S.review)?stop():play(); }
@@ -1808,7 +1816,11 @@ $('#delay').addEventListener('input',e=>setDelay(+e.target.value));
 $('#calBtn').addEventListener('click',measureDelay);
 $('#alignR').addEventListener('input',onAlign);
 $('#alignUse').addEventListener('click',useAlignForNew);
-$('#zoom').addEventListener('input',e=>{ S.win=+e.target.value; $('#zoomV').textContent=S.win+' s'; draw(); });
+function setWin(w,save){ S.win=Math.max(2,Math.min(30,w)); $('#zoom').value=String(Math.round(S.win)); $('#zoomV').textContent=(S.win<10?S.win.toFixed(1).replace(/\.0$/,''):Math.round(S.win))+' s'; draw(); if(save){ try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } }
+$('#zoom').addEventListener('input',e=>setWin(+e.target.value,true));
+try{ const w=+localStorage.getItem('pc-win'); if(w>=2&&w<=30) setWin(w,false); }catch(x){}
+// mouse wheel / trackpad zoom on the lane
+canvas.addEventListener('wheel',e=>{ e.preventDefault(); setWin(S.win*Math.exp(e.deltaY*0.0015),true); },{passive:false});
 $('#ignoreOct').addEventListener('change',e=>{ S.ignoreOct=e.target.checked; });
 try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
 try{ const d=localStorage.getItem('pc-delay'); if(d){ $('#delay').value=d; S.delay=+d/1000; $('#delayV').textContent=d+' ms'; } }catch(x){}
