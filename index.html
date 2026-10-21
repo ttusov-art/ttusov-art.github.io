@@ -62,6 +62,9 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .edit-info b{font-family:var(--font-mono)}
 .edit-sep{width:1px;height:24px;background:var(--line);margin:0 2px}
 .snd{gap:6px;flex:1 1 100%}
+.sync{display:inline-flex;align-items:center;gap:4px;margin-left:auto}
+.sync .val{min-width:5ch;text-align:center}
+.sync button{padding:5px 10px}
 .snd button{padding:7px 9px;font-size:14px}
 .guide-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 #editBtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -200,6 +203,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="guideBtn" type="button" aria-pressed="true" class="guide-on" title="Guide voice">Voice: on</button>
         <button id="backBtn" type="button" aria-pressed="true" class="guide-on">Backing: on</button>
         <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone: off</button>
+        <span class="sync" role="group" aria-label="Picture delay"><span class="small">Picture</span><button id="pdDown" type="button" aria-label="Show the picture earlier">−</button><span class="val" id="pdV">0 ms</span><button id="pdUp" type="button" aria-label="Show the picture later">+</button></span>
       </div>
       <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped. Pinch to zoom, two-finger drag to move.</span></span>
     </div>
@@ -339,6 +343,13 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="field">
         <label for="delay">Delay compensation</label>
         <div class="field-row"><input id="delay" type="range" min="0" max="600" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
+      </div>
+      <div class="field">
+        <label for="pdelay">Picture delay</label>
+        <div class="field-row"><input id="pdelay" type="range" min="0" max="600" step="10" value="0"><span class="val" id="pdelayV">0 ms</span></div>
+        <span class="small">Moves the playhead and lane to match what you hear. Raise it if the playhead runs ahead of the music (Bluetooth: often 150–300 ms). Also under the lane as Picture − / +.</span>
+      </div>
+      <div class="field">
         <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Measures your headphones and microphone in about 10 seconds.</span></div>
         <span class="small">If your line always looks slightly late compared with the target, raise this or tap Measure delay. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
       </div>
@@ -547,6 +558,7 @@ function targetAt(t){
 }
 
 // ===== playback =====
+function visTime(){ const t=songTime(); return (S.playing||S.review)?Math.max(0,t-(S.pdelay||0)*(S.review?S.review.rate:S.rate)):t; }
 function songTime(){ if(S.review) return S.review.song0+(S.ctx.currentTime-S.review.at)*S.review.rate; return S.playing? S.pos0+(S.ctx.currentTime-S.startAt)*S.rate : S.pos; }
 async function play(){
   if(S.playing) return;
@@ -678,7 +690,7 @@ function stop(){
   if(S.review){ stopReview(); return; }
   if(!S.playing) return;
   endTake();
-  S.pos=Math.min(S.dur,songTime()); S.playing=false;
+  S.pos=Math.min(S.dur,visTime()); S.playing=false;
   S.srcs.forEach(s=>{ try{s.stop()}catch(e){} s.disconnect(); }); S.srcs=[];
   stopTone();
   setPlayLbl('Play');
@@ -1186,7 +1198,7 @@ function setEditMode(on){
   $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select (start on the row of the note you want to add). Tap a fragment to select it. Two fingers: move and zoom.':'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped. Pinch to zoom, two-finger drag to move.';
   if(!on) S.sel=null; updateSelInfo(); draw();
 }
-function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return songTime()+(clientX-rect.left-headX)/pps; }
+function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
 
 // ===== timing: note starts from the target line, scored against your pitch line =====
 function computeOnsets(){
@@ -1338,7 +1350,7 @@ function startTap(){
 function stopTap(){ if(!S.tap) return; S.tap=null; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; S.lyrBarKey=null; updateLyricBar(songTime()); }
 function tapNow(){
   if(!S.tap||!S.playing) return;
-  const lat=((S.ctx&&S.ctx.outputLatency)||0)+0.12;
+  const lat=(S.pdelay||0)+0.12;
   const t=Math.max(0,Math.round((songTime()-lat*S.rate)*100)/100);
   S.lyrics[S.tap.i].t=t; S.tap.i++;
   for(let j=S.tap.i;j<S.lyrics.length;j++){ if(S.lyrics[j].t!=null&&S.lyrics[j].t<t) S.lyrics[j].t=null; }
@@ -1539,7 +1551,7 @@ function reviewTick(){
 function stopReview(){
   if(!S.review) return;
   stopBg(); mediaOff();
-  S.pos=Math.min(S.dur,songTime());
+  S.pos=Math.min(S.dur,visTime());
   S.review.srcs.forEach(n=>{ try{n.stop&&n.stop()}catch(e){} n.disconnect(); });
   S.review=null; setPlayLbl('Play'); setStatus('Stopped.'); renderTakes(); updateTime(); draw();
 }
@@ -1702,7 +1714,7 @@ function draw(){
   const dpr=window.devicePixelRatio||1, w=canvas.width/dpr, h=canvas.height/dpr;
   g.setTransform(dpr,0,0,dpr,0,0);
   const {lo,hi}=S.view, rows=hi-lo+1, rh=(h-8)/rows, yOf=m=>4+(hi+0.5-m)*rh;
-  const now=songTime(), pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3, xOf=t=>headX+(t-now)*pps;
+  const now=visTime(), pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3, xOf=t=>headX+(t-now)*pps;
   const t0=now-(headX-LABELW)/pps, t1=now+(w-headX)/pps;
   g.fillStyle=col('--lane-bg'); g.fillRect(0,0,w,h);
   for(let m=lo;m<=hi;m++){
@@ -1944,6 +1956,13 @@ $('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volTone
 $('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; if(was) play(); });
 $('#delay').addEventListener('input',e=>setDelay(+e.target.value));
 $('#calBtn').addEventListener('click',measureDelay);
+function setPDelay(ms,save){ ms=Math.max(0,Math.min(600,Math.round(ms/10)*10)); S.pdelay=ms/1000; $('#pdelay').value=String(ms); $('#pdelayV').textContent=ms+' ms'; $('#pdV').textContent=ms+' ms'; if(save){ try{localStorage.setItem('pc-pdelay',String(ms))}catch(x){} } draw(); }
+$('#pdelay').addEventListener('input',e=>setPDelay(+e.target.value,true));
+$('#pdDown').addEventListener('click',()=>setPDelay(S.pdelay*1000-20,true));
+$('#pdUp').addEventListener('click',()=>setPDelay(S.pdelay*1000+20,true));
+(()=>{ let v=null; try{ const s=localStorage.getItem('pc-pdelay'); if(s!==null) v=+s; }catch(x){}
+  if(v===null){ try{ ensureCtx(); const est=((S.ctx.outputLatency||0)+(S.ctx.baseLatency||0))*1000; v=est>20?est:0; }catch(e){ v=0; } }
+  setPDelay(v,false); })();
 $('#alignR').addEventListener('input',onAlign);
 $('#alignUse').addEventListener('click',useAlignForNew);
 function setWin(w,save){ S.win=Math.max(2,Math.min(30,w)); $('#zoom').value=String(Math.round(S.win)); $('#zoomV').textContent=(S.win<10?S.win.toFixed(1).replace(/\.0$/,''):Math.round(S.win))+' s'; draw(); if(save){ try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } }
