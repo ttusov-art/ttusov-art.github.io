@@ -12,7 +12,7 @@
 :root{
   --bg:#f5f7f8; --surface:#ffffff; --fg:#13212b; --muted:#5a6a76; --line:#dde3e7;
   --accent:#0c7165; --accent-ink:#ffffff; --accent-soft:#e1f1ee; --warm:#c86f0c;
-  --lane-bg:#fbfcfc; --lane-alt:#edf1f3; --lane-line:#dfe5e8; --lane-c:#b5c1c8;
+  --lane-bg:#fbfcfc; --lane-alt:#edf1f3; --lane-black:#e1e7eb; --key-white:#ffffff; --key-black:#2b3740; --key-black-ink:#e3eaee; --lane-line:#dfe5e8; --lane-c:#b5c1c8;
   --target:rgba(12,113,101,.30); --target-edge:rgba(12,113,101,.55);
   --loop:rgba(200,111,12,.10); --loop-edge:#c86f0c; --ghost:rgba(59,91,219,.30);
   --beat:rgba(90,106,118,.38); --halfbeat:rgba(90,106,118,.16);
@@ -26,7 +26,7 @@
 @media (prefers-color-scheme: dark){ :root{
   --bg:#0e1419; --surface:#151e25; --fg:#e3eaee; --muted:#93a3ae; --line:#25323b;
   --accent:#3bb6a4; --accent-ink:#05201c; --accent-soft:#16302d; --warm:#f0a03c;
-  --lane-bg:#111a20; --lane-alt:#17222a; --lane-line:#1f2b34; --lane-c:#344651;
+  --lane-bg:#111a20; --lane-alt:#17222a; --lane-black:#0a1115; --key-white:#cfd8de; --key-black:#070b0e; --key-black-ink:#93a3ae; --lane-line:#1f2b34; --lane-c:#344651;
   --target:rgba(59,182,164,.28); --target-edge:rgba(59,182,164,.6);
   --loop:rgba(240,160,60,.10); --loop-edge:#f0a03c; --ghost:rgba(138,164,255,.30);
   --beat:rgba(147,163,174,.34); --halfbeat:rgba(147,163,174,.14);
@@ -1799,8 +1799,8 @@ function draw(){
   g.fillStyle=col('--lane-bg'); g.fillRect(0,0,w,h);
   for(let m=lo;m<=hi;m++){
     const pc=((m%12)+12)%12;
-    if(BLACK.includes(pc)){ g.fillStyle=col('--lane-alt'); g.fillRect(LABELW,yOf(m)-rh/2,w,rh); }
-    g.fillStyle=pc===0?col('--lane-c'):col('--lane-line'); g.fillRect(LABELW,Math.round(yOf(m)+rh/2)-(pc===0?1:0.5),w,pc===0?1:0.5);
+    if(BLACK.includes(pc)){ g.fillStyle=col('--lane-black'); g.fillRect(LABELW,yOf(m)-rh/2,w,rh); }
+    else if(pc===0||pc===5){ g.fillStyle=pc===0?col('--lane-c'):col('--lane-line'); g.fillRect(LABELW,Math.round(yOf(m)+rh/2)-(pc===0?1:0.5),w,pc===0?1:1); }
   }
   // seconds grid
   if(S.beat){
@@ -1893,12 +1893,17 @@ function draw(){
   // playhead
   g.fillStyle=col('--warm'); g.fillRect(Math.round(headX)-1,0,2,h);
   // labels
-  g.fillStyle=col('--label-bg'); g.fillRect(0,0,LABELW,h); g.fillStyle=col('--line'); g.fillRect(LABELW-1,0,1,h);
+  // labels drawn as a piano keyboard: white keys, dark black keys, a line between neighbouring white keys
+  g.fillStyle=col('--key-white'); g.fillRect(0,0,LABELW,h);
+  for(let m=lo;m<=hi;m++){ const pc=((m%12)+12)%12, y=yOf(m);
+    if(BLACK.includes(pc)){ g.fillStyle=col('--key-black'); g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); }
+    else if(pc===0||pc===5){ g.fillStyle=col('--lane-c'); g.fillRect(0,Math.round(y+rh/2)-0.5,LABELW,1); } }
+  g.fillStyle=col('--line'); g.fillRect(LABELW-1,0,1,h);
   g.textAlign='right'; g.textBaseline='middle';
   for(let m=lo;m<=hi;m++){
-    const pc=((m%12)+12)%12; if(!(rh>=13||(!BLACK.includes(pc)&&rh>=8)||pc===0)) continue;
+    const pc=((m%12)+12)%12, bk=BLACK.includes(pc); if(!(rh>=13||(!bk&&rh>=8)||pc===0)) continue;
     g.font=(pc===0?'600 ':'400 ')+Math.min(11,Math.max(9,rh-3))+'px '+col('--font-mono');
-    g.fillStyle=pc===0?col('--fg'):col('--muted'); g.fillText(noteName(m),LABELW-6,yOf(m)+0.5);
+    g.fillStyle=bk?col('--key-black-ink'):pc===0?'#13212b':'#5a6a76'; g.fillText(noteName(m),LABELW-6,yOf(m)+0.5);
   }
 }
 
