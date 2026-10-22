@@ -201,6 +201,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="edit-sep"></span>
       <button id="edOne" type="button" class="primary">One note</button>
       <button id="edFill" type="button">Fill</button>
+      <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
       <button id="edUp" type="button" aria-label="Up a semitone">▲ ½</button>
       <button id="edDown" type="button" aria-label="Down a semitone">▼ ½</button>
       <button id="edOctUp" type="button">Octave ▲</button>
@@ -1239,6 +1240,63 @@ function edOneNote(){
   for(let i=f;i<=l;i++) S.tM[i]=m;
   targetEdited('Made one note: '+noteName(m)+'. Use ▲ / ▼ if it should be a different note.');
 }
+// Smooth: turn the sung line into flat piano-style notes (selection, or whole song)
+function smoothNotes(runV,fps){
+  // dynamic programming over semitones: stay on a note unless the pitch clearly moves
+  let mn=1e9,mx=-1e9; for(const v of runV) if(!isNaN(v)){ if(v<mn) mn=v; if(v>mx) mx=v; }
+  const lo=Math.floor(mn)-1, K=Math.ceil(mx)+1-lo+1, L=runV.length, lam=0.12*fps;
+  let D=new Float64Array(K), N=new Float64Array(K); const bp=new Uint8Array(L*K); // 1 = came from another note
+  const fc=(v,k)=>isNaN(v)?0:Math.min(2.25,(v-(lo+k))**2);
+  for(let k=0;k<K;k++) D[k]=fc(runV[0],k);
+  const bestFrom=new Int16Array(L);
+  for(let i=1;i<L;i++){
+    let bk=0; for(let k=1;k<K;k++) if(D[k]<D[bk]) bk=k; bestFrom[i]=bk;
+    for(let k=0;k<K;k++){ const stay=D[k], jump=D[bk]+lam; if(jump<stay){ N[k]=jump+fc(runV[i],k); bp[i*K+k]=1; } else { N[k]=stay+fc(runV[i],k); bp[i*K+k]=0; } }
+    const t=D; D=N; N=t;
+  }
+  let k=0; for(let j=1;j<K;j++) if(D[j]<D[k]) k=j;
+  const out=new Int16Array(L);
+  for(let i=L-1;i>=0;i--){ out[i]=lo+k; if(i>0&&bp[i*K+k]) k=bestFrom[i]; }
+  return out;
+}
+function edSmooth(){
+  if(!S.tT||!S.tM) return;
+  const T=S.tT, M=S.tM, r=selRange(), i0=r?r.i0:0, i1=r?r.i1:T.length-1;
+  const ta=r?r.a:-1e9, tb=r?r.b:1e9;
+  if(i1-i0<2) return;
+  const dt=Math.max(0.002,(T[i1]-T[i0])/(i1-i0)), fps=1/dt, GAP=0.25, MINN=0.1;
+  // phrases: voiced runs, with short breaks closed
+  const runs=[]; for(let i=i0;i<=i1;i++){ if(isNaN(M[i])) continue; const last=runs[runs.length-1]; if(last&&T[i]-T[last.e]<=GAP+dt*1.5) last.e=i; else runs.push({s:i,e:i}); }
+  if(!runs.length){ setStatus('There is no line to smooth here.',true); return; }
+  const snapping=!!(S.beat&&S.snap), out=Float32Array.from(M); let notes=0;
+  for(const run of runs){
+    const raw=Array.from(M.subarray(run.s,run.e+1)), w=Math.round(0.4*fps), st=Math.max(1,Math.round(w/15));
+    // ignore octave slips: frames far from the local median are treated as unknown
+    const vals=raw.map((v,j)=>{ if(isNaN(v)) return v; const loc=[]; for(let k=Math.max(0,j-w);k<=Math.min(raw.length-1,j+w);k+=st) if(!isNaN(raw[k])) loc.push(raw[k]); return Math.abs(v-median(loc))>8?NaN:v; });
+    if(vals.every(isNaN)) continue;
+    const q=smoothNotes(vals,fps);
+    // segments in time
+    let segs=[]; for(let j=0;j<q.length;j++){ const t=T[run.s+j]; if(segs.length&&segs[segs.length-1].m===q[j]) segs[segs.length-1].b=t+dt; else segs.push({m:q[j],a:t,b:t+dt}); }
+    // fold very short notes into the closer neighbour
+    for(let changed=true;changed&&segs.length>1;){ changed=false;
+      for(let j=0;j<segs.length;j++){ const g=segs[j]; if(g.b-g.a>=MINN) continue;
+        const p=segs[j-1], n=segs[j+1], to=!p?n:!n?p:(Math.abs(p.m-g.m)<=Math.abs(n.m-g.m)?p:n);
+        if(to===p) p.b=g.b; else n.a=g.a; segs.splice(j,1); changed=true; break; }
+      for(let j=segs.length-1;j>0;j--) if(segs[j].m===segs[j-1].m){ segs[j-1].b=segs[j].b; segs.splice(j,1); }
+    }
+    // snap note starts, changes and ends to the beat grid
+    let B=[segs[0].a,...segs.map(g=>g.b)];
+    if(snapping) B=B.map(t=>Math.max(ta,Math.min(tb,snapT(t))));
+    let fin=[]; segs.forEach((g,j)=>{ if(B[j+1]-B[j]>1e-6){ const last=fin[fin.length-1]; if(last&&last.m===g.m) last.b=B[j+1]; else fin.push({m:g.m,a:B[j],b:B[j+1]}); } });
+    if(!fin.length){ const m=segs.reduce((x,y)=>(y.b-y.a>x.b-x.a?y:x)).m, a=snapping?B[0]:segs[0].a; fin=[{m,a,b:Math.max(a+dt,snapping?a+beatP()/2:segs[segs.length-1].b)}]; }
+    for(let i=run.s;i<=run.e;i++) out[i]=NaN;
+    let j0=run.s; while(j0>i0&&T[j0-1]>=fin[0].a-1e-9) j0--;
+    for(let i=j0,k=0;i<=i1;i++){ const t=T[i]; if(t>=fin[fin.length-1].b-1e-9) break; while(k<fin.length-1&&t>=fin[k].b-1e-9) k++; if(t>=fin[k].a-1e-9) out[i]=fin[k].m; }
+    notes+=fin.length;
+  }
+  pushUndo(); S.tM=out;
+  targetEdited('Smoothed '+(r?fmtT1(r.a)+'–'+fmtT1(r.b):'the whole song')+' into '+notes+' note'+(notes===1?'':'s')+(snapping?', lined up with the beats':'')+'. Undo brings the old line back.');
+}
 function edShift(d){
   const r=selRange(); if(!r) return; if(!voicedIn(r).length) return; pushUndo();
   for(let i=r.i0;i<=r.i1;i++) if(!isNaN(S.tM[i])) S.tM[i]+=d;
@@ -1990,6 +2048,7 @@ $('#lyrSnapAll').addEventListener('click',snapAllLines);
 try{ if(localStorage.getItem('pc-snap')==='0'){ S.snap=false; $('#snapOn').checked=false; } }catch(x){}
 renderBeatInfo();
 $('#edFill').addEventListener('click',edFill);
+$('#edSmooth').addEventListener('click',edSmooth);
 $('#edUp').addEventListener('click',()=>edShift(1));
 $('#edDown').addEventListener('click',()=>edShift(-1));
 $('#edOctUp').addEventListener('click',()=>edShift(12));
