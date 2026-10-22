@@ -230,7 +230,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone: off</button>
         <span class="sync" role="group" aria-label="Picture delay"><span class="small">Picture</span><button id="pdDown" type="button" aria-label="Show the picture earlier">−</button><span class="val" id="pdV">0 ms</span><button id="pdUp" type="button" aria-label="Show the picture later">+</button></span>
       </div>
-      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped. Pinch to zoom, two-finger drag to move.</span></span>
+      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move.</span></span>
     </div>
   </section>
 
@@ -1318,7 +1318,7 @@ function selectFragmentAt(t){
 }
 function setEditMode(on){
   S.editMode=on; $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select (start on the row of the note you want to add). Tap a fragment to select it. Two fingers: move and zoom.':'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move while stopped. Pinch to zoom, two-finger drag to move.';
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select (start on the row of the note you want to add). Tap a fragment to select it. Two fingers: move and zoom.':'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move.';
   if(!on) S.sel=null; updateSelInfo(); draw();
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
@@ -1980,12 +1980,13 @@ canvas.addEventListener('pointerdown',e=>{
   drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX)}; canvas.setPointerCapture(e.pointerId);
   const d=drag; d.timer=setTimeout(()=>{ if(drag===d&&!d.moved){ d.long=true; holdLoopPoint(d.t); } },550); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-canvas.addEventListener('pointermove',e=>{ if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); } if(drag.long||!drag.moved||drag.busy||S.playing) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
+canvas.addEventListener('pointermove',e=>{ if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
   touchPts.delete(e.pointerId);
   if(pinch){ if(touchPts.size<2){ pinch=null; try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } if(touchPts.size>0) return; drag=null; draw(); return; }
   if(drag&&drag.pinch){ if(touchPts.size===0) drag=null; return; }
   if(drag&&drag.timer) clearTimeout(drag.timer);
+  if(drag&&drag.resume){ drag=null; play(); return; }
   if(drag&&!drag.edit&&drag.long){}
   else if(drag&&!drag.edit&&ev==='pointerup'&&!drag.moved){ (S.playing||S.review)?stop():play(); }
   else if(drag&&drag.edit&&ev==='pointerup'&&Math.abs(e.clientX-drag.x)<6) selectFragmentAt(drag.t0);
@@ -2186,9 +2187,11 @@ function setWin(w,save){ S.win=Math.max(2,Math.min(30,w)); $('#zoom').value=Stri
 $('#zoom').addEventListener('input',e=>setWin(+e.target.value,true));
 try{ const w=+localStorage.getItem('pc-win'); if(w>=2&&w<=30) setWin(w,false); }catch(x){}
 // mouse wheel / trackpad zoom on the lane
+let wheelAcc=0, wheelTimer=null;
 canvas.addEventListener('wheel',e=>{ e.preventDefault();
   const sideways=e.shiftKey||Math.abs(e.deltaX)>Math.abs(e.deltaY);
-  if(sideways){ if(S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,S.pos+(e.deltaX||e.deltaY)/pps)); updateTime(); draw(); }
+  if(sideways&&S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; wheelAcc+=(e.deltaX||e.deltaY)/pps; clearTimeout(wheelTimer); wheelTimer=setTimeout(()=>{ const d=wheelAcc; wheelAcc=0; if(S.playing) seek(songTime()+d); },120); return; }
+  if(sideways){ if(S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,S.pos+(e.deltaX||e.deltaY)/pps)); updateTime(); draw(); }
   else setWin(S.win*Math.exp(e.deltaY*0.0015),true); },{passive:false});
 $('#ignoreOct').addEventListener('change',e=>{ S.ignoreOct=e.target.checked; });
 try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
