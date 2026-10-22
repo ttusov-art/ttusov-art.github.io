@@ -230,7 +230,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone: off</button>
         <span class="sync" role="group" aria-label="Picture delay"><span class="small">Picture</span><button id="pdDown" type="button" aria-label="Show the picture earlier">−</button><span class="val" id="pdV">0 ms</span><button id="pdUp" type="button" aria-label="Show the picture later">+</button></span>
       </div>
-      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move.</span></span>
+      <span class="row"><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Drag the keyboard up or down, pinch it to show more notes, double-tap it for the automatic range.</span></span>
     </div>
   </section>
 
@@ -537,7 +537,7 @@ async function readZip(ab){
 }
 
 // ===== guide loading =====
-function setTarget(times,midis,orig){ S.tT=times; S.tM=midis; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()}; S.tMorig=orig&&orig.length===midis.length?new Float32Array(orig):Float32Array.from(midis); S.undo=[]; S.sel=null; if(typeof updateSelInfo==='function') updateSelInfo(); computeView(); }
+function setTarget(times,midis,orig){ S.tT=times; S.tM=midis; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()}; S.tMorig=orig&&orig.length===midis.length?new Float32Array(orig):Float32Array.from(midis); S.undo=[]; S.sel=null; if(typeof updateSelInfo==='function') updateSelInfo(); S.viewManual=false; computeView(); }
 async function pitchLineOf(buf,onProg){
   const len=Math.ceil(buf.duration*11025), oc=new OfflineAudioContext(1,len,11025);
   const src=oc.createBufferSource(); src.buffer=buf;
@@ -906,7 +906,7 @@ async function backupLibrary(){
     const entries=[], man={app:'part-coach',version:1,created:Date.now(),songs:[]};
     for(const s0 of songs){
       let s=s0; if(!s.uid){ s.uid=newUid(); await libPutRaw(s); }
-      const dir='songs/'+s.uid+'/', m={uid:s.uid,beat:s.beat||null,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
+      const dir='songs/'+s.uid+'/', m={uid:s.uid,beat:s.beat||null,view:s.view||null,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
       entries.push({name:dir+'vocals.pcm',data:s.pcm}); m.files.pcm=dir+'vocals.pcm';
       if(s.contour){ entries.push({name:dir+'contour.f32',data:f32buf(s.contour)}); m.files.contour=dir+'contour.f32'; }
       if(s.contourOrig){ entries.push({name:dir+'contour-original.f32',data:f32buf(s.contourOrig)}); m.files.contourOrig=dir+'contour-original.f32'; }
@@ -934,7 +934,7 @@ async function restoreLibrary(file,out){
       const cur=byUid[m.uid];
       if(cur&&(cur.updated||cur.created)>=(m.updated||m.created)){ skipped++; continue; }
       const rd=async f=>f?await (await z.get(f)).arrayBuffer():null;
-      const rec={uid:m.uid,beat:m.beat||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:await rd(m.files.pcm)};
+      const rec={uid:m.uid,beat:m.beat||null,view:m.view||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:await rd(m.files.pcm)};
       if(m.hop!=null) rec.hop=m.hop; if(m.t0!=null) rec.t0=m.t0;
       const c=await rd(m.files.contour); if(c) rec.contour=new Float32Array(c);
       const co=await rd(m.files.contourOrig); if(co) rec.contourOrig=new Float32Array(co);
@@ -978,7 +978,7 @@ async function openLibSong(id){
     S.curBacks=backsOf(s).slice(); S.curBackSel=S.curBacks.length?Math.max(0,Math.min(S.curBacks.length-1,s.backSel==null?0:s.backSel)):-1;
     if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
     S.cur={libId:id,fromFile:false}; S.beat=s.beat?{...s.beat}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
-    setTarget(tt,mm,s.contourOrig); songReady(s.name,s.name+' (vocals, from library)');
+    setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } songReady(s.name,s.name+' (vocals, from library)');
     setStatus(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.');
     window.scrollTo({top:0,behavior:'smooth'});
   }catch(err){ setStatus('Could not open this song: '+((err&&err.message)||'unknown error')+'.',true); }
@@ -1222,7 +1222,7 @@ function targetEdited(msg){
   if(msg) setStatus(msg);
   if(S.cur.libId!=null){ clearTimeout(edSaveTimer); const id=S.cur.libId; edSaveTimer=setTimeout(()=>{ libUpdate(id,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig)}).catch(()=>{}); },500); }
 }
-function computeViewKeep(){ const {lo,hi}=S.view; computeView(); S.view.lo=Math.min(S.view.lo,lo); S.view.hi=Math.max(S.view.hi,hi); }
+function computeViewKeep(){ if(S.viewManual) return; const {lo,hi}=S.view; computeView(); S.view.lo=Math.min(S.view.lo,lo); S.view.hi=Math.max(S.view.hi,hi); }
 // note used by Fill: the selection's own note if it has one, otherwise the row where the drag started
 function fillNote(r,v){ v=v||voicedIn(r); if(v.length) return Math.round(median(v)); if(S.sel&&S.sel.m!=null) return S.sel.m; return null; }
 function laneNoteAt(clientY){ const rect=canvas.getBoundingClientRect(), {lo,hi}=S.view, rh=(rect.height-8)/(hi-lo+1); return Math.max(lo,Math.min(hi,Math.round(hi+0.5-(clientY-rect.top-4)/rh))); }
@@ -1318,7 +1318,7 @@ function selectFragmentAt(t){
 }
 function setEditMode(on){
   S.editMode=on; $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select (start on the row of the note you want to add). Tap a fragment to select it. Two fingers: move and zoom.':'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move.';
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?'Drag to select (start on the row of the note you want to add). Tap a fragment to select it. Two fingers: move and zoom. Drag or pinch the keyboard to change the note range.':'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Drag the keyboard up or down, pinch it to show more notes, double-tap it for the automatic range.';
   if(!on) S.sel=null; updateSelInfo(); draw();
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
@@ -1972,7 +1972,19 @@ let drag=null;
 const touchPts=new Map(); let pinch=null;
 const pinchDist=()=>{ const v=[...touchPts.values()]; return Math.max(20,Math.abs(v[0]-v[1])); };
 const pinchMid=()=>{ const v=[...touchPts.values()]; return (v[0]+v[1])/2; };
+// keyboard column: drag to move the note range up or down, pinch to show more or fewer notes, double-tap for the automatic range
+let kb=null, kbLastTap=0, kbSaveTimer=null;
+function kbStart(){ const v=[...kb.pts.values()], rect=canvas.getBoundingClientRect(); kb.lo0=S.view.lo; kb.hi0=S.view.hi; kb.rh0=(rect.height-8)/(S.view.hi-S.view.lo+1); kb.top=rect.top;
+  if(v.length===1) kb.y0=v[0]; else { kb.d0=Math.max(20,Math.abs(v[0]-v[1])); kb.mid0=(v[0]+v[1])/2; kb.c0=kb.hi0+0.5-(kb.mid0-kb.top-4)/kb.rh0; } }
+function setViewRange(lo,hi){ const span=Math.max(8,Math.min(60,hi-lo)); lo=Math.max(21,Math.min(108-span,Math.round(lo))); S.view={lo,hi:lo+span}; S.viewManual=true; draw(); }
+function saveView(){ clearTimeout(kbSaveTimer); if(S.cur&&S.cur.libId!=null){ const id=S.cur.libId, v=S.viewManual?{...S.view}:null; kbSaveTimer=setTimeout(()=>libUpdate(id,{view:v}).catch(()=>{}),400); } }
+function kbMove(){ const v=[...kb.pts.values()];
+  if(v.length===1){ const d=(v[0]-kb.y0)/kb.rh0; if(Math.abs(v[0]-kb.y0)>4) kb.moved=true; const sh=Math.round(d); setViewRange(kb.lo0+sh,kb.hi0+sh); }
+  else if(v.length>=2){ kb.moved=true; const d=Math.max(20,Math.abs(v[0]-v[1])), span=Math.max(8,Math.min(60,Math.round((kb.hi0-kb.lo0+1)*kb.d0/d)-1)), rect=canvas.getBoundingClientRect(), rh=(rect.height-8)/(span+1), mid=(v[0]+v[1])/2;
+    const hi=kb.c0-0.5+(mid-kb.top-4)/rh; setViewRange(Math.round(hi)-span,Math.round(hi)); } }
 canvas.addEventListener('pointerdown',e=>{
+  if(kb||(e.clientX-canvas.getBoundingClientRect().left<LABELW&&touchPts.size===0)){
+    if(!kb) kb={pts:new Map(),moved:false}; kb.pts.set(e.pointerId,e.clientY); kbStart(); canvas.setPointerCapture(e.pointerId); e.preventDefault(); return; }
   touchPts.set(e.pointerId,e.clientX);
   if(touchPts.size===2){ pinch={d0:pinchDist(),win0:S.win,mid0:pinchMid(),pos0:S.pos}; if(drag){ clearTimeout(drag.timer); drag.moved=true; drag.pinch=true; if(drag.edit&&drag.sel0!==undefined) S.sel=drag.sel0; } canvas.setPointerCapture(e.pointerId); draw(); return; }
   if(touchPts.size>2) return;
@@ -1980,8 +1992,12 @@ canvas.addEventListener('pointerdown',e=>{
   drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX)}; canvas.setPointerCapture(e.pointerId);
   const d=drag; d.timer=setTimeout(()=>{ if(drag===d&&!d.moved){ d.long=true; holdLoopPoint(d.t); } },550); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-canvas.addEventListener('pointermove',e=>{ if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
+canvas.addEventListener('pointermove',e=>{ if(kb&&kb.pts.has(e.pointerId)){ kb.pts.set(e.pointerId,e.clientY); kbMove(); return; } if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
+  if(kb&&kb.pts.has(e.pointerId)){ kb.pts.delete(e.pointerId);
+    if(kb.pts.size){ kbStart(); return; }
+    if(!kb.moved&&ev==='pointerup'){ const now=Date.now(); if(now-kbLastTap<350){ S.viewManual=false; computeView(); draw(); setStatus('Note range set back to automatic.'); kbLastTap=0; } else kbLastTap=now; }
+    kb=null; saveView(); return; }
   touchPts.delete(e.pointerId);
   if(pinch){ if(touchPts.size<2){ pinch=null; try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } if(touchPts.size>0) return; drag=null; draw(); return; }
   if(drag&&drag.pinch){ if(touchPts.size===0) drag=null; return; }
@@ -2006,7 +2022,7 @@ async function addCurrentToLib(btn){
   try{
     const name=$('#songName').textContent.trim()||'Song';
     const pcm=await toInt16(S.guideBuf,LIB_SR);
-    const id=await libPut({name,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
+    const id=await libPut({name,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,view:S.viewManual?{...S.view}:null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
     let note='Added to the library.';
     if(S.backBuf){
       try{ const bb=S.curBackBlob||await encodeMp3(S.backBuf,96,p=>setStatus('Saving the backing track… '+Math.round(p*100)+'%'));
@@ -2189,6 +2205,10 @@ try{ const w=+localStorage.getItem('pc-win'); if(w>=2&&w<=30) setWin(w,false); }
 // mouse wheel / trackpad zoom on the lane
 let wheelAcc=0, wheelTimer=null;
 canvas.addEventListener('wheel',e=>{ e.preventDefault();
+  if(e.clientX-canvas.getBoundingClientRect().left<LABELW){ const {lo,hi}=S.view;
+    if(e.ctrlKey){ const span=Math.round((hi-lo)*Math.exp(e.deltaY*0.01)), c=(lo+hi)/2; setViewRange(Math.round(c-span/2),Math.round(c-span/2)+span); }
+    else { const sh=Math.sign(e.deltaY)*Math.max(1,Math.round(Math.abs(e.deltaY)/60)); setViewRange(lo-sh,hi-sh); }
+    saveView(); return; }
   const sideways=e.shiftKey||Math.abs(e.deltaX)>Math.abs(e.deltaY);
   if(sideways&&S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; wheelAcc+=(e.deltaX||e.deltaY)/pps; clearTimeout(wheelTimer); wheelTimer=setTimeout(()=>{ const d=wheelAcc; wheelAcc=0; if(S.playing) seek(songTime()+d); },120); return; }
   if(sideways){ if(S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,S.pos+(e.deltaX||e.deltaY)/pps)); updateTime(); draw(); }
