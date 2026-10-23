@@ -219,6 +219,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="edit-sep"></span>
       <button id="edUndo" type="button">Undo</button>
       <button id="edReset" type="button">Reset to original</button>
+      <button id="edRefind" type="button" title="Read the vocals again with this part's voice range">Find pitch line again</button>
       <div class="beat-row" id="beatRow">
         <span class="small">Beats</span>
         <input id="bpmIn" type="number" min="30" max="240" step="0.1" aria-label="Tempo in beats per minute"><span class="small">BPM</span>
@@ -334,6 +335,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <button id="partNew" type="button">New part</button>
       <button id="partRen" type="button">Rename</button>
       <button id="partDel" type="button">Delete part</button>
+      <label class="lbl" for="partRange">Voice range</label>
+      <select id="partRange" class="sel">
+        <option value="low">Low voice (bass, baritone, tenor)</option>
+        <option value="high">High voice (alto, soprano)</option>
+      </select>
     </div>
     <div class="lib-head">
       <span class="small">Separated songs and songs you added are kept here on this device, in the part chosen above.</span>
@@ -560,14 +566,25 @@ async function readZip(ab){
 
 // ===== guide loading =====
 function setTarget(times,midis,orig){ S.tT=times; S.tM=midis; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()}; S.tMorig=orig&&orig.length===midis.length?new Float32Array(orig):Float32Array.from(midis); S.undo=[]; S.sel=null; if(typeof updateSelInfo==='function') updateSelInfo(); S.viewManual=false; computeView(); }
-async function pitchLineOf(buf,onProg){
-  const len=Math.ceil(buf.duration*11025), oc=new OfflineAudioContext(1,len,11025);
+// voice ranges: where the pitch tracker looks for notes (file analysis and live microphone)
+const RANGES={
+  low:{label:'Low voice (bass, baritone, tenor)',fmin:70,fmax:700,sr:11025,lp:2800,mic:[70,800]},
+  high:{label:'High voice (alto, soprano)',fmin:140,fmax:1100,sr:22050,lp:4500,mic:[140,1200]}
+};
+function partRanges(){ try{ return JSON.parse(localStorage.getItem('pc-partrange')||'{}')||{}; }catch(e){ return {}; } }
+function defaultRange(part){ return /sopran|alt|mezzo|high|treble/i.test(part||'')?'high':'low'; }
+function rangeKey(part){ part=part||S.part; const r=partRanges()[part]; return RANGES[r]?r:defaultRange(part); }
+function curRange(){ return RANGES[rangeKey(S.curPart||S.part)]; }
+function setPartRange(v){ const L=partRanges(); L[S.part]=v; try{ localStorage.setItem('pc-partrange',JSON.stringify(L)); }catch(e){} if(!S.curPart||S.curPart===S.part) RT.cm=null; renderParts._last&&renderLib(); setStatus(S.part+' now uses '+RANGES[v].label.toLowerCase()+'. New pitch lines in this part use it; for an existing song use Find pitch line again in the editor.'); }
+async function pitchLineOf(buf,onProg,rk){
+  const R0=RANGES[rk]||curRange(), SR=R0.sr;
+  const len=Math.ceil(buf.duration*SR), oc=new OfflineAudioContext(1,len,SR);
   const src=oc.createBufferSource(); src.buffer=buf;
   const hp=oc.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=70;
-  const lp=oc.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2800;
+  const lp=oc.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=R0.lp;
   src.connect(hp).connect(lp).connect(oc.destination); src.start();
   const x=(await oc.startRendering()).getChannelData(0);
-  const tr=await yinTrack(x,11025,80,700,onProg);
+  const tr=await yinTrack(x,SR,R0.fmin,R0.fmax,onProg);
   const mm=contourOf(tr), tt=new Float32Array(tr.n);
   for(let i=0;i<tr.n;i++) tt[i]=i*tr.hop+tr.t0;
   return {tt,mm,hop:tr.hop,t0:tr.t0};
@@ -593,10 +610,10 @@ async function loadGuide(file){
       setTarget(tt,mm);
     }else{
       const buf=await decode(ab); S.guideBuf=buf;
-      const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'));
+      const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'),rangeKey(S.part));
       setTarget(pl.tt,pl.mm);
     }
-    normalize(); S.stretch=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    normalize(); S.stretch=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -999,7 +1016,7 @@ function shareLinks(){ try{ return JSON.parse(localStorage.getItem('pc-sharelink
 function renderParts(songs){
   if(S.parts.length>1&&S.parts.includes('My songs')&&!songs.some(x=>x.part==='My songs')){ S.parts=S.parts.filter(n=>n!=='My songs'); if(S.part==='My songs') S.part=S.parts[0]; partsSave(); }
   const sel=$('#partSel'); sel.innerHTML=''; S.parts.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n+' ('+songs.filter(x=>partOf(x)===n).length+')'; sel.appendChild(o); }); sel.value=S.part;
-  $('#partDel').disabled=S.parts.length<2||songs.some(x=>partOf(x)===S.part);
+  $('#partDel').disabled=S.parts.length<2||songs.some(x=>partOf(x)===S.part); $('#partRange').value=rangeKey(S.part); renderParts._last=true;
   $('#sharePart').textContent=S.part; $('#shareFile').textContent=shareFileName(); if(document.activeElement!==$('#shareName')) $('#shareName').value=shareFileName().replace(/\.zip$/i,'');
   const ln=shareLinks()[S.part]||''; if(document.activeElement!==$('#shareIn')) $('#shareIn').value=ln; $('#shareText').textContent='';
 }
@@ -1044,7 +1061,7 @@ async function openLibSong(id){
     S.guideBuf=buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
     S.curBacks=backsOf(s).slice(); S.curBackSel=S.curBacks.length?Math.max(0,Math.min(S.curBacks.length-1,s.backSel==null?0:s.backSel)):-1;
     if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
-    S.cur={libId:id,fromFile:false}; S.beat=s.beat?{...s.beat}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
+    S.cur={libId:id,fromFile:false}; S.curPart=partOf(s); RT.cm=null; S.beat=s.beat?{...s.beat}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
     setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } songReady(s.name,s.name+' (vocals, from library)');
     setStatus(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.');
     window.scrollTo({top:0,behavior:'smooth'});
@@ -1151,9 +1168,9 @@ async function separateSong(file){
     for(let i=0;i<n;i++) vm[i]=0.5*(VL[i]+VR[i]); voc.copyToChannel(vm,0);
     const back=new AudioBuffer({numberOfChannels:2,length:n,sampleRate:sr}), bl=new Float32Array(n), br=new Float32Array(n);
     for(let i=0;i<n;i++){ bl[i]=oL[i]-VL[i]; br[i]=oR[i]-VR[i]; } back.copyToChannel(bl,0); back.copyToChannel(br,1);
-    const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1));
+    const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1),rangeKey(S.part));
     S.guideBuf=voc; S.backBuf=back; $('#backName').textContent='Backing from the separation (this time only)'; $('#backClear').hidden=false;
-    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     S.beat=null; S.beatTok++;
     setTarget(pl.tt,pl.mm); songReady(name,name+' (separated vocals)');
     let note='';
@@ -1374,6 +1391,19 @@ function edUndo(){ if(!S.undo.length) return; S.tM=S.undo.pop(); targetEdited('U
 function edReset(btn){
   if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent='Tap again to reset'; setTimeout(()=>{ delete btn.dataset.armed; btn.textContent='Reset to original'; },4000); return; }
   delete btn.dataset.armed; btn.textContent='Reset to original'; pushUndo(); S.tM=Float32Array.from(S.tMorig); targetEdited('The whole target line is back to the original.');
+}
+async function edRefind(btn){
+  if(!S.guideBuf) return;
+  const rk=rangeKey(S.curPart||S.part);
+  if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent='Tap again: replaces all edits'; setTimeout(()=>{ if(btn.isConnected){ delete btn.dataset.armed; btn.textContent='Find pitch line again'; } },5000); return; }
+  delete btn.dataset.armed; btn.disabled=true; stop();
+  try{
+    const pl=await pitchLineOf(S.guideBuf,p=>{ btn.textContent='Reading… '+Math.round(p*100)+'%'; },rk);
+    const view=S.viewManual?{...S.view}:null; setTarget(pl.tt,pl.mm); if(view){ S.view=view; S.viewManual=true; }
+    if(S.cur&&S.cur.libId!=null) await libUpdate(S.cur.libId,{contour:Float32Array.from(pl.mm),contourOrig:Float32Array.from(pl.mm),tt:Float32Array.from(pl.tt),hop:pl.hop,t0:pl.t0});
+    draw(); setStatus('New pitch line found using '+RANGES[rk].label.toLowerCase()+'.');
+  }catch(e){ setStatus('Could not read the pitch line: '+((e&&e.message)||'unknown error')+'.',true); }
+  finally{ btn.disabled=false; btn.textContent='Find pitch line again'; }
 }
 function edLoop(){ const r=selRange(); if(!r) return; S.loop.a=Math.round(r.a*10)/10; S.loop.b=Math.round(Math.max(r.b,r.a+0.5)*10)/10; S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); setStatus('Loop set to the selection. Press Play.'); }
 // with Snap on, a tap selects the one beat under the finger (beat line to the next beat line)
@@ -1809,7 +1839,7 @@ function micPitch(){
   if(!RT.x||RT.x.length!==n){ RT.x=new Float32Array(n); }
   let e=0; for(let i=0;i<n;i++){ let s=0; for(let k=0;k<dec;k++) s+=S.micBuf[i*dec+k]; const v=s/dec; RT.x[i]=v; e+=v*v; }
   const rms=Math.sqrt(e/n); if(rms<0.004) return NaN;
-  const tauMin=Math.floor(fs/900), tauMax=Math.ceil(fs/70), W=n-tauMax-2; if(W<64) return NaN;
+  const mr=curRange().mic, tauMin=Math.floor(fs/mr[1]), tauMax=Math.ceil(fs/mr[0]), W=n-tauMax-2; if(W<64) return NaN;
   if(!RT.cm||RT.cm.length<tauMax+2) RT.cm=new Float32Array(tauMax+2);
   const x=RT.x, cm=RT.cm; let run=0; cm[0]=1;
   for(let tau=1;tau<=tauMax+1;tau++){ let sum=0; for(let j=0;j<W;j++){ const d=x[j]-x[j+tau]; sum+=d*d; } run+=sum; cm[tau]=run>0?sum*tau/run:1; }
@@ -2134,6 +2164,7 @@ $('#lyrSnapAll').addEventListener('click',snapAllLines);
 try{ if(localStorage.getItem('pc-snap')==='0'){ S.snap=false; $('#snapOn').checked=false; } }catch(x){}
 renderBeatInfo();
 $('#edFill').addEventListener('click',edFill);
+$('#edRefind').addEventListener('click',e=>edRefind(e.currentTarget));
 $('#edSmooth').addEventListener('click',edSmooth);
 $('#edUp').addEventListener('click',()=>edShift(1));
 $('#edDown').addEventListener('click',()=>edShift(-1));
@@ -2168,6 +2199,7 @@ $('#partSel').addEventListener('change',e=>setPart(e.target.value));
 $('#partNew').addEventListener('click',newPart);
 $('#partRen').addEventListener('click',renamePart);
 $('#partDel').addEventListener('click',deletePart);
+$('#partRange').addEventListener('change',e=>setPartRange(e.target.value));
 $('#bkFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) restoreLibrary(f).finally(()=>e.target.value=''); });
 $('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) useBacking(i); });
 $('#backSave').addEventListener('click',saveBacking);
