@@ -116,6 +116,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pick-menu .pm-parts button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .link-box,.share-box{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
 .share-box{margin-top:10px}
+.share-box #shareName{flex:1 1 200px}
 .link-box input,.share-box input{flex:1 1 220px;min-width:0;font:inherit;font-size:16px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)}
 .share-url{font-family:var(--font-mono);font-size:12px;word-break:break-all}
 .setup{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
@@ -358,8 +359,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <b>Share with your choir</b>
       <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
       <span class="small">1. Tap Make share file. 2. Upload “<span id="shareFile"></span>” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered the songs of this part.</span>
+      <span class="small">You can change the file name below; the app remembers it for each part.</span>
       <span class="small"><b>Updating later:</b> tap Make share file again and upload it to the same Dropbox folder with exactly the same name, so it replaces the old file and the link stays the same. Choir members' apps then download only the new songs and changed edits, not the audio they already have.</span>
-      <div class="row"><button id="shareMake" type="button">Make share file</button></div>
+      <div class="row">
+        <input id="shareName" type="text" autocomplete="off" spellcheck="false" aria-label="File name for the share file">
+        <button id="shareMake" type="button">Make share file</button>
+      </div>
       <div class="row">
         <input id="shareIn" type="url" inputmode="url" autocomplete="off" placeholder="Dropbox link to your backup" aria-label="Dropbox link to your backup">
         <button id="shareGo" type="button">Share link</button>
@@ -987,13 +992,15 @@ async function initParts(){
 function ensurePart(name){ if(name&&!S.parts.includes(name)){ S.parts.push(name); partsSave(); } }
 function setPart(name){ ensurePart(name); S.part=name; partsSave(); renderLib(); }
 function cleanPartName(v){ return String(v||'').replace(/[\\/:*?"<>|]/g,'').trim().slice(0,40); }
-function shareFileName(){ return 'Part Coach - '+S.part+'.zip'; }
+function shareNames(){ try{ return JSON.parse(localStorage.getItem('pc-sharenames')||'{}')||{}; }catch(e){ return {}; } }
+function shareFileName(){ const n=String(shareNames()[S.part]||'').replace(/[\\/:*?"<>|]/g,'').trim(); return (n||'Part Coach - '+S.part).replace(/\.zip$/i,'')+'.zip'; }
+function saveShareName(){ const L=shareNames(), v=$('#shareName').value.replace(/[\\/:*?"<>|]/g,'').trim().replace(/\.zip$/i,''); if(v&&v!=='Part Coach - '+S.part) L[S.part]=v; else delete L[S.part]; try{ localStorage.setItem('pc-sharenames',JSON.stringify(L)); }catch(e){} $('#shareFile').textContent=shareFileName(); }
 function shareLinks(){ try{ return JSON.parse(localStorage.getItem('pc-sharelinks')||'{}')||{}; }catch(e){ return {}; } }
 function renderParts(songs){
   if(S.parts.length>1&&S.parts.includes('My songs')&&!songs.some(x=>x.part==='My songs')){ S.parts=S.parts.filter(n=>n!=='My songs'); if(S.part==='My songs') S.part=S.parts[0]; partsSave(); }
   const sel=$('#partSel'); sel.innerHTML=''; S.parts.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n+' ('+songs.filter(x=>partOf(x)===n).length+')'; sel.appendChild(o); }); sel.value=S.part;
   $('#partDel').disabled=S.parts.length<2||songs.some(x=>partOf(x)===S.part);
-  $('#sharePart').textContent=S.part; $('#shareFile').textContent=shareFileName();
+  $('#sharePart').textContent=S.part; $('#shareFile').textContent=shareFileName(); if(document.activeElement!==$('#shareName')) $('#shareName').value=shareFileName().replace(/\.zip$/i,'');
   const ln=shareLinks()[S.part]||''; if(document.activeElement!==$('#shareIn')) $('#shareIn').value=ln; $('#shareText').textContent='';
 }
 async function newPart(){ const n=cleanPartName(prompt('Name of the new part (for example Alto 1):','')); if(!n) return; if(S.parts.includes(n)){ setPart(n); return; } setPart(n); setStatus('New part '+n+'. Songs you separate or add now go into it.'); }
@@ -1002,6 +1009,7 @@ async function renamePart(){
   if(S.parts.includes(n)){ setStatus('There is already a part called '+n+'.',true); return; }
   for(const x of await libList()) if(partOf(x)===old){ x.part=n; await libPut(x); }
   S.parts[S.parts.indexOf(old)]=n; S.part=n; const L=shareLinks(); if(L[old]){ L[n]=L[old]; delete L[old]; try{ localStorage.setItem('pc-sharelinks',JSON.stringify(L)); }catch(e){} }
+  { const N=shareNames(); if(N[old]){ N[n]=N[old]; delete N[old]; try{ localStorage.setItem('pc-sharenames',JSON.stringify(N)); }catch(e){} } }
   partsSave(); renderLib();
 }
 function deletePart(){ if(S.parts.length<2) return; S.parts=S.parts.filter(n=>n!==S.part); S.part=S.parts[0]; partsSave(); renderLib(); }
@@ -2154,7 +2162,8 @@ for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes']
   el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
 }
 $('#bkSave').addEventListener('click',()=>backupLibrary());
-$('#shareMake').addEventListener('click',()=>backupLibrary(shareFileName(),$('#shareMake'),$('#shareText')));
+$('#shareMake').addEventListener('click',()=>{ saveShareName(); backupLibrary(shareFileName(),$('#shareMake'),$('#shareText')); });
+$('#shareName').addEventListener('change',saveShareName);
 $('#partSel').addEventListener('change',e=>setPart(e.target.value));
 $('#partNew').addEventListener('click',newPart);
 $('#partRen').addEventListener('click',renamePart);
