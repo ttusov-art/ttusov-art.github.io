@@ -342,7 +342,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div class="share-box">
       <b>Share with your choir</b>
-      <span class="small">1. Tap Back up library. 2. Upload the file to Dropbox and copy its share link. 3. Paste the link here. Anyone who opens the link you get is offered your songs.</span>
+      <span class="small">1. Tap Make share file. 2. Upload “Part Coach shared library.zip” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered your songs.</span>
+      <span class="small"><b>Updating later:</b> tap Make share file again and upload it to the same Dropbox folder with exactly the same name, so it replaces the old file and the link stays the same. Choir members' apps then download only the new songs and changed edits, not the audio they already have.</span>
+      <div class="row"><button id="shareMake" type="button">Make share file</button></div>
       <div class="row">
         <input id="shareIn" type="url" inputmode="url" autocomplete="off" placeholder="Dropbox link to your backup" aria-label="Dropbox link to your backup">
         <button id="shareGo" type="button">Share link</button>
@@ -899,8 +901,8 @@ async function openZip(file){
   return {names:Object.keys(map), async get(name){ const en=map[name]; if(!en) return null; const lh=new DataView(await file.slice(en.lo,en.lo+30).arrayBuffer()); const ds=en.lo+30+lh.getUint16(26,true)+lh.getUint16(28,true); const b=file.slice(ds,ds+en.csize); return en.method===0?b:new Blob([await inflateRaw(new Uint8Array(await b.arrayBuffer()))]); }};
 }
 const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
-async function backupLibrary(){
-  const btn=$('#bkSave'), txt=$('#bkText'); btn.disabled=true;
+async function backupLibrary(fixedName,btn0,txt0){
+  const btn=btn0||$('#bkSave'), txt=txt0||$('#bkText'); btn.disabled=true;
   try{
     const songs=await libList(); if(!songs.length){ txt.textContent='The library is empty.'; return; }
     const entries=[], man={app:'part-coach',version:1,created:Date.now(),songs:[]};
@@ -911,12 +913,12 @@ async function backupLibrary(){
       if(s.contour){ entries.push({name:dir+'contour.f32',data:f32buf(s.contour)}); m.files.contour=dir+'contour.f32'; }
       if(s.contourOrig){ entries.push({name:dir+'contour-original.f32',data:f32buf(s.contourOrig)}); m.files.contourOrig=dir+'contour-original.f32'; }
       if(s.tt){ entries.push({name:dir+'times.f32',data:f32buf(s.tt)}); m.files.tt=dir+'times.f32'; }
-      m.backs=backsOf(s).map((b,i)=>{ const f=dir+'backing'+i+'.'+blobExt(b.blob,b.name); entries.push({name:f,data:b.blob}); return {name:b.name,sep:!!b.sep,type:b.blob.type||'',file:f}; });
+      m.backs=backsOf(s).map((b,i)=>{ const f=dir+'backing'+i+'.'+blobExt(b.blob,b.name); entries.push({name:f,data:b.blob}); return {name:b.name,sep:!!b.sep,type:b.blob.type||'',size:b.blob.size,file:f}; });
       man.songs.push(m);
     }
     entries.unshift({name:'part-coach-backup.json',data:new TextEncoder().encode(JSON.stringify(man))});
     const zip=await zipBlob(entries,p=>{ txt.textContent='Preparing the backup… '+Math.round(p*100)+'%'; });
-    const d=new Date(), name='Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
+    const d=new Date(), name=fixedName||'Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
     const a=document.createElement('a'); a.href=URL.createObjectURL(zip); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },5000);
     txt.textContent='Saved '+name+' ('+fmtMB(zip.size)+', '+songs.length+' song'+(songs.length>1?'s':'')+') to your downloads.';
   }catch(err){ txt.textContent='Backup failed: '+((err&&err.message)||'unknown error')+'.'; }
@@ -934,12 +936,14 @@ async function restoreLibrary(file,out){
       const cur=byUid[m.uid];
       if(cur&&(cur.updated||cur.created)>=(m.updated||m.created)){ skipped++; continue; }
       const rd=async f=>f?await (await z.get(f)).arrayBuffer():null;
-      const rec={uid:m.uid,beat:m.beat||null,view:m.view||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:await rd(m.files.pcm)};
+      const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01;
+      const rec={uid:m.uid,beat:m.beat||null,view:m.view||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:samePcm?cur.pcm:await rd(m.files.pcm)};
       if(m.hop!=null) rec.hop=m.hop; if(m.t0!=null) rec.t0=m.t0;
       const c=await rd(m.files.contour); if(c) rec.contour=new Float32Array(c);
       const co=await rd(m.files.contourOrig); if(co) rec.contourOrig=new Float32Array(co);
       const tt=await rd(m.files.tt); if(tt) rec.tt=new Float32Array(tt);
-      rec.backs=[]; for(const b of (m.backs||[])){ const bl=await z.get(b.file); if(bl) rec.backs.push({name:b.name,sep:!!b.sep,blob:new Blob([bl],{type:b.type||'audio/mpeg'})}); }
+      rec.backs=[]; const old=cur?backsOf(cur):[];
+      for(const b of (m.backs||[])){ const keep=old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size)); if(keep){ rec.backs.push({name:b.name,sep:!!b.sep,blob:keep.blob}); continue; } const bl=await z.get(b.file); if(bl) rec.backs.push({name:b.name,sep:!!b.sep,blob:new Blob([await bl.arrayBuffer()],{type:b.type||'audio/mpeg'})}); }
       rec.backSel=rec.backs.length?Math.max(0,Math.min(rec.backs.length-1,m.backSel||0)):-1;
       if(cur) rec.id=cur.id;
       await libPutRaw(rec); if(cur) updated++; else added++;
@@ -2092,7 +2096,8 @@ for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes']
   try{ const v=localStorage.getItem(key); if(v==='0') el.open=false; if(v==='1') el.open=true; }catch(x){}
   el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
 }
-$('#bkSave').addEventListener('click',backupLibrary);
+$('#bkSave').addEventListener('click',()=>backupLibrary());
+$('#shareMake').addEventListener('click',()=>backupLibrary('Part Coach shared library.zip',$('#shareMake'),$('#shareText')));
 $('#bkFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) restoreLibrary(f).finally(()=>e.target.value=''); });
 $('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) useBacking(i); });
 $('#backSave').addEventListener('click',saveBacking);
@@ -2118,6 +2123,7 @@ async function openGuideMenu(){
   for(const x of songs){ const b=item('<span class="pm-name"></span><span class="pm-meta">'+fmtT(x.dur)+'</span>',S.cur&&S.cur.libId===x.id?'cur':'',()=>openLibSong(x.id)); b.querySelector('.pm-name').textContent=x.name; }
   item('<span class="pm-name">+ Add vocals from this device…</span>','pm-add',()=>$('#guideFile').click());
   item('<span class="pm-name">+ Add songs from a shared link…</span>','pm-add pm-add2',()=>showLinkBox(''));
+  if(getShared()) item('<span class="pm-name">↻ Check shared songs for updates</span>','pm-add pm-add2',()=>checkShared(true));
   m.hidden=false; $('#guidePick').setAttribute('aria-expanded','true');
   const c=m.querySelector('button.cur')||m.querySelector('button'); if(c) c.focus({preventScroll:true});
   m.scrollIntoView({block:'nearest',behavior:'smooth'});
@@ -2144,19 +2150,61 @@ async function fetchBlob(url,onProg){
 }
 function showLinkBox(url,shared){
   $('#linkBox').hidden=false; $('#linkIn').value=url||''; $('#linkText').textContent=''; $('#linkGo').disabled=false;
-  $('#linkIntro').textContent=shared?'Someone shared a song library with you. Tap Add songs to download it into your library on this device.':'Paste the Dropbox link to a Part Coach backup. Its songs are added to your library.';
+  $('#linkIntro').textContent=shared==='update'||shared==='check'?'Songs shared with you through a link. Only new songs and changes are downloaded.':shared?'Someone shared a song library with you. Tap Add songs to download it into your library on this device.':'Paste the Dropbox link to a Part Coach backup. Its songs are added to your library.';
+  $('#linkGo').textContent=shared==='update'||shared==='check'?'Update':'Add songs';
   $('#linkBox').scrollIntoView({block:'nearest',behavior:'smooth'}); if(!url) $('#linkIn').focus();
 }
+// read a shared zip in pieces (HTTP range requests), so only what is needed is downloaded; null if the server can't do that
+async function remoteFile(url){
+  let size=0;
+  try{ const h=await fetch(url,{method:'HEAD',cache:'no-store'}); if(h.ok) size=+h.headers.get('content-length')||0; }catch(e){}
+  if(!size){ try{ const ac=new AbortController(), r=await fetch(url,{signal:ac.signal,cache:'no-store'}); size=+r.headers.get('content-length')||0; ac.abort(); }catch(e){} }
+  if(!size||size<22) return null;
+  try{ const t=await fetch(url,{headers:{Range:'bytes='+(size-22)+'-'+(size-1)},cache:'no-store'}); if(t.status!==206){ try{ t.body&&t.body.cancel(); }catch(e){} return null; } await t.arrayBuffer(); }catch(e){ return null; }
+  const stats={bytes:0};
+  const rd=async(a,b)=>{ if(b<=a) return new ArrayBuffer(0); const r=await fetch(url,{headers:{Range:'bytes='+a+'-'+(b-1)},cache:'no-store'}); if(r.status!==206) throw new Error('the server stopped allowing partial downloads'); const buf=await r.arrayBuffer(); stats.bytes+=buf.byteLength; return buf; };
+  const mk=(a,b)=>({size:b-a, arrayBuffer:()=>rd(a,b), text:async()=>new TextDecoder().decode(await rd(a,b)), slice:(x,y)=>{ x=Math.max(0,x||0); y=y==null?b-a:Math.min(y,b-a); return mk(a+x,a+Math.max(x,y)); }});
+  const f=mk(0,size); f.name='the shared library'; f.stats=stats; return f;
+}
+const mbTxt=n=>(n/1048576).toFixed(1)+' MB';
+function getShared(){ try{ return JSON.parse(localStorage.getItem('pc-shared')||'null'); }catch(e){ return null; } }
+function setShared(url){ try{ localStorage.setItem('pc-shared',JSON.stringify({url,saved:Date.now()})); }catch(e){} }
+// how many songs in the shared file are new or newer than the ones here; null if it can't be checked cheaply
+async function sharedChanges(url){
+  const rf=await remoteFile(directUrl(url)); if(!rf) return null;
+  const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
+  const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
+  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if((c.updated||c.created)<(m.updated||m.created)) updated++; }
+  return {added,updated};
+}
+function changesTxt(c){ const p=[]; if(c.added) p.push(c.added+' new song'+(c.added>1?'s':'')); if(c.updated) p.push(c.updated+' changed song'+(c.updated>1?'s':'')); return p.join(' and '); }
 async function addFromLink(){
-  const out=$('#linkText'), btn=$('#linkGo'); let url;
-  try{ url=directUrl($('#linkIn').value); }catch(e){ out.textContent=e.message[0].toUpperCase()+e.message.slice(1)+'.'; return; }
-  btn.disabled=true; out.textContent='Downloading…';
+  const out=$('#linkText'), btn=$('#linkGo'); let url; const raw=$('#linkIn').value.trim();
+  try{ url=directUrl(raw); }catch(e){ out.textContent=e.message[0].toUpperCase()+e.message.slice(1)+'.'; return; }
+  btn.disabled=true; out.textContent='Checking the shared library…';
   try{
-    const mb=n=>(n/1048576).toFixed(1)+' MB';
-    const blob=await fetchBlob(url,(got,total)=>{ out.textContent='Downloading… '+mb(got)+(total?' of '+mb(total):''); });
-    if(await restoreLibrary(new File([blob],'shared library.zip'),out)) setStatus('Shared songs are in your library. Tap Choose song to open one.');
+    let ok=false; const rf=await remoteFile(url);
+    if(rf){
+      ok=await restoreLibrary(rf,out);
+      if(ok) out.textContent+=' Downloaded '+mbTxt(rf.stats.bytes)+'.';
+    } else {
+      const blob=await fetchBlob(url,(got,total)=>{ out.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); });
+      ok=await restoreLibrary(new File([blob],'shared library.zip'),out);
+    }
+    if(ok){ setShared(raw); setStatus('Shared songs are in your library. Tap Choose song to open one.'); }
   }catch(e){ out.textContent='Could not add the songs: '+e.message+'.'; }
   finally{ btn.disabled=false; }
+}
+async function checkShared(manual){
+  const sh=getShared(); if(!sh) return;
+  if(manual){ showLinkBox(sh.url,'check'); $('#linkText').textContent='Checking for updates…'; }
+  try{
+    const c=await sharedChanges(sh.url);
+    if(c==null){ if(manual) $('#linkText').textContent='Could not check without downloading everything. Tap Update to download the whole shared library.'; return; }
+    if(!c.added&&!c.updated){ if(manual) $('#linkText').textContent='Everything is up to date.'; return; }
+    showLinkBox(sh.url,'update'); $('#linkText').textContent='Updates are ready: '+changesTxt(c)+'.';
+    if(!manual) setStatus('Your shared songs have updates. See the Song section below.');
+  }catch(e){ if(manual) $('#linkText').textContent='Could not check for updates: '+e.message+'.'; }
 }
 function shareUrlFor(link){ return location.origin+location.pathname+'?lib='+encodeURIComponent(link.trim()); }
 async function shareLibrary(){
@@ -2174,6 +2222,7 @@ $('#linkCancel').addEventListener('click',()=>{ $('#linkBox').hidden=true; });
 $('#shareGo').addEventListener('click',shareLibrary);
 try{ const sharedLib=new URLSearchParams(location.search).get('lib');
   if(sharedLib){ history.replaceState(null,'',location.pathname+location.hash); setTimeout(()=>{ showLinkBox(sharedLib,true); setStatus('Someone shared a song library with you. See the Song section below.'); },300); }
+  else if(getShared()) setTimeout(()=>checkShared(false),2500);
 }catch(e){}
 function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
 $('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
