@@ -2387,6 +2387,7 @@ async function fetchBlob(url,onProg){
 }
 function showLinkBox(url,shared){
   if(!shared) S.pendingSlug=null;
+  $('#linkGo').hidden=false;
   $('#linkBox').hidden=false; $('#linkIn').value=url||''; $('#linkText').textContent=''; $('#linkGo').disabled=false;
   $('#linkIntro').textContent=shared==='update'||shared==='check'?'Songs shared with you through a link. Only new songs and changes are downloaded.':shared?'Someone shared a song library with you. Tap Add songs to download it into your library on this device.':'Paste the Dropbox link to a Part Coach backup. Its songs are added to your library.';
   $('#linkGo').textContent=shared==='update'||shared==='check'?'Update':'Add songs';
@@ -2417,7 +2418,7 @@ async function sharedChanges(url){
   const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
   const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
   let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if((c.updated||c.created)<(m.updated||m.created)) updated++; }
-  return {added,updated};
+  return {added,updated,total:man.songs.length,part:man.part||null};
 }
 function changesTxt(c){ const p=[]; if(c.added) p.push(c.added+' new song'+(c.added>1?'s':'')); if(c.updated) p.push(c.updated+' changed song'+(c.updated>1?'s':'')); return p.join(' and '); }
 async function addFromLink(){
@@ -2437,6 +2438,9 @@ async function addFromLink(){
   }catch(e){ out.textContent='Could not add the songs: '+e.message+'.'; }
   finally{ btn.disabled=false; }
 }
+S.lastCheck=0;
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&getShared().length&&Date.now()-S.lastCheck>5*60e3&&!S.playing) checkShared(false); });
+setInterval(()=>{ if(!document.hidden&&getShared().length&&Date.now()-S.lastCheck>15*60e3&&!S.playing) checkShared(false); },60e3);
 function paintUpd(){ const r=S.updReady||[], b=$('#updBtn'); b.hidden=!r.length; if(!r.length) return;
   $('#updLbl').textContent=r.length>1?'Update '+r.length+' parts':'Update'+(r[0].sh.part?' '+r[0].sh.part:'');
   b.title='New songs or changes are waiting: '+r.map(x=>(x.sh.part?x.sh.part+': ':'')+changesTxt(x.c)).join('; '); }
@@ -2446,7 +2450,7 @@ async function runUpdates(){
   finally{ $('#updBtn').disabled=false; S.updReady=[]; paintUpd(); }
 }
 async function checkShared(manual){
-  const list=getShared(); if(!list.length) return;
+  const list=getShared(); if(!list.length) return; S.lastCheck=Date.now();
   if(manual){ showLinkBox(list[0].url,'check'); $('#linkText').textContent='Checking for updates…'; }
   let unknown=null, failed=null; const lj=list.some(x=>x.slug)?await fetchLinks():null;
   for(const sh of list) if(sh.slug&&lj&&lj[sh.slug]&&lj[sh.slug].url&&lj[sh.slug].url!==sh.url){ sh.url=lj[sh.slug].url; setShared(sh.url,sh.part,sh.slug); }
@@ -2496,12 +2500,28 @@ try{ const q=location.search.slice(1), short=/^[a-z0-9-]+$/i.test(q)?q.toLowerCa
   if(short){ history.replaceState(null,'',location.pathname+location.hash);
     fetchLinks().then(lj=>{ const ent=lj&&lj[slugOf(short)];
       if(!ent){ setStatus('This short link ('+short+') is not set up yet. Ask the person who sent it for a new link.',true); return; }
-      S.pendingSlug=slugOf(short); showLinkBox(ent.url,true); $('#linkIntro').textContent=(ent.part||'A part')+': songs shared with you. Tap Add songs to download them into your library on this device.'; setStatus('Someone shared '+(ent.part||'songs')+' with you. See the Song section below.'); });
+      openSharedLink(ent.url,slugOf(short),ent.part); });
   }
   const sharedLib=short?null:new URLSearchParams(location.search).get('lib');
-  if(sharedLib){ history.replaceState(null,'',location.pathname+location.hash); setTimeout(()=>{ showLinkBox(sharedLib,true); setStatus('Someone shared a song library with you. See the Song section below.'); },300); }
-  else if(!short&&getShared().length) setTimeout(()=>checkShared(false),300);
+  if(sharedLib){ history.replaceState(null,'',location.pathname+location.hash); setTimeout(()=>openSharedLink(sharedLib,null,null),100); }
+  // other remembered links are checked too (the opened one is handled by openSharedLink)
+  if(getShared().length) setTimeout(()=>checkShared(false),300);
 }catch(e){}
+// opened from a shared link: tell the person whether they already have these songs
+async function openSharedLink(url,slug,partName){
+  const who=partName||'A part';
+  showLinkBox(url,true); S.pendingSlug=slug||null;
+  $('#linkIntro').textContent=(partName?partName+': songs':'Songs')+' shared with you. Checking what you already have…'; $('#linkText').textContent='';
+  let c=null; try{ c=await sharedChanges(url); }catch(e){}
+  if(!c){ $('#linkIntro').textContent=(partName?partName+': songs':'Someone shared a song library')+' shared with you. Tap Add songs to download them into your library on this device.'; setStatus('Someone shared '+(partName||'songs')+' with you. See the Song section below.'); return; }
+  const name=partName||c.part||'these songs', have=c.total-c.added;
+  if(!have){ $('#linkIntro').textContent=name+': '+c.total+' song'+(c.total>1?'s':'')+' shared with you. Tap Add songs to download them into your library on this device.'; setStatus('Someone shared '+name+' with you. See the Song section below.'); return; }
+  if(!c.added&&!c.updated){ setShared(url,c.part||partName||null,slug||null); S.pendingSlug=null;
+    $('#linkBox').hidden=false; $('#linkIntro').textContent='✓ You already have all '+c.total+' song'+(c.total>1?'s':'')+' of '+name+', and they are up to date. New songs and changes will show up as an Update button next to Play.';
+    $('#linkGo').hidden=true; $('#linkText').textContent=''; setStatus('You already have everything from this link.'); return; }
+  $('#linkIntro').textContent='You already have '+have+' of the '+c.total+' songs of '+name+'. Updates are ready: '+changesTxt(c)+'.'; $('#linkGo').textContent='Update';
+  setStatus('Updates are ready for '+name+'. Tap Update in the Song section.');
+}
 function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
 $('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
 document.addEventListener('click',e=>{ if(!$('#guideMenu').hidden&&!e.target.closest('.pick-wrap')) closeGuideMenu(); });
