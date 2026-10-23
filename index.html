@@ -1889,17 +1889,31 @@ async function startMic(){
     let stream=null;
     if(S.micId){ try{ stream=await navigator.mediaDevices.getUserMedia({audio:{...ac,deviceId:{exact:S.micId}}}); }catch(e){ if(e&&e.name==='NotAllowedError') throw e; S.micId=null; try{localStorage.removeItem('pc-mic')}catch(x){} } }
     if(!stream) stream=await navigator.mediaDevices.getUserMedia({audio:ac});
+    // first use / no choice made: avoid the Bluetooth headset's microphone (it forces call mode), use the phone's own
+    let switched=null;
+    if(!S.micId){ const alt=await phoneMicFor(stream); if(alt){ try{ const s2=await navigator.mediaDevices.getUserMedia({audio:{...ac,deviceId:{exact:alt.deviceId}}}); stream.getTracks().forEach(t=>t.stop()); stream=s2; switched=alt.label; }catch(e){} } }
     const ctx=ensureCtx(); const src=ctx.createMediaStreamSource(stream);
     const an=ctx.createAnalyser(); an.fftSize=2048; an.smoothingTimeConstant=0; src.connect(an);
     S.mic={stream,an,src}; S.micBuf=new Float32Array(an.fftSize);
     await attachRecorder(src);
     $('#micDot').classList.add('live');
     listMics(stream);
+    if(switched) setStatus('Singing into the phone’s microphone ('+switched+'), so Bluetooth headphones keep full sound and normal volume. You can change it in Settings.');
     return true;
   }catch(err){ setStatus('The microphone was not allowed. Allow it in the browser’s site settings, then try again.',true); return false; }
 }
 listMics(null);
 try{ navigator.mediaDevices&&navigator.mediaDevices.addEventListener('devicechange',()=>listMics(S.mic?S.mic.stream:null)); }catch(e){}
+async function phoneMicFor(stream){
+  try{
+    const tr=stream.getAudioTracks()[0], st=tr.getSettings(), devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput'&&d.deviceId);
+    const cur=devs.find(d=>d.deviceId===st.deviceId), curLabel=(cur&&cur.label)||tr.label||'';
+    const generic=!cur||st.deviceId==='default'||st.deviceId==='communications'||/^default$/i.test(curLabel);
+    if(!(isBtMic(curLabel)||(generic&&devs.some(d=>isBtMic(d.label))))) return null;
+    const cand=devs.filter(d=>d.label&&!isBtMic(d.label)&&d.deviceId!=='default'&&d.deviceId!=='communications');
+    return cand.find(d=>/speakerphone|built-?in|internal|iphone|ipad|phone|mikrofon|microphone array/i.test(d.label))||cand[0]||null;
+  }catch(e){ return null; }
+}
 function isBtMic(label){ return /bluetooth|headset|hands-?free|airpods|buds|\bbt\b|jabra|bose|sony wh|sony wf|soundcore|beats/i.test(label||''); }
 async function listMics(stream){
   try{
