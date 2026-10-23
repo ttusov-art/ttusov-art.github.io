@@ -392,6 +392,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="lyrAuto" type="button">Place lines automatically</button>
         <button id="lyrTap" type="button">Tap to time</button>
         <button id="lyrClear" type="button">Remove lyrics</button>
+        <span class="btn">Import from PDF<input id="lyrPdf" type="file" accept="application/pdf,.pdf" aria-label="Import lyrics from a PDF with one column per part"></span>
+      </div>
+      <div class="row" id="lyrPdfRow" hidden>
+        <label class="small" for="lyrPdfCol">Column from the PDF</label>
+        <select id="lyrPdfCol" class="sel" style="flex:1 1 160px;min-width:0"></select>
       </div>
       <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
       <div class="row" id="lyrSnapRow" hidden>
@@ -1522,6 +1527,61 @@ function renderLyrSnap(){
   $('#lyrHint').textContent='After placing the lines, play the song and check them. Use − and + to move a line by '+(lyrSnapping()?st:'0.2 s')+', or Now to set it to the playhead.'+(lyrSnapping()?' New times land on the nearest beat or half beat.':'');
 }
 function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); }
+// ----- lyrics from a PDF table: one column per part, rows in singing order -----
+async function loadPdfJs(){
+  if(window.pdfjsLib) return window.pdfjsLib;
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  return pdfjsLib;
+}
+async function pdfColumns(file){
+  const lib=await loadPdfJs(), doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const pages=[];
+  for(let pn=1;pn<=doc.numPages;pn++){
+    const pg=await doc.getPage(pn), vp=pg.getViewport({scale:1}), tc=await pg.getTextContent();
+    const items=tc.items.filter(it=>it.str&&it.str.trim()).map(it=>({s:it.str, x:it.transform[4], y:vp.height-it.transform[5], h:Math.abs(it.transform[3])||10, w:it.width||0}));
+    // group into visual rows
+    items.sort((a,b)=>a.y-b.y||a.x-b.x); const rows=[];
+    for(const it of items){ const r=rows[rows.length-1]; if(r&&Math.abs(r.y-it.y)<3) r.items.push(it); else rows.push({y:it.y,items:[it]}); }
+    pages.push(rows);
+  }
+  // header: first row on a page with at least 3 short items (e.g. SOPS  A1  A2  TENORS)
+  let head=null;
+  for(const rows of pages){ for(const r of rows){ const sh=r.items.filter(i=>i.s.trim().length<=14); if(sh.length>=3&&sh.length===r.items.length){ head=r.items.map(i=>({name:i.s.trim(),x:i.x})).sort((a,b)=>a.x-b.x); break; } } if(head) break; }
+  if(!head) throw new Error('could not find the part names at the top of the columns');
+  const names=head.map(h=>h.name.toUpperCase()), cols=head.map(h=>({name:h.name,x:h.x,lines:[]}));
+  const colOf=x=>{ let k=-1; cols.forEach((c,i)=>{ if(x>=c.x-8) k=i; }); return k; };
+  pages.forEach((rows,pi)=>{
+    for(const r of rows){
+      const txt=r.items.map(i=>i.s.trim().toUpperCase());
+      if(txt.every(t=>names.includes(t))) continue;                 // repeated header row
+      if(r.items.length===1&&/^\d+$/.test(txt[0])) continue;        // page number
+      for(const it of r.items){ const k=colOf(it.x); if(k<0) continue;  // section labels on the left
+        const L=cols[k].lines, last=L[L.length-1];
+        if(last&&last.p===pi&&Math.abs(last.y-it.y)<3) last.s+=' '+it.s.trim(); else L.push({p:pi,y:it.y,h:it.h,s:it.s.trim()}); }
+    }
+  });
+  // join wrapped lines of one cell; a bigger gap starts the next lyric line
+  const gaps=[]; cols.forEach(c=>{ for(let i=1;i<c.lines.length;i++){ const a=c.lines[i-1],b=c.lines[i]; if(a.p===b.p) gaps.push(Math.round(b.y-a.y)); } });
+  const lead=gaps.length?Math.min(...gaps.filter(g=>g>2)):20;
+  return cols.map(c=>{ const out=[]; let cur=null;
+    c.lines.forEach((l,i)=>{ const prev=c.lines[i-1]; if(cur&&prev&&prev.p===l.p&&l.y-prev.y<=lead*1.12) cur.push(l.s); else { cur=[l.s]; out.push(cur); } });
+    const lines=out.map(a=>a.join(' ').replace(/\s+/g,' ').replace(/\s*[—–-]{2,}\s*$/,'').trim()).filter(t=>t&&!/^\(.*\)$/.test(t)&&!/^\d+\.?$/.test(t));
+    return {name:c.name,lines}; });
+}
+function partKey(n){ n=String(n||'').toLowerCase(); const num=(n.match(/\d/)||[''])[0]; const v=/^s|sop/.test(n)?'s':/^a|alt/.test(n)?'a':/^t|ten/.test(n)?'t':/^b|bas|bar/.test(n)?'b':''; return {v,num}; }
+function bestColumn(cols,part){ const p=partKey(part); let best=-1,score=0; cols.forEach((c,i)=>{ const k=partKey(c.name); const sc=(k.v&&k.v===p.v?2:0)+(k.num&&k.num===p.num?1:0)+(!k.num&&k.v===p.v?0.5:0); if(sc>score){ score=sc; best=i; } }); return best; }
+async function importLyricsPdf(file){
+  setStatus('Reading the lyrics PDF…');
+  try{
+    const cols=(await pdfColumns(file)).filter(c=>c.lines.length); if(!cols.length) throw new Error('no lyrics found in the columns');
+    S.pdfCols=cols; const sel=$('#lyrPdfCol'); sel.innerHTML='';
+    cols.forEach((c,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=c.name+' ('+c.lines.length+' lines)'; sel.appendChild(o); });
+    const k=bestColumn(cols,S.curPart||S.part); sel.value=String(k<0?0:k); $('#lyrPdfRow').hidden=false; fillFromPdf();
+    setStatus('Found '+cols.length+' parts in the PDF. Pick the column, check the lines, then tap Use these lines.');
+  }catch(e){ setStatus('Could not read the lyrics PDF: '+((e&&e.message)||'unknown error')+'.',true); }
+}
+function fillFromPdf(){ const c=S.pdfCols&&S.pdfCols[+$('#lyrPdfCol').value]; if(c) $('#lyrText').value=c.lines.join('\n'); }
 function applyLyricText(){
   const lines=$('#lyrText').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   const old=S.lyrics;
@@ -2176,6 +2236,8 @@ $('#edUndo').addEventListener('click',edUndo);
 $('#edReset').addEventListener('click',e=>edReset(e.currentTarget));
 $('#edPlay').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 updateSelInfo();
+$('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>e.target.value=''); });
+$('#lyrPdfCol').addEventListener('change',fillFromPdf);
 $('#lyrApply').addEventListener('click',applyLyricText);
 $('#lyrAuto').addEventListener('click',()=>autoPlace(false));
 $('#lyrTap').addEventListener('click',()=>S.tap?stopTap():startTap());
