@@ -107,6 +107,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pick-menu .pm-add{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;color:var(--accent);font-weight:600}
 .pick-menu .pm-empty{padding:10px;color:var(--muted);font-size:13px}
 .file-name:empty{display:none}
+.upd-btn{border-color:var(--accent);color:var(--accent);font-weight:600}
+.upd-dot{width:8px;height:8px;border-radius:50%;background:var(--warm);box-shadow:0 0 0 3px color-mix(in srgb,var(--warm) 25%,transparent)}
 #micNote.warn{color:var(--off)}
 .part-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid var(--line)}
 .part-row .sel{flex:1 1 140px;min-width:0}
@@ -249,6 +251,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <button class="primary" id="play" type="button"><span id="playLbl">Play</span></button>
     <button id="songLoop" type="button" aria-pressed="false" aria-label="Repeat the whole song" title="Repeat the whole song: off" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
     <button id="restart" type="button">Start over</button>
+    <button id="updBtn" type="button" class="upd-btn" hidden><span class="upd-dot" aria-hidden="true"></span><span id="updLbl">Update</span></button>
     <span class="time" id="time">0:00 / 0:00</span>
     <label class="small" for="tempo">Tempo</label>
     <select id="tempo" class="sel">
@@ -956,9 +959,9 @@ async function openZip(file){
   let p=0;
   for(let k=0;k<count;k++){
     const method=cd.getUint16(p+10,true), csize=cd.getUint32(p+20,true), nl=cd.getUint16(p+28,true), xl=cd.getUint16(p+30,true), cl=cd.getUint16(p+32,true), lo=cd.getUint32(p+42,true);
-    const name=dec.decode(new Uint8Array(cd.buffer,cd.byteOffset+p+46,nl)); map[name]={method,csize,lo}; p+=46+nl+xl+cl;
+    const name=dec.decode(new Uint8Array(cd.buffer,cd.byteOffset+p+46,nl)); map[name]={method,csize,lo,nl,xl}; p+=46+nl+xl+cl;
   }
-  return {names:Object.keys(map), async get(name){ const en=map[name]; if(!en) return null; const lh=new DataView(await file.slice(en.lo,en.lo+30).arrayBuffer()); const ds=en.lo+30+lh.getUint16(26,true)+lh.getUint16(28,true); const b=file.slice(ds,ds+en.csize); return en.method===0?b:new Blob([await inflateRaw(new Uint8Array(await b.arrayBuffer()))]); }};
+  return {names:Object.keys(map), async get(name){ const en=map[name]; if(!en) return null; if(file.prefetch) await file.prefetch(en.lo,en.lo+30+en.nl+en.xl+en.csize+512); const lh=new DataView(await file.slice(en.lo,en.lo+30).arrayBuffer()); const ds=en.lo+30+lh.getUint16(26,true)+lh.getUint16(28,true); const b=file.slice(ds,ds+en.csize); return en.method===0?b:new Blob([await inflateRaw(new Uint8Array(await b.arrayBuffer()))]); }};
 }
 const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
 async function backupLibrary(fixedName,btn0,txt0){
@@ -2395,11 +2398,15 @@ async function remoteFile(url){
   try{ const h=await fetch(url,{method:'HEAD',cache:'no-store'}); if(h.ok) size=+h.headers.get('content-length')||0; }catch(e){}
   if(!size){ try{ const ac=new AbortController(), r=await fetch(url,{signal:ac.signal,cache:'no-store'}); size=+r.headers.get('content-length')||0; ac.abort(); }catch(e){} }
   if(!size||size<22) return null;
-  try{ const t=await fetch(url,{headers:{Range:'bytes='+(size-22)+'-'+(size-1)},cache:'no-store'}); if(t.status!==206){ try{ t.body&&t.body.cancel(); }catch(e){} return null; } await t.arrayBuffer(); }catch(e){ return null; }
-  const stats={bytes:0};
-  const rd=async(a,b)=>{ if(b<=a) return new ArrayBuffer(0); const r=await fetch(url,{headers:{Range:'bytes='+a+'-'+(b-1)},cache:'no-store'}); if(r.status!==206) throw new Error('the server stopped allowing partial downloads'); const buf=await r.arrayBuffer(); stats.bytes+=buf.byteLength; return buf; };
+  const stats={bytes:0}, cache=[];
+  const get=async(a,b)=>{ const r=await fetch(url,{headers:{Range:'bytes='+a+'-'+(b-1)},cache:'no-store'}); if(r.status!==206){ try{ r.body&&r.body.cancel(); }catch(e){} return null; } const buf=await r.arrayBuffer(); stats.bytes+=buf.byteLength; return buf; };
+  const fromCache=(a,b)=>{ for(const c of cache) if(a>=c.a&&b<=c.b) return c.buf.slice(a-c.a,b-c.a); return null; };
+  // the end of the zip (its table of contents) in one request; also tells us whether partial downloads work
+  try{ const a=Math.max(0,size-66000), buf=await get(a,size); if(!buf) return null; cache.push({a,b:size,buf}); }catch(e){ return null; }
+  const rd=async(a,b)=>{ if(b<=a) return new ArrayBuffer(0); const hit=fromCache(a,b); if(hit) return hit; const buf=await get(a,b); if(!buf) throw new Error('the server stopped allowing partial downloads'); return buf; };
+  const prefetch=async(a,b)=>{ b=Math.min(b,size); if(fromCache(a,b)) return; if(b-a>8e6) return; const buf=await get(a,b); if(buf){ cache.push({a,b,buf}); if(cache.length>6) cache.splice(1,1); } };
   const mk=(a,b)=>({size:b-a, arrayBuffer:()=>rd(a,b), text:async()=>new TextDecoder().decode(await rd(a,b)), slice:(x,y)=>{ x=Math.max(0,x||0); y=y==null?b-a:Math.min(y,b-a); return mk(a+x,a+Math.max(x,y)); }});
-  const f=mk(0,size); f.name='the shared library'; f.stats=stats; return f;
+  const f=mk(0,size); f.name='the shared library'; f.stats=stats; f.prefetch=prefetch; return f;
 }
 const mbTxt=n=>(n/1048576).toFixed(1)+' MB';
 function getShared(){ let v=null; try{ v=JSON.parse(localStorage.getItem('pc-shared')||'null'); }catch(e){} if(!v) return []; return Array.isArray(v)?v:[v]; }
@@ -2426,22 +2433,29 @@ async function addFromLink(){
       const blob=await fetchBlob(url,(got,total)=>{ out.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); });
       ok=await restoreLibrary(new File([blob],'shared library.zip'),out);
     }
-    if(ok){ setShared(raw,typeof ok==='string'?ok:null,S.pendingSlug||null); S.pendingSlug=null; setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>checkShared(false),800); }
+    if(ok){ setShared(raw,typeof ok==='string'?ok:null,S.pendingSlug||null); S.pendingSlug=null; setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>{ if(!(S.updReady&&S.updReady.length)) checkShared(false); },800); }
   }catch(e){ out.textContent='Could not add the songs: '+e.message+'.'; }
   finally{ btn.disabled=false; }
+}
+function paintUpd(){ const r=S.updReady||[], b=$('#updBtn'); b.hidden=!r.length; if(!r.length) return;
+  $('#updLbl').textContent=r.length>1?'Update '+r.length+' parts':'Update'+(r[0].sh.part?' '+r[0].sh.part:'');
+  b.title='New songs or changes are waiting: '+r.map(x=>(x.sh.part?x.sh.part+': ':'')+changesTxt(x.c)).join('; '); }
+async function runUpdates(){
+  const list=(S.updReady||[]).slice(); if(!list.length) return; $('#updBtn').disabled=true;
+  try{ for(const r of list){ showLinkBox(r.sh.url,'update'); await addFromLink(); } }
+  finally{ $('#updBtn').disabled=false; S.updReady=[]; paintUpd(); }
 }
 async function checkShared(manual){
   const list=getShared(); if(!list.length) return;
   if(manual){ showLinkBox(list[0].url,'check'); $('#linkText').textContent='Checking for updates…'; }
   let unknown=null, failed=null; const lj=list.some(x=>x.slug)?await fetchLinks():null;
-  for(const sh of list){
-    if(sh.slug&&lj&&lj[sh.slug]&&lj[sh.slug].url&&lj[sh.slug].url!==sh.url){ sh.url=lj[sh.slug].url; setShared(sh.url,sh.part,sh.slug); }
-    try{
-      const c=await sharedChanges(sh.url);
-      if(c==null){ unknown=unknown||sh; continue; }
-      if(c.added||c.updated){ showLinkBox(sh.url,'update'); $('#linkText').textContent='Updates are ready'+(sh.part?' for '+sh.part:'')+': '+changesTxt(c)+'.'; if(!manual) setStatus('Your shared songs have updates. See the Song section below.'); return; }
-    }catch(e){ failed=failed||{sh,e}; }
-  }
+  for(const sh of list) if(sh.slug&&lj&&lj[sh.slug]&&lj[sh.slug].url&&lj[sh.slug].url!==sh.url){ sh.url=lj[sh.slug].url; setShared(sh.url,sh.part,sh.slug); }
+  const res=await Promise.all(list.map(sh=>sharedChanges(sh.url).then(c=>({sh,c}),e=>({sh,e}))));
+  const ready=res.filter(r=>r.c&&(r.c.added||r.c.updated));
+  for(const r of res){ if(r.e) failed=failed||{sh:r.sh,e:r.e}; else if(r.c==null) unknown=unknown||r.sh; }
+  S.updReady=ready; paintUpd();
+  if(ready.length){ const r=ready[0], txt='Updates are ready'+(r.sh.part?' for '+r.sh.part:'')+': '+changesTxt(r.c)+'.';
+    if(manual){ showLinkBox(r.sh.url,'update'); $('#linkText').textContent=txt; } else setStatus(txt+' Tap Update next to Play.'); return; }
   if(!manual) return;
   if(unknown){ $('#linkIn').value=unknown.url; $('#linkText').textContent='Could not check '+(unknown.part||'a shared link')+' without downloading everything. Tap Update to download it whole.'; }
   else if(failed){ $('#linkIn').value=failed.sh.url; $('#linkText').textContent='Could not check '+(failed.sh.part||'a shared link')+': '+failed.e.message+'.'; }
@@ -2473,6 +2487,7 @@ async function shareLibrary(){
   const sp=document.createElement('span'); sp.className='share-url'; sp.textContent=url; out.appendChild(sp); if(note) out.appendChild(document.createTextNode(note));
 }
 $('#linkGo').addEventListener('click',addFromLink);
+$('#updBtn').addEventListener('click',runUpdates);
 $('#linksMake').addEventListener('click',makeLinksJson);
 $('#linkIn').addEventListener('keydown',e=>{ if(e.key==='Enter') addFromLink(); });
 $('#linkCancel').addEventListener('click',()=>{ $('#linkBox').hidden=true; });
@@ -2485,7 +2500,7 @@ try{ const q=location.search.slice(1), short=/^[a-z0-9-]+$/i.test(q)?q.toLowerCa
   }
   const sharedLib=short?null:new URLSearchParams(location.search).get('lib');
   if(sharedLib){ history.replaceState(null,'',location.pathname+location.hash); setTimeout(()=>{ showLinkBox(sharedLib,true); setStatus('Someone shared a song library with you. See the Song section below.'); },300); }
-  else if(!short&&getShared().length) setTimeout(()=>checkShared(false),2500);
+  else if(!short&&getShared().length) setTimeout(()=>checkShared(false),300);
 }catch(e){}
 function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
 $('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
