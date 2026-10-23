@@ -376,6 +376,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="shareGo" type="button">Share link</button>
       </div>
       <span class="small" id="shareText"></span>
+      <span class="small"><b>Short links:</b> with a file called links.json next to index.html on GitHub, each part gets a short link like <span class="share-url" id="shortEx"></span>. Tap Make links.json and upload it to your GitHub repo, again only when you add a part or a Dropbox link changes.</span>
+      <div class="row"><button id="linksMake" type="button">Make links.json</button></div>
     </div>
     <span class="small" id="storeText"></span>
     <span class="small" id="libEmpty">Choose a song (for example your part MP3). The app separates the voice, finds the pitch line and keeps the vocals here for next time.</span>
@@ -1022,7 +1024,7 @@ function renderParts(songs){
   if(S.parts.length>1&&S.parts.includes('My songs')&&!songs.some(x=>x.part==='My songs')){ S.parts=S.parts.filter(n=>n!=='My songs'); if(S.part==='My songs') S.part=S.parts[0]; partsSave(); }
   const sel=$('#partSel'); sel.innerHTML=''; S.parts.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n+' ('+songs.filter(x=>partOf(x)===n).length+')'; sel.appendChild(o); }); sel.value=S.part;
   $('#partDel').disabled=S.parts.length<2||songs.some(x=>partOf(x)===S.part); $('#partRange').value=rangeKey(S.part); renderParts._last=true;
-  $('#sharePart').textContent=S.part; $('#shareFile').textContent=shareFileName(); if(document.activeElement!==$('#shareName')) $('#shareName').value=shareFileName().replace(/\.zip$/i,'');
+  $('#shortEx').textContent=shortUrlFor(S.part); $('#sharePart').textContent=S.part; $('#shareFile').textContent=shareFileName(); if(document.activeElement!==$('#shareName')) $('#shareName').value=shareFileName().replace(/\.zip$/i,'');
   const ln=shareLinks()[S.part]||''; if(document.activeElement!==$('#shareIn')) $('#shareIn').value=ln; $('#shareText').textContent='';
 }
 async function newPart(){ const n=cleanPartName(prompt('Name of the new part (for example Alto 1):','')); if(!n) return; if(S.parts.includes(n)){ setPart(n); return; } setPart(n); setStatus('New part '+n+'. Songs you separate or add now go into it.'); }
@@ -2315,6 +2317,7 @@ async function fetchBlob(url,onProg){
   return new Blob(parts,{type:'application/zip'});
 }
 function showLinkBox(url,shared){
+  if(!shared) S.pendingSlug=null;
   $('#linkBox').hidden=false; $('#linkIn').value=url||''; $('#linkText').textContent=''; $('#linkGo').disabled=false;
   $('#linkIntro').textContent=shared==='update'||shared==='check'?'Songs shared with you through a link. Only new songs and changes are downloaded.':shared?'Someone shared a song library with you. Tap Add songs to download it into your library on this device.':'Paste the Dropbox link to a Part Coach backup. Its songs are added to your library.';
   $('#linkGo').textContent=shared==='update'||shared==='check'?'Update':'Add songs';
@@ -2334,7 +2337,7 @@ async function remoteFile(url){
 }
 const mbTxt=n=>(n/1048576).toFixed(1)+' MB';
 function getShared(){ let v=null; try{ v=JSON.parse(localStorage.getItem('pc-shared')||'null'); }catch(e){} if(!v) return []; return Array.isArray(v)?v:[v]; }
-function setShared(url,part){ const list=getShared().filter(x=>x.url!==url&&!(part&&x.part===part)); list.push({url,part:part||null,saved:Date.now()}); try{ localStorage.setItem('pc-shared',JSON.stringify(list)); }catch(e){} }
+function setShared(url,part,slug){ const list=getShared().filter(x=>x.url!==url&&!(part&&x.part===part)&&!(slug&&x.slug===slug)); list.push({url,part:part||null,slug:slug||null,saved:Date.now()}); try{ localStorage.setItem('pc-shared',JSON.stringify(list)); }catch(e){} }
 // how many songs in the shared file are new or newer than the ones here; null if it can't be checked cheaply
 async function sharedChanges(url){
   const rf=await remoteFile(directUrl(url)); if(!rf) return null;
@@ -2357,15 +2360,16 @@ async function addFromLink(){
       const blob=await fetchBlob(url,(got,total)=>{ out.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); });
       ok=await restoreLibrary(new File([blob],'shared library.zip'),out);
     }
-    if(ok){ setShared(raw,typeof ok==='string'?ok:null); setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>checkShared(false),800); }
+    if(ok){ setShared(raw,typeof ok==='string'?ok:null,S.pendingSlug||null); S.pendingSlug=null; setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>checkShared(false),800); }
   }catch(e){ out.textContent='Could not add the songs: '+e.message+'.'; }
   finally{ btn.disabled=false; }
 }
 async function checkShared(manual){
   const list=getShared(); if(!list.length) return;
   if(manual){ showLinkBox(list[0].url,'check'); $('#linkText').textContent='Checking for updates…'; }
-  let unknown=null, failed=null;
+  let unknown=null, failed=null; const lj=list.some(x=>x.slug)?await fetchLinks():null;
   for(const sh of list){
+    if(sh.slug&&lj&&lj[sh.slug]&&lj[sh.slug].url&&lj[sh.slug].url!==sh.url){ sh.url=lj[sh.slug].url; setShared(sh.url,sh.part,sh.slug); }
     try{
       const c=await sharedChanges(sh.url);
       if(c==null){ unknown=unknown||sh; continue; }
@@ -2378,23 +2382,44 @@ async function checkShared(manual){
   else $('#linkText').textContent=list.length>1?'All shared parts are up to date.':'Everything is up to date.';
 }
 function shareUrlFor(link){ return location.origin+location.pathname+'?lib='+encodeURIComponent(link.trim()); }
+// short links: ?alto-1 is looked up in links.json next to index.html
+const slugOf=n=>String(n||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'songs';
+const appBase=()=>location.origin+location.pathname;
+const shortUrlFor=part=>appBase()+'?'+slugOf(part);
+async function fetchLinks(){ try{ const r=await fetch('links.json',{cache:'no-store'}); if(!r.ok) return null; const j=await r.json(); return j&&typeof j==='object'?j:null; }catch(e){ return null; } }
+function makeLinksJson(){
+  const L=shareLinks(), out={}; Object.keys(L).forEach(part=>{ if(L[part]) out[slugOf(part)]={part,url:L[part]}; });
+  const t=$('#shareText'); if(!Object.keys(out).length){ t.textContent='Paste the Dropbox link of at least one part and tap Share link first.'; return; }
+  const blob=new Blob([JSON.stringify(out,null,2)+'\n'],{type:'application/json'}), a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='links.json'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000);
+  t.textContent='Saved links.json with '+Object.keys(out).map(k=>out[k].part).join(', ')+'. Upload it to your GitHub repo next to index.html; the short links work a minute or two later.';
+}
 async function shareLibrary(){
-  const out=$('#shareText'), raw=$('#shareIn').value;
+  const out=$('#shareText'), raw=$('#shareIn').value.trim();
   try{ directUrl(raw); }catch(e){ out.textContent=e.message[0].toUpperCase()+e.message.slice(1)+'.'; return; }
-  { const L=shareLinks(); L[S.part]=raw.trim(); try{ localStorage.setItem('pc-sharelinks',JSON.stringify(L)); }catch(e){} }
-  const url=shareUrlFor(raw); out.innerHTML='';
-  if(navigator.share){ try{ await navigator.share({title:'Part Coach songs',text:'Our choir parts in Part Coach',url}); out.textContent='Shared.'; return; }catch(e){ if(e&&e.name==='AbortError') return; } }
-  let copied=false; try{ await navigator.clipboard.writeText(url); copied=true; }catch(e){}
-  out.textContent=copied?'Link copied. Paste it in your choir chat: ':'Copy this link and send it to your choir: ';
-  const sp=document.createElement('span'); sp.className='share-url'; sp.textContent=url; out.appendChild(sp);
+  { const L=shareLinks(); L[S.part]=raw; try{ localStorage.setItem('pc-sharelinks',JSON.stringify(L)); }catch(e){} }
+  const lj=await fetchLinks(), ent=lj&&lj[slugOf(S.part)], short=!!(ent&&ent.url&&ent.url.trim()===raw);
+  const url=short?shortUrlFor(S.part):shareUrlFor(raw), text='🎵 '+S.part+' practice songs for Part Coach — tap to open:';
+  out.innerHTML='';
+  const note=short?'':(ent?' (links.json on your site has an older Dropbox link for '+S.part+', so this is the long link. Make links.json again and upload it.)':' (This is the long link. For a short one, tap Make links.json and upload it to GitHub.)');
+  if(navigator.share){ try{ await navigator.share({title:'Part Coach – '+S.part,text,url}); out.textContent='Shared.'+note; return; }catch(e){ if(e&&e.name==='AbortError') return; } }
+  let copied=false; try{ await navigator.clipboard.writeText(text+' '+url); copied=true; }catch(e){}
+  out.textContent=(copied?'Copied, ready to paste in your choir chat: ':'Copy this and send it to your choir: ')+text+' ';
+  const sp=document.createElement('span'); sp.className='share-url'; sp.textContent=url; out.appendChild(sp); if(note) out.appendChild(document.createTextNode(note));
 }
 $('#linkGo').addEventListener('click',addFromLink);
+$('#linksMake').addEventListener('click',makeLinksJson);
 $('#linkIn').addEventListener('keydown',e=>{ if(e.key==='Enter') addFromLink(); });
 $('#linkCancel').addEventListener('click',()=>{ $('#linkBox').hidden=true; });
 $('#shareGo').addEventListener('click',shareLibrary);
-try{ const sharedLib=new URLSearchParams(location.search).get('lib');
+try{ const q=location.search.slice(1), short=/^[a-z0-9-]+$/i.test(q)?q.toLowerCase():new URLSearchParams(location.search).get('p');
+  if(short){ history.replaceState(null,'',location.pathname+location.hash);
+    fetchLinks().then(lj=>{ const ent=lj&&lj[slugOf(short)];
+      if(!ent){ setStatus('This short link ('+short+') is not set up yet. Ask the person who sent it for a new link.',true); return; }
+      S.pendingSlug=slugOf(short); showLinkBox(ent.url,true); $('#linkIntro').textContent=(ent.part||'A part')+': songs shared with you. Tap Add songs to download them into your library on this device.'; setStatus('Someone shared '+(ent.part||'songs')+' with you. See the Song section below.'); });
+  }
+  const sharedLib=short?null:new URLSearchParams(location.search).get('lib');
   if(sharedLib){ history.replaceState(null,'',location.pathname+location.hash); setTimeout(()=>{ showLinkBox(sharedLib,true); setStatus('Someone shared a song library with you. See the Song section below.'); },300); }
-  else if(getShared().length) setTimeout(()=>checkShared(false),2500);
+  else if(!short&&getShared().length) setTimeout(()=>checkShared(false),2500);
 }catch(e){}
 function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
 $('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
