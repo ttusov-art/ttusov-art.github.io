@@ -456,10 +456,18 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <div class="field-row"><input id="zoom" type="range" min="2" max="30" step="1" value="8"><span class="val" id="zoomV">8 s</span></div>
       </div>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
+      <div class="field">
+        <label for="timMarks">Timing marks on the pitch lane</label>
+        <select id="timMarks" class="sel">
+          <option value="gentle">Gentle: small dots, no numbers</option>
+          <option value="detailed">Detailed: coloured bars with ms</option>
+          <option value="off">Off: only the summary after singing</option>
+        </select>
+      </div>
       <ul class="tips">
         <li>Your line is green within 50 cents of the target, amber within a semitone and red further off. The faint blue line is your previous loop pass.</li>
         <li>Score counts only moments where both the target and you have a clear pitch.</li>
-        <li>On time: at each note start the app checks when you reached the new note. Within 80 ms is on time (green), up to 200 ms is amber, more is red with the offset in ms (+ late, − early). Grey ticks show upcoming note starts.</li>
+        <li>On time: at each note start the app checks when you reached the new note; within 80 ms counts as on time. With gentle marks, a small green dot means on time and a faint ring means early or late. Detailed marks add colours and the offset in ms (+ late, − early). The summary after singing tells you if you tend to be early or late.</li>
         <li>Turn the guide voice down once you know the part, and sing it alone over the backing.</li>
         <li>You can turn the screen off while singing. The song, scoring and recording keep going, and lock-screen controls can pause it.</li>
       </ul>
@@ -2097,7 +2105,11 @@ function draw(){
     for(let k=lowerOnset(t0-0.2);k<S.onsets.length&&S.onsets[k].t<=t1;k++){
       const o=S.onsets[k], x=xOf(o.t), y=yOf(o.m), r=S.tim.res.get(k);
       if(x<LABELW) continue;
-      if(!r){ g.fillStyle=col('--lane-c'); g.fillRect(Math.round(x),y-rh*0.9,1.5,rh*1.8); continue; }
+      if(!r){ if(S.timMarks==='off') continue; g.fillStyle=col('--lane-c'); g.fillRect(Math.round(x),y-rh*0.9,1.5,rh*1.8); continue; }
+      if(S.timMarks==='off'){ continue; }
+      if(S.timMarks==='gentle'){ const yy=y-rh*0.9-4; g.beginPath(); g.arc(x,yy,2.6,0,Math.PI*2);
+        if(r.g==='good'){ g.fillStyle=gcol.good; g.globalAlpha=0.75; g.fill(); } else { g.strokeStyle=gcol.near; g.globalAlpha=0.55; g.lineWidth=1.3; g.stroke(); }
+        g.globalAlpha=1; continue; }
       g.fillStyle=gcol[r.g]; g.fillRect(Math.round(x)-1,y-rh*1.3,3,rh*2.6);
       if(r.g!=='good'){ const lab=r.off===null?'×':(r.off>0?'+':'−')+Math.round(Math.abs(r.off)*1000); g.fillText(lab,x,y-rh*1.4); }
     }
@@ -2489,6 +2501,8 @@ canvas.addEventListener('wheel',e=>{ e.preventDefault();
   if(sideways&&S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; wheelAcc+=(e.deltaX||e.deltaY)/pps; clearTimeout(wheelTimer); wheelTimer=setTimeout(()=>{ const d=wheelAcc; wheelAcc=0; if(S.playing) seek(songTime()+d); },120); return; }
   if(sideways){ if(S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,S.pos+(e.deltaX||e.deltaY)/pps)); updateTime(); draw(); }
   else setWin(S.win*Math.exp(e.deltaY*0.0015),true); },{passive:false});
+S.timMarks='gentle'; try{ const v=localStorage.getItem('pc-timmarks'); if(['gentle','detailed','off'].includes(v)) S.timMarks=v; }catch(x){} $('#timMarks').value=S.timMarks;
+$('#timMarks').addEventListener('change',e=>{ S.timMarks=e.target.value; try{localStorage.setItem('pc-timmarks',S.timMarks)}catch(x){} draw(); });
 $('#ignoreOct').addEventListener('change',e=>{ S.ignoreOct=e.target.checked; });
 try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
 try{ const d=localStorage.getItem('pc-delay'); if(d){ $('#delay').value=d; S.delay=+d/1000; $('#delayV').textContent=d+' ms'; } }catch(x){}
