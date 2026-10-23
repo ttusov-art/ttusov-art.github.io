@@ -447,7 +447,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Measures your headphones and microphone in about 10 seconds.</span></div>
         <span class="small">If your line always looks slightly late compared with the target, raise this or tap Measure delay. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
       </div>
-      <div class="field" id="micSelField" hidden>
+      <div class="field" id="micSelField">
         <label for="micSel">Microphone</label>
         <select id="micSel" style="font:inherit;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);width:100%"></select>
         <span class="small" id="micNote">With Bluetooth earbuds or a headset, choose the phone’s own microphone. Using the headset’s microphone switches it into phone-call mode: the sound gets quiet and thin, and the volume can’t be changed.</span>
@@ -1898,17 +1898,21 @@ async function startMic(){
     return true;
   }catch(err){ setStatus('The microphone was not allowed. Allow it in the browser’s site settings, then try again.',true); return false; }
 }
+listMics(null);
+try{ navigator.mediaDevices&&navigator.mediaDevices.addEventListener('devicechange',()=>listMics(S.mic?S.mic.stream:null)); }catch(e){}
 function isBtMic(label){ return /bluetooth|headset|hands-?free|airpods|buds|\bbt\b|jabra|bose|sony wh|sony wf|soundcore|beats/i.test(label||''); }
 async function listMics(stream){
   try{
-    const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
-    if(devs.length<2) return;
-    const cur=stream.getAudioTracks()[0].getSettings().deviceId, sel=$('#micSel');
-    sel.innerHTML=''; devs.forEach((d,i)=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||('Microphone '+(i+1)); if(d.deviceId===cur) o.selected=true; sel.appendChild(o); });
-    $('#micSelField').hidden=false;
+    const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput'&&d.deviceId);
+    const sel=$('#micSel'); sel.innerHTML='';
+    if(!devs.length||!devs.some(d=>d.label)){ const o=document.createElement('option'); o.textContent='Turn on the microphone to choose one'; o.value=''; sel.appendChild(o); sel.disabled=true; return; }
+    sel.disabled=false;
+    const cur=stream?stream.getAudioTracks()[0].getSettings().deviceId:(S.micId||'default');
+    devs.forEach((d,i)=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||('Microphone '+(i+1)); if(d.deviceId===cur) o.selected=true; sel.appendChild(o); });
+    if(devs.length===1) sel.title='Only one microphone is available right now. Connect or disconnect a headset and turn the microphone off and on to refresh the list.';
     const curDev=devs.find(d=>d.deviceId===cur), bt=curDev&&isBtMic(curDev.label);
     $('#micNote').classList.toggle('warn',!!bt);
-    if(bt){ const alt=devs.find(d=>!isBtMic(d.label)&&d.deviceId!=='default'&&d.deviceId!=='communications');
+    if(bt&&stream){ const alt=devs.find(d=>!isBtMic(d.label)&&d.deviceId!=='default'&&d.deviceId!=='communications');
       setStatus('You are using the Bluetooth headset’s microphone. This switches the headset into phone-call mode, so the music gets quiet and the volume can’t be changed. In Settings, choose '+(alt&&alt.label?'“'+alt.label+'”':'the phone’s own microphone')+' instead and keep listening on the headset.',true); }
   }catch(e){}
 }
@@ -2480,7 +2484,7 @@ const pct=v=>Math.round(v*100)+'%';
 $('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); });
 $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
 $('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; S.toneMuted=v<=0; try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){} paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); });
-$('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; paintMic(); if(was) play(); });
+$('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} if(!S.mic){ setStatus('Microphone chosen. It is used when you turn the microphone on.'); return; } const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; paintMic(); if(was) play(); });
 $('#delay').addEventListener('input',e=>setDelay(+e.target.value));
 $('#calBtn').addEventListener('click',measureDelay);
 $('#resultText').addEventListener('click',e=>{ const b=e.target.closest('.fix-delay'); if(!b) return; const ms=+b.dataset.ms, nv=Math.max(0,Math.min(600,Math.round((S.delay*1000+ms)/10)*10)); setDelay(nv); b.disabled=true; b.textContent='Delay compensation is now '+nv+' ms'; setStatus('Delay compensation set to '+nv+' ms. Sing the passage again to check.'); });
