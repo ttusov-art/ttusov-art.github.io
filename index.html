@@ -107,6 +107,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pick-menu .pm-add{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;color:var(--accent);font-weight:600}
 .pick-menu .pm-empty{padding:10px;color:var(--muted);font-size:13px}
 .file-name:empty{display:none}
+#micNote.warn{color:var(--off)}
 .part-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid var(--line)}
 .part-row .sel{flex:1 1 140px;min-width:0}
 .part-row button{padding:7px 12px}
@@ -449,7 +450,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="field" id="micSelField" hidden>
         <label for="micSel">Microphone</label>
         <select id="micSel" style="font:inherit;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);width:100%"></select>
-        <span class="small">With Bluetooth earbuds, choosing the phone’s own microphone can keep the earbuds in better sound quality.</span>
+        <span class="small" id="micNote">With Bluetooth earbuds or a headset, choose the phone’s own microphone. Using the headset’s microphone switches it into phone-call mode: the sound gets quiet and thin, and the volume can’t be changed.</span>
       </div>
       <div class="field">
         <label for="zoom">Seconds on screen</label>
@@ -1897,6 +1898,7 @@ async function startMic(){
     return true;
   }catch(err){ setStatus('The microphone was not allowed. Allow it in the browser’s site settings, then try again.',true); return false; }
 }
+function isBtMic(label){ return /bluetooth|headset|hands-?free|airpods|buds|\bbt\b|jabra|bose|sony wh|sony wf|soundcore|beats/i.test(label||''); }
 async function listMics(stream){
   try{
     const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
@@ -1904,6 +1906,10 @@ async function listMics(stream){
     const cur=stream.getAudioTracks()[0].getSettings().deviceId, sel=$('#micSel');
     sel.innerHTML=''; devs.forEach((d,i)=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||('Microphone '+(i+1)); if(d.deviceId===cur) o.selected=true; sel.appendChild(o); });
     $('#micSelField').hidden=false;
+    const curDev=devs.find(d=>d.deviceId===cur), bt=curDev&&isBtMic(curDev.label);
+    $('#micNote').classList.toggle('warn',!!bt);
+    if(bt){ const alt=devs.find(d=>!isBtMic(d.label)&&d.deviceId!=='default'&&d.deviceId!=='communications');
+      setStatus('You are using the Bluetooth headset’s microphone. This switches the headset into phone-call mode, so the music gets quiet and the volume can’t be changed. In Settings, choose '+(alt&&alt.label?'“'+alt.label+'”':'the phone’s own microphone')+' instead and keep listening on the headset.',true); }
   }catch(e){}
 }
 function stopMic(){ if(!S.mic) return; if(S.recNode){ try{S.recNode.disconnect()}catch(e){} S.recNode=null; } S.mic.stream.getTracks().forEach(t=>t.stop()); S.mic.src.disconnect(); S.mic=null; $('#micDot').classList.remove('live'); }
