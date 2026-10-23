@@ -107,6 +107,13 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pick-menu .pm-add{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;color:var(--accent);font-weight:600}
 .pick-menu .pm-empty{padding:10px;color:var(--muted);font-size:13px}
 .file-name:empty{display:none}
+.part-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+.part-row .sel{flex:1 1 140px;min-width:0}
+.part-row button{padding:7px 12px}
+.song-row .move{flex:0 1 auto;max-width:140px}
+.pick-menu .pm-parts{display:flex;flex-wrap:wrap;gap:6px;padding:6px 6px 8px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.pick-menu .pm-parts button{width:auto;flex:none;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:13px}
+.pick-menu .pm-parts button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .link-box,.share-box{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
 .share-box{margin-top:10px}
 .link-box input,.share-box input{flex:1 1 220px;min-width:0;font:inherit;font-size:16px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)}
@@ -320,8 +327,15 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   <details class="panel fold" id="libPanel" open>
     <summary>Song library<span class="count" id="libCount"></span></summary>
     <div class="fold-body">
+    <div class="part-row">
+      <label class="lbl" for="partSel">Part</label>
+      <select id="partSel" class="sel"></select>
+      <button id="partNew" type="button">New part</button>
+      <button id="partRen" type="button">Rename</button>
+      <button id="partDel" type="button">Delete part</button>
+    </div>
     <div class="lib-head">
-      <span class="small">Separated songs and songs you added are kept here on this device.</span>
+      <span class="small">Separated songs and songs you added are kept here on this device, in the part chosen above.</span>
       <span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span>
     </div>
     <div class="sep-box" id="sepBox" hidden>
@@ -342,7 +356,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div class="share-box">
       <b>Share with your choir</b>
-      <span class="small">1. Tap Make share file. 2. Upload “Part Coach shared library.zip” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered your songs.</span>
+      <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
+      <span class="small">1. Tap Make share file. 2. Upload “<span id="shareFile"></span>” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered the songs of this part.</span>
       <span class="small"><b>Updating later:</b> tap Make share file again and upload it to the same Dropbox folder with exactly the same name, so it replaces the old file and the link stays the same. Choir members' apps then download only the new songs and changed edits, not the audio they already have.</span>
       <div class="row"><button id="shareMake" type="button">Make share file</button></div>
       <div class="row">
@@ -904,11 +919,12 @@ const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
 async function backupLibrary(fixedName,btn0,txt0){
   const btn=btn0||$('#bkSave'), txt=txt0||$('#bkText'); btn.disabled=true;
   try{
-    const songs=await libList(); if(!songs.length){ txt.textContent='The library is empty.'; return; }
-    const entries=[], man={app:'part-coach',version:1,created:Date.now(),songs:[]};
+    const sharePart=fixedName?S.part:null;
+    const songs=(await libList()).filter(x=>!sharePart||partOf(x)===sharePart); if(!songs.length){ txt.textContent=sharePart?'There are no songs in '+sharePart+' yet.':'The library is empty.'; return; }
+    const entries=[], man={app:'part-coach',version:1,created:Date.now(),part:sharePart,songs:[]};
     for(const s0 of songs){
       let s=s0; if(!s.uid){ s.uid=newUid(); await libPutRaw(s); }
-      const dir='songs/'+s.uid+'/', m={uid:s.uid,beat:s.beat||null,view:s.view||null,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
+      const dir='songs/'+s.uid+'/', m={uid:s.uid,part:partOf(s),beat:s.beat||null,view:s.view||null,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
       entries.push({name:dir+'vocals.pcm',data:s.pcm}); m.files.pcm=dir+'vocals.pcm';
       if(s.contour){ entries.push({name:dir+'contour.f32',data:f32buf(s.contour)}); m.files.contour=dir+'contour.f32'; }
       if(s.contourOrig){ entries.push({name:dir+'contour-original.f32',data:f32buf(s.contourOrig)}); m.files.contourOrig=dir+'contour-original.f32'; }
@@ -937,7 +953,8 @@ async function restoreLibrary(file,out){
       if(cur&&(cur.updated||cur.created)>=(m.updated||m.created)){ skipped++; continue; }
       const rd=async f=>f?await (await z.get(f)).arrayBuffer():null;
       const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01;
-      const rec={uid:m.uid,beat:m.beat||null,view:m.view||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:samePcm?cur.pcm:await rd(m.files.pcm)};
+      const part=m.part||man.part||(cur&&cur.part)||S.part; ensurePart(part);
+      const rec={uid:m.uid,part,beat:m.beat||null,view:m.view||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:samePcm?cur.pcm:await rd(m.files.pcm)};
       if(m.hop!=null) rec.hop=m.hop; if(m.t0!=null) rec.t0=m.t0;
       const c=await rd(m.files.contour); if(c) rec.contour=new Float32Array(c);
       const co=await rd(m.files.contourOrig); if(co) rec.contourOrig=new Float32Array(co);
@@ -948,16 +965,51 @@ async function restoreLibrary(file,out){
       if(cur) rec.id=cur.id;
       await libPutRaw(rec); if(cur) updated++; else added++;
     }
+    if(man.part&&out){ S.part=man.part; partsSave(); }
     await renderLib();
     const parts=[]; if(added) parts.push(added+' added'); if(updated) parts.push(updated+' updated'); if(skipped) parts.push(skipped+' already up to date');
     txt.textContent=(out?'Done: ':'Restore finished: ')+(parts.join(', ')||'nothing to restore')+'.'+(out&&(added||updated)?' Tap Choose song to open one.':'');
-    return true;
+    return man.part||true;
   }catch(err){ txt.textContent=(out?'Could not add the songs: ':'Restore failed: ')+((err&&err.message)||'unknown error')+'.'; return false; }
 }
+// ===== parts (separate libraries, e.g. Soprano 1, Alto 2, Tenor) =====
+S.parts=[]; S.part=null;
+function partsSave(){ try{ localStorage.setItem('pc-parts',JSON.stringify(S.parts)); localStorage.setItem('pc-part',S.part); }catch(e){} }
+const partOf=x=>x.part||S.part||S.parts[0];
+async function initParts(){
+  const songs=await libList(); let parts=null; try{ parts=JSON.parse(localStorage.getItem('pc-parts')||'null'); }catch(e){}
+  if(!Array.isArray(parts)){ parts=[]; const untagged=songs.filter(x=>!x.part); if(untagged.length){ for(const x of untagged){ x.part='Tenor'; await libPutRaw(x); } parts.push('Tenor'); } }
+  songs.forEach(x=>{ if(x.part&&!parts.includes(x.part)) parts.push(x.part); });
+  if(!parts.length) parts.push('My songs');
+  S.parts=parts; let cur=null; try{ cur=localStorage.getItem('pc-part'); }catch(e){}
+  S.part=parts.includes(cur)?cur:parts[0]; partsSave();
+}
+function ensurePart(name){ if(name&&!S.parts.includes(name)){ S.parts.push(name); partsSave(); } }
+function setPart(name){ ensurePart(name); S.part=name; partsSave(); renderLib(); }
+function cleanPartName(v){ return String(v||'').replace(/[\\/:*?"<>|]/g,'').trim().slice(0,40); }
+function shareFileName(){ return 'Part Coach - '+S.part+'.zip'; }
+function shareLinks(){ try{ return JSON.parse(localStorage.getItem('pc-sharelinks')||'{}')||{}; }catch(e){ return {}; } }
+function renderParts(songs){
+  if(S.parts.length>1&&S.parts.includes('My songs')&&!songs.some(x=>x.part==='My songs')){ S.parts=S.parts.filter(n=>n!=='My songs'); if(S.part==='My songs') S.part=S.parts[0]; partsSave(); }
+  const sel=$('#partSel'); sel.innerHTML=''; S.parts.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n+' ('+songs.filter(x=>partOf(x)===n).length+')'; sel.appendChild(o); }); sel.value=S.part;
+  $('#partDel').disabled=S.parts.length<2||songs.some(x=>partOf(x)===S.part);
+  $('#sharePart').textContent=S.part; $('#shareFile').textContent=shareFileName();
+  const ln=shareLinks()[S.part]||''; if(document.activeElement!==$('#shareIn')) $('#shareIn').value=ln; $('#shareText').textContent='';
+}
+async function newPart(){ const n=cleanPartName(prompt('Name of the new part (for example Alto 1):','')); if(!n) return; if(S.parts.includes(n)){ setPart(n); return; } setPart(n); setStatus('New part '+n+'. Songs you separate or add now go into it.'); }
+async function renamePart(){
+  const old=S.part, n=cleanPartName(prompt('New name for '+old+':',old)); if(!n||n===old) return;
+  if(S.parts.includes(n)){ setStatus('There is already a part called '+n+'.',true); return; }
+  for(const x of await libList()) if(partOf(x)===old){ x.part=n; await libPut(x); }
+  S.parts[S.parts.indexOf(old)]=n; S.part=n; const L=shareLinks(); if(L[old]){ L[n]=L[old]; delete L[old]; try{ localStorage.setItem('pc-sharelinks',JSON.stringify(L)); }catch(e){} }
+  partsSave(); renderLib();
+}
+function deletePart(){ if(S.parts.length<2) return; S.parts=S.parts.filter(n=>n!==S.part); S.part=S.parts[0]; partsSave(); renderLib(); }
 async function renderLib(){
   showStorage();
-  const songs=(await libList()).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur,nb:backsOf(s).length})).sort((a,b)=>b.created-a.created);
-  const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0; $('#libCount').textContent=songs.length?'('+songs.length+')':'';
+  const all=await libList(); renderParts(all);
+  const songs=all.filter(x=>partOf(x)===S.part).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur,nb:backsOf(s).length})).sort((a,b)=>b.created-a.created);
+  const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0; $('#libCount').textContent=' · '+S.part+(songs.length?' ('+songs.length+')':'');
   for(const s of songs){
     const row=document.createElement('div'); row.className='song-row';
     const d=new Date(s.created);
@@ -966,6 +1018,9 @@ async function renderLib(){
     const mk=(label,fn,cls)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; if(cls) b.className=cls; b.addEventListener('click',()=>fn(b)); row.appendChild(b); return b; };
     mk('Practise',()=>openLibSong(s.id),'primary');
     mk('Save vocals',b=>saveLibVocals(s.id,b));
+    if(S.parts.length>1){ const mv=document.createElement('select'); mv.className='sel move'; mv.setAttribute('aria-label','Move to another part');
+      mv.innerHTML='<option value="">Move to…</option>'; S.parts.filter(n=>n!==S.part).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; mv.appendChild(o); });
+      mv.addEventListener('change',async()=>{ if(!mv.value) return; const rec=await libGet(s.id); if(rec){ rec.part=mv.value; await libPut(rec); } setStatus(s.name+' moved to '+mv.value+'.'); renderLib(); }); row.appendChild(mv); }
     mk('Delete',b=>{ if(b.dataset.armed){ libDel(s.id).then(renderLib); return; } b.dataset.armed='1'; b.textContent='Tap again to delete'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; b.classList.remove('danger'); } },4000); });
     list.appendChild(row);
   }
@@ -1098,7 +1153,7 @@ async function separateSong(file){
       sepUI('Saving to the library…',1);
       try{
         const pcm=await toInt16(voc,LIB_SR);
-        const id=await libPut({name,created:Date.now(),dur:voc.duration,sr:LIB_SR,pcm:pcm.buffer,contour:pl.mm,hop:pl.hop,t0:pl.t0});
+        const id=await libPut({name,part:S.part,created:Date.now(),dur:voc.duration,sr:LIB_SR,pcm:pcm.buffer,contour:pl.mm,hop:pl.hop,t0:pl.t0});
         S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; note=' Saved in the library.';
         try{ const bb=await encodeMp3(back,96,p=>sepUI('Saving the backing track to the library… '+Math.round(p*100)+'%',1)); S.curBacks=[{name:name+' backing',blob:bb,sep:true}]; S.curBackSel=0; await libSetBacks(id,S.curBacks,0); S.curBackBlob=bb; renderBackPick(); note=' Vocals and backing saved in the library.'; }
         catch(e){ note=' Vocals saved in the library (the backing could not be saved).'; }
@@ -2028,7 +2083,7 @@ async function addCurrentToLib(btn){
   try{
     const name=$('#songName').textContent.trim()||'Song';
     const pcm=await toInt16(S.guideBuf,LIB_SR);
-    const id=await libPut({name,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,view:S.viewManual?{...S.view}:null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
+    const id=await libPut({name,part:S.part,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,view:S.viewManual?{...S.view}:null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
     let note='Added to the library.';
     if(S.backBuf){
       try{ const bb=S.curBackBlob||await encodeMp3(S.backBuf,96,p=>setStatus('Saving the backing track… '+Math.round(p*100)+'%'));
@@ -2099,7 +2154,11 @@ for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes']
   el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
 }
 $('#bkSave').addEventListener('click',()=>backupLibrary());
-$('#shareMake').addEventListener('click',()=>backupLibrary('Part Coach shared library.zip',$('#shareMake'),$('#shareText')));
+$('#shareMake').addEventListener('click',()=>backupLibrary(shareFileName(),$('#shareMake'),$('#shareText')));
+$('#partSel').addEventListener('change',e=>setPart(e.target.value));
+$('#partNew').addEventListener('click',newPart);
+$('#partRen').addEventListener('click',renamePart);
+$('#partDel').addEventListener('click',deletePart);
 $('#bkFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) restoreLibrary(f).finally(()=>e.target.value=''); });
 $('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) useBacking(i); });
 $('#backSave').addEventListener('click',saveBacking);
@@ -2108,7 +2167,7 @@ $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
 $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
-renderLib();
+initParts().then(renderLib);
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
 $('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); });
@@ -2119,15 +2178,17 @@ function paintMic(){ const on=$('#micOn').checked, l=$('#micLbl'); l.classList.t
 $('#micOn').addEventListener('change',async e=>{ paintMic(); if(e.target.checked){ const ok=await startMic(); if(!ok){ e.target.checked=false; paintMic(); } } else stopMic(); });
 async function openGuideMenu(){
   const m=$('#guideMenu'); m.innerHTML='';
-  let songs=[]; try{ songs=(await libList()).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})).sort((a,b)=>b.created-a.created); }catch(e){}
+  let songs=[]; try{ songs=(await libList()).filter(x=>partOf(x)===S.part).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})).sort((a,b)=>b.created-a.created); }catch(e){}
+  if(S.parts.length>1){ const bar=document.createElement('div'); bar.className='pm-parts'; bar.setAttribute('role','group'); bar.setAttribute('aria-label','Part');
+    S.parts.forEach(n=>{ const c=document.createElement('button'); c.type='button'; c.textContent=n; if(n===S.part){ c.className='on'; c.setAttribute('aria-pressed','true'); } c.addEventListener('click',e=>{ e.stopPropagation(); setPart(n); openGuideMenu(); }); bar.appendChild(c); }); m.appendChild(bar); }
   const item=(html,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','menuitem'); if(cls) b.className=cls; b.innerHTML=html; b.addEventListener('click',()=>{ closeGuideMenu(); fn(); }); m.appendChild(b); return b; };
-  if(!songs.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent='Your library is empty. Songs you separate or add are listed here.'; m.appendChild(e); }
+  if(!songs.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent=S.parts.length>1?'No songs in '+S.part+' yet.':'Your library is empty. Songs you separate or add are listed here.'; m.appendChild(e); }
   for(const x of songs){ const b=item('<span class="pm-name"></span><span class="pm-meta">'+fmtT(x.dur)+'</span>',S.cur&&S.cur.libId===x.id?'cur':'',()=>openLibSong(x.id)); b.querySelector('.pm-name').textContent=x.name; }
   item('<span class="pm-name">+ Add vocals from this device…</span>','pm-add',()=>$('#guideFile').click());
   item('<span class="pm-name">+ Add songs from a shared link…</span>','pm-add pm-add2',()=>showLinkBox(''));
-  if(getShared()) item('<span class="pm-name">↻ Check shared songs for updates</span>','pm-add pm-add2',()=>checkShared(true));
+  if(getShared().length) item('<span class="pm-name">↻ Check shared songs for updates</span>','pm-add pm-add2',()=>checkShared(true));
   m.hidden=false; $('#guidePick').setAttribute('aria-expanded','true');
-  const c=m.querySelector('button.cur')||m.querySelector('button'); if(c) c.focus({preventScroll:true});
+  const c=m.querySelector('button.cur')||m.querySelector('[role=menuitem]'); if(c) c.focus({preventScroll:true});
   m.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 // ----- shared library links -----
@@ -2154,7 +2215,7 @@ function showLinkBox(url,shared){
   $('#linkBox').hidden=false; $('#linkIn').value=url||''; $('#linkText').textContent=''; $('#linkGo').disabled=false;
   $('#linkIntro').textContent=shared==='update'||shared==='check'?'Songs shared with you through a link. Only new songs and changes are downloaded.':shared?'Someone shared a song library with you. Tap Add songs to download it into your library on this device.':'Paste the Dropbox link to a Part Coach backup. Its songs are added to your library.';
   $('#linkGo').textContent=shared==='update'||shared==='check'?'Update':'Add songs';
-  $('#linkBox').scrollIntoView({block:'nearest',behavior:'smooth'}); if(!url) $('#linkIn').focus();
+  $('#linkBox').scrollIntoView({block:'nearest',behavior:'smooth'}); if(!url&&!shared) $('#linkIn').focus();
 }
 // read a shared zip in pieces (HTTP range requests), so only what is needed is downloaded; null if the server can't do that
 async function remoteFile(url){
@@ -2169,8 +2230,8 @@ async function remoteFile(url){
   const f=mk(0,size); f.name='the shared library'; f.stats=stats; return f;
 }
 const mbTxt=n=>(n/1048576).toFixed(1)+' MB';
-function getShared(){ try{ return JSON.parse(localStorage.getItem('pc-shared')||'null'); }catch(e){ return null; } }
-function setShared(url){ try{ localStorage.setItem('pc-shared',JSON.stringify({url,saved:Date.now()})); }catch(e){} }
+function getShared(){ let v=null; try{ v=JSON.parse(localStorage.getItem('pc-shared')||'null'); }catch(e){} if(!v) return []; return Array.isArray(v)?v:[v]; }
+function setShared(url,part){ const list=getShared().filter(x=>x.url!==url&&!(part&&x.part===part)); list.push({url,part:part||null,saved:Date.now()}); try{ localStorage.setItem('pc-shared',JSON.stringify(list)); }catch(e){} }
 // how many songs in the shared file are new or newer than the ones here; null if it can't be checked cheaply
 async function sharedChanges(url){
   const rf=await remoteFile(directUrl(url)); if(!rf) return null;
@@ -2193,25 +2254,31 @@ async function addFromLink(){
       const blob=await fetchBlob(url,(got,total)=>{ out.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); });
       ok=await restoreLibrary(new File([blob],'shared library.zip'),out);
     }
-    if(ok){ setShared(raw); setStatus('Shared songs are in your library. Tap Choose song to open one.'); }
+    if(ok){ setShared(raw,typeof ok==='string'?ok:null); setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>checkShared(false),800); }
   }catch(e){ out.textContent='Could not add the songs: '+e.message+'.'; }
   finally{ btn.disabled=false; }
 }
 async function checkShared(manual){
-  const sh=getShared(); if(!sh) return;
-  if(manual){ showLinkBox(sh.url,'check'); $('#linkText').textContent='Checking for updates…'; }
-  try{
-    const c=await sharedChanges(sh.url);
-    if(c==null){ if(manual) $('#linkText').textContent='Could not check without downloading everything. Tap Update to download the whole shared library.'; return; }
-    if(!c.added&&!c.updated){ if(manual) $('#linkText').textContent='Everything is up to date.'; return; }
-    showLinkBox(sh.url,'update'); $('#linkText').textContent='Updates are ready: '+changesTxt(c)+'.';
-    if(!manual) setStatus('Your shared songs have updates. See the Song section below.');
-  }catch(e){ if(manual) $('#linkText').textContent='Could not check for updates: '+e.message+'.'; }
+  const list=getShared(); if(!list.length) return;
+  if(manual){ showLinkBox(list[0].url,'check'); $('#linkText').textContent='Checking for updates…'; }
+  let unknown=null, failed=null;
+  for(const sh of list){
+    try{
+      const c=await sharedChanges(sh.url);
+      if(c==null){ unknown=unknown||sh; continue; }
+      if(c.added||c.updated){ showLinkBox(sh.url,'update'); $('#linkText').textContent='Updates are ready'+(sh.part?' for '+sh.part:'')+': '+changesTxt(c)+'.'; if(!manual) setStatus('Your shared songs have updates. See the Song section below.'); return; }
+    }catch(e){ failed=failed||{sh,e}; }
+  }
+  if(!manual) return;
+  if(unknown){ $('#linkIn').value=unknown.url; $('#linkText').textContent='Could not check '+(unknown.part||'a shared link')+' without downloading everything. Tap Update to download it whole.'; }
+  else if(failed){ $('#linkIn').value=failed.sh.url; $('#linkText').textContent='Could not check '+(failed.sh.part||'a shared link')+': '+failed.e.message+'.'; }
+  else $('#linkText').textContent=list.length>1?'All shared parts are up to date.':'Everything is up to date.';
 }
 function shareUrlFor(link){ return location.origin+location.pathname+'?lib='+encodeURIComponent(link.trim()); }
 async function shareLibrary(){
   const out=$('#shareText'), raw=$('#shareIn').value;
   try{ directUrl(raw); }catch(e){ out.textContent=e.message[0].toUpperCase()+e.message.slice(1)+'.'; return; }
+  { const L=shareLinks(); L[S.part]=raw.trim(); try{ localStorage.setItem('pc-sharelinks',JSON.stringify(L)); }catch(e){} }
   const url=shareUrlFor(raw); out.innerHTML='';
   if(navigator.share){ try{ await navigator.share({title:'Part Coach songs',text:'Our choir parts in Part Coach',url}); out.textContent='Shared.'; return; }catch(e){ if(e&&e.name==='AbortError') return; } }
   let copied=false; try{ await navigator.clipboard.writeText(url); copied=true; }catch(e){}
@@ -2224,7 +2291,7 @@ $('#linkCancel').addEventListener('click',()=>{ $('#linkBox').hidden=true; });
 $('#shareGo').addEventListener('click',shareLibrary);
 try{ const sharedLib=new URLSearchParams(location.search).get('lib');
   if(sharedLib){ history.replaceState(null,'',location.pathname+location.hash); setTimeout(()=>{ showLinkBox(sharedLib,true); setStatus('Someone shared a song library with you. See the Song section below.'); },300); }
-  else if(getShared()) setTimeout(()=>checkShared(false),2500);
+  else if(getShared().length) setTimeout(()=>checkShared(false),2500);
 }catch(e){}
 function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
 $('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
