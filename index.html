@@ -73,8 +73,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .ed-fold summary::-webkit-details-marker{display:none}
 .ed-fold summary::before{content:"▸";font-size:11px}
 .ed-fold[open] summary::before{content:"▾"}
-.ed-fold[open]{gap:8px;align-items:center}
-#editBtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ed-fold[open]{gap:8px;align-items:center;flex-wrap:wrap}
+#edTimeBtn[aria-pressed="true"],#editBtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .lane-foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .sw{display:inline-block;width:18px;height:8px;border-radius:4px;vertical-align:middle;margin-right:5px}
@@ -309,7 +309,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="metBtn" type="button" aria-pressed="false" title="Metronome click on every beat">Click: off</button>
         <span class="sync" role="group" aria-label="Picture delay"><span class="small">Picture</span><button id="pdDown" type="button" aria-label="Show the picture earlier">−</button><span class="val" id="pdV">0 ms</span><button id="pdUp" type="button" aria-label="Show the picture later">+</button></span>
       </div>
-      <span class="row"><details class="ed-fold" id="edFold"><summary>Editor</summary><button id="editBtn" type="button" aria-pressed="false">Edit target line</button></details><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Drag the keyboard up or down, pinch it to show more notes, double-tap it for the automatic range.</span></span>
+      <span class="row"><details class="ed-fold" id="edFold"><summary>Editor</summary><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></details><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Drag the keyboard up or down, pinch it to show more notes, double-tap it for the automatic range.</span></span>
     </div>
   </section>
 
@@ -587,7 +587,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 m';
+const APP_VERSION='2026-10-24 n';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1627,7 +1627,7 @@ function renderLyrics(fillText){
     mk('▶','Play from just before this line',()=>{ if(S.lyrics[i].t!=null) seek(Math.max(0,S.lyrics[i].t-1.5)); if(!S.playing&&!S.review) play(); });
     list.appendChild(row);
   });
-  $('#lyrAuto').disabled=!has; $('#lyrTap').disabled=!has; $('#lyrClear').disabled=!has;
+  $('#lyrAuto').disabled=!has; $('#lyrTap').disabled=!has; $('#edTimeBtn').disabled=!has; $('#edTimeBtn').title=has?'Tap the start of each lyric line while the song plays':'Add lyrics first (Lyrics section)'; $('#lyrClear').disabled=!has;
   renderLyrSnap(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
 function lyrSnapping(){ return !!(S.beat&&S.snap); }
@@ -1863,13 +1863,13 @@ function startTap(){
   let i=S.lyrics.findIndex(l=>l.t==null); if(i<0) i=0;
   const prev=i>0?S.lyrics[i-1].t:null, from=prev!=null?Math.max(0,prev-1):Math.max(0,(S.lyrics[i].t!=null?S.lyrics[i].t:0)-4);
   S.loop.on=false; $('#loopOn').checked=false; updateLoopUI();
-  S.tap={i,hist:[]}; $('#lyrBar').classList.add('tap'); $('#lyrUndo').hidden=false; $('#lyrUndo').disabled=true; $('#lyrSkip').hidden=false; $('#lyrSkip').disabled=false; $('#lyrBar').hidden=false; $('#lyrTap').textContent='Stop timing';
+  S.tap={i,hist:[]}; $('#lyrBar').classList.add('tap'); $('#lyrUndo').hidden=false; $('#lyrUndo').disabled=true; $('#lyrSkip').hidden=false; $('#lyrSkip').disabled=false; $('#lyrBar').hidden=false; $('#lyrTap').textContent='Stop timing'; $('#edTimeBtn').textContent='Stop timing'; $('#edTimeBtn').setAttribute('aria-pressed','true');
   S.lyrBarKey=null; updateLyricBar(from);
   setStatus('Tap the lyrics bar (or press Space) at the start of each line. You can also pause, drag the playhead to the exact spot and tap. Drag a line’s label at the bottom of the lane to nudge it. Undo takes back the last step.');
   seek(from); if(!S.playing) play();
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function stopTap(){ if(!S.tap) return; S.tap=null; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; S.lyrBarKey=null; updateLyricBar(songTime()); }
+function stopTap(){ if(!S.tap) return; S.tap=null; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
 function tapNow(){
   if(!S.tap||S.review||S.tap.i>=S.lyrics.length) return;
   // playing: allow for reaction time; paused: the playhead was placed by hand, use it as it is
@@ -2517,6 +2517,7 @@ S.toneMuted=true; try{ if(localStorage.getItem('pc-tone-muted')==='0') setToneOn
 paintToggle('toneBtn','Tone',toneIsOn());
 try{ if(localStorage.getItem('pc-guide-muted')==='1') setGuideMuted(true); }catch(x){}
 $('#editBtn').addEventListener('click',()=>setEditMode(!S.editMode));
+$('#edTimeBtn').addEventListener('click',()=>{ if(S.editMode) setEditMode(false); $('#lyrTap').click(); });
 $('#edOne').addEventListener('click',edOneNote);
 $('#bpmIn').addEventListener('change',e=>{ const v=+e.target.value; if(!S.beat&&v>=30&&v<=240){ S.beat={bpm:v,offset:0,auto:false}; beatEdited(); } else setBpm(v); });
 $('#bShiftL').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=((S.beat.offset-0.02)%P+P)%P; beatEdited(); });
