@@ -170,7 +170,12 @@ table.sheet tr.empty{display:none}
 .setup h2{font-family:var(--font-display);font-size:18px;margin:0}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .file-name{font-size:13px;color:var(--muted);min-width:0;overflow-wrap:anywhere}
-.field{display:grid;gap:4px}
+.field{display:grid;gap:4px;grid-template-columns:minmax(0,1fr);min-width:0}
+.field>*{min-width:0}
+select{max-width:100%;min-width:0;text-overflow:ellipsis}
+.file-name{overflow-wrap:anywhere}
+#backPick label{flex-basis:100%}
+#backPick #backSel{flex:1 1 100%!important}
 .field label,.lbl{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .field-row{display:flex;align-items:center;gap:10px}
 input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
@@ -199,7 +204,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .engine{font-family:var(--font-mono);font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface);color:var(--muted)}
 .engine.gpu{background:var(--accent-soft);color:var(--accent)}
 .song-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 0;border-top:1px solid var(--line)}
-.song-row .take-info{flex:1 1 220px}
+.song-row .take-info{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+.pick-menu,.lyr-list,.take-info{overflow-wrap:anywhere}
 .song-row button{padding:7px 12px}
 .danger{color:var(--off);border-color:var(--off)}
 .lyr{padding:10px 10px 8px 14px;border-bottom:1px solid var(--line);min-height:62px;display:flex;align-items:center;gap:10px;background:var(--surface)}
@@ -587,7 +593,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 n';
+const APP_VERSION='2026-10-24 o';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
