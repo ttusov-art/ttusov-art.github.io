@@ -42,3 +42,16 @@ Pitch line and score move along with your voice.
 Use this for new recordings copies the corrected value into Delay compensation, so live scoring and future takes are aligned too.
 
 Panning in the editor now works only with two fingers (or shift + mouse wheel on a laptop).
+
+Editor mode in PC:
+Key	What it does
+← / →	Move the view back or forward by ⅛ of the screen (one second at the default zoom)
+Shift + ← / →	Move by half a screen
+Space	Play / pause
+↑ / ↓	Selected notes up or down a semitone
+Shift + ↑ / ↓	Selected notes up or down an octave (a bonus I added)
+Enter	Fill
+Delete or Backspace	Remove
+Ctrl + Z (Cmd + Z on a Mac)	Undo
+Esc	Clear the selection (also a bonus)
+Ctrl + ← / → (Cmd on a Mac) selects from the playhead
