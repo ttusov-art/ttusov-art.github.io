@@ -593,7 +593,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 s';
+const APP_VERSION='2026-10-24 t';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1542,7 +1542,7 @@ function selectFragmentAt(t){
 }
 function setEditMode(on){
   S.editMode=on; if(on) $('#edFold').open=true; $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Drag to select (start on the row of the note you want to add). Click to select half a beat (the whole fragment when Snap is off). Drag a lyric label at the bottom to move it. Keys: ← → move half a beat, Ctrl+← → select from the playhead, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'Drag to select (start on the row of the note you want to add). Tap to select one beat (or the whole fragment when Snap is off). Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Drag or pinch the keyboard to change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Drag the keyboard up or down, pinch it to show more notes, double-tap it for the automatic range.';
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Drag to select (start on the row of the note you want to add). Click to select half a beat (the whole fragment when Snap is off). Drag a lyric label at the bottom to move it. Keys: ← → move half a beat, Ctrl+← → select from the playhead, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'Drag to select (start on the row of the note you want to add). Tap to select one beat (or the whole fragment when Snap is off). Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Drag or pinch the keyboard to change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Drag the keyboard up or down, pinch it to show more notes, double-tap it for the automatic range.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
   if(!on) S.sel=null; updateSelInfo(); draw();
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
@@ -2557,11 +2557,23 @@ $('#edUndo').addEventListener('click',edUndo);
 $('#edReset').addEventListener('click',e=>edReset(e.currentTarget));
 $('#edPlay').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 // next / previous half-beat line from t (dir 0: nearest); without a beat grid, steps of 0.25 s
-function stepGrid(t,dir){
-  const st=(S.beat&&S.snap)?beatP()/2:0.25, off=(S.beat&&S.snap)?S.beat.offset:0, k=(t-off)/st;
+function stepGrid(t,dir,full){
+  const st=(S.beat&&S.snap)?beatP()/(full?1:2):(full?1:0.25), off=(S.beat&&S.snap)?S.beat.offset:0, k=(t-off)/st;
   let n=dir>0?Math.floor(k+1e-6)+1:dir<0?Math.ceil(k-1e-6)-1:Math.round(k);
   return Math.max(0,Math.min(S.dur,off+n*st));
 }
+// keyboard while practising (laptop): Space play/pause, ←/→ one beat back/forward
+document.addEventListener('keydown',e=>{
+  if(S.editMode||S.tap||e.ctrlKey||e.metaKey||e.altKey) return;
+  const tg=document.activeElement&&document.activeElement.tagName; if(/INPUT|TEXTAREA|SELECT/.test(tg)) return;
+  const k=e.key, sheet=!$('#sheetView').hidden; let done=true;
+  if(k===' '||e.code==='Space') (S.playing||S.review)?stop():play();
+  else if(!sheet&&(k==='ArrowLeft'||k==='ArrowRight')&&!S.review){ const dir=k==='ArrowLeft'?-1:1;
+    const P=(S.beat&&S.snap)?beatP():1, from=S.playing?songTime():S.pos, to=stepGrid(from+dir*P,0,true);   // about one beat, landing on a beat line
+    if(S.playing) seek(to); else { S.pos=to; updateTime(); draw(); } }
+  else done=false;
+  if(done){ e.preventDefault(); e.stopPropagation(); if(tg==='BUTTON') document.activeElement.blur(); }
+},true);
 // keyboard in edit mode (laptop): ←/→ pan, Space play/pause, ↑/↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear selection
 document.addEventListener('keydown',e=>{
   if(!S.editMode||S.tap||!$('#sheetView').hidden) return;
@@ -2638,6 +2650,7 @@ $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.fi
 $('#sepCancel').addEventListener('click',cancelSeparation);
 $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
 initParts().then(renderLib);
+if(matchMedia('(pointer:fine)').matches) $('#laneHint').textContent+=' Keys: Space play/pause, ← → one beat back/forward.';
 $('#appVer').textContent='Part Coach version '+APP_VERSION;
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
