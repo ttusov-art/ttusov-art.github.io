@@ -587,7 +587,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 i';
+const APP_VERSION='2026-10-24 j';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1701,7 +1701,10 @@ function openSheet(){
   const sh=S.sheet; if(!sh) return; let mine=bestColumn(sh.cols.map(n=>({name:n})),S.curPart||S.part);
   // the column the timed lyric lines came from (best text match), so a tap can find the line's time
   const clean=t=>String(t||'').replace(/\s*[—–-]{2,}\s*$/,'').trim(), usable=t=>t&&!/^\(.*\)$/.test(t)&&!/^\d+\.?$/.test(t), norm=t=>clean(t).toLowerCase().replace(/[^a-z0-9]+/g,'');
-  if(S.lyrics.length){ let best=-1,bs=0; sh.cols.forEach((n,k)=>{ const L=sh.rows.map(r=>clean(r.cells[k])).filter(usable); let m=0; L.forEach((t,i)=>{ if(S.lyrics[i]&&norm(S.lyrics[i].text)===norm(t)) m++; }); if(m>bs){ bs=m; best=k; } }); if(best>=0&&bs>=Math.min(3,S.lyrics.length)) mine=best; }
+  // match the sheet's text against your lyric lines as one running text, so split or merged lines still line up
+  const LS=lyricStream();
+  if(S.lyrics.length){ let best=-1,bs=0; sh.cols.forEach((n,k)=>{ const spans=mapCells(sh.rows.map(r=>clean(r.cells[k])).filter(usable),LS); const m=spans.filter(Boolean).length; if(m>bs){ bs=m; best=k; } }); if(best>=0&&bs>=Math.min(3,S.lyrics.length)) mine=best; }
+  const mineSpans=mapCells(sh.rows.map(r=>clean(r.cells[mine])).filter(usable),LS);
   let li=0;
   $('#sheetTitle').textContent=sh.title||($('#songName').textContent||'Lyrics');
   let hide=sheetHidden().filter(n=>sh.cols.includes(n)); if(hide.length>=sh.cols.length) hide=[];
@@ -1722,7 +1725,7 @@ function openSheet(){
     tr.className=(r.label?'sec ':'')+'st-'+st;
     if(anyLab){ const td=document.createElement('td'); td.className='lab'; td.textContent=r.label||''; tr.appendChild(td); }
     let any=false; r.cells.forEach((c,k)=>{ const idx=(k===mine&&usable(clean(c)))?li++:-1; if(!show[k]) return; const td=document.createElement('td'); td.textContent=c||''; if(c) any=true;
-      if(k===mine){ td.className='mine'; if(idx>=0&&S.lyrics[idx]&&norm(S.lyrics[idx].text)===norm(c)){ td.classList.add('tap'); td.dataset.li=idx; td.title='Tap to see the melody shape'; td.setAttribute('role','button'); td.tabIndex=0; } }
+      if(k===mine){ td.className='mine'; const sp=idx>=0?mineSpans[idx]:null; if(sp){ td.classList.add('tap'); td.dataset.a=sp.a; td.dataset.b=sp.b; td.title='Tap to see the melody shape'; td.setAttribute('role','button'); td.tabIndex=0; } }
       tr.appendChild(td); });
     if(!any&&!r.label) tr.classList.add('empty'); tb.appendChild(tr); });
   t.appendChild(tb);
@@ -1739,12 +1742,28 @@ function applySheetType(t){
 }
 function setSheetType(ch){ const t={...sheetType(),...ch}; try{ localStorage.setItem('pc-sheettype',JSON.stringify(t)); }catch(e){} applySheetType(t); }
 // melody shape of one lyric line, drawn as a thin line under it
+// your lyric lines as one running text with a time for every letter position
+function lyricStream(){
+  const nz=t=>String(t||'').toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g,'');
+  let str=''; const lines=[];
+  S.lyrics.forEach((L,i)=>{ const n=nz(L.text); lines.push({i,s:str.length,len:n.length,t:L.t}); str+=n; });
+  const timeAt=c=>{ // time of a letter position: inside a line, spread evenly up to the next timed line
+    let k=lines.findIndex(l=>c>=l.s&&c<l.s+l.len); if(k<0){ if(c>=str.length&&lines.length){ k=lines.length-1; } else return null; }
+    const l=lines[k]; if(l.t==null) return null; let nt=null; for(let j=k+1;j<lines.length;j++) if(lines[j].t!=null&&lines[j].t>l.t){ nt=lines[j].t; break; }
+    const end=nt==null?l.t+Math.min(8,Math.max(2,l.len*0.25)):nt, f=Math.max(0,Math.min(1,(c-l.s)/Math.max(1,l.len))); return l.t+f*(end-l.t); };
+  return {str,nz,timeAt};
+}
+function mapCells(cells,LS){
+  let p=0; return cells.map(c=>{ const n=LS.nz(c); if(!n) return null;
+    const at=LS.str.indexOf(n,p); if(at<0||at-p>200) return null;   // text changed too much: no shape for this cell
+    const a=LS.timeAt(at), b=LS.timeAt(at+n.length); p=at+n.length;
+    if(a==null) return null; return {a,b:b==null||b<=a?a+4:b}; });
+}
 function toggleShape(td){
   const old=td.querySelector('.shape'); if(old){ old.remove(); return; }
-  const i=+td.dataset.li, L=S.lyrics[i], box=document.createElement('div'); box.className='shape';
-  if(!L||L.t==null||!S.tT){ box.textContent='Time the lyrics first (Lyrics → Place lines automatically).'; td.appendChild(box); return; }
-  let b=null; for(let j=i+1;j<S.lyrics.length;j++) if(S.lyrics[j].t!=null&&S.lyrics[j].t>L.t){ b=S.lyrics[j].t; break; }
-  const a=L.t; b=Math.min(b==null?a+8:b,a+15);
+  const box=document.createElement('div'); box.className='shape';
+  const a=+td.dataset.a, b=Math.min(+td.dataset.b,a+15);
+  if(!isFinite(a)||!isFinite(b)||!S.tT){ box.textContent='Time the lyrics first (Lyrics → Place lines automatically).'; td.appendChild(box); return; }
   const pts=[]; for(let k=0;k<S.tT.length;k++){ const t=S.tT[k]; if(t<a) continue; if(t>b) break; pts.push([t,S.tM[k]]); }
   const v=pts.filter(p=>!isNaN(p[1])); if(!v.length){ box.textContent='No melody found for this line.'; td.appendChild(box); return; }
   // trim silence at the end
