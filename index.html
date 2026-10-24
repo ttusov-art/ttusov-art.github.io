@@ -199,7 +199,10 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .song-row .take-info{flex:1 1 220px}
 .song-row button{padding:7px 12px}
 .danger{color:var(--off);border-color:var(--off)}
-.lyr{padding:10px 14px 8px;border-bottom:1px solid var(--line);min-height:62px;display:flex;flex-direction:column;justify-content:center;gap:2px;background:var(--surface)}
+.lyr{padding:10px 10px 8px 14px;border-bottom:1px solid var(--line);min-height:62px;display:flex;align-items:center;gap:10px;background:var(--surface)}
+.lyr-text{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.lyr-sheet{flex:none;flex-direction:column;gap:2px;padding:6px 10px;font-size:11px;color:var(--muted)}
+.lyr-sheet:hover{color:var(--fg)}
 .lyr-now{font-family:var(--font-display);font-weight:700;font-size:clamp(18px,3.6vw,24px);line-height:1.25;min-height:1.25em;overflow-wrap:anywhere;color:var(--fg)}
 .lyr-now.waiting{color:var(--muted)}
 .lyr-next{font-size:14px;color:var(--muted);min-height:1.4em;overflow-wrap:anywhere}
@@ -264,7 +267,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </section>
 
   <section class="panel lane">
-    <div class="lyr" id="lyrBar" hidden role="button" tabindex="-1"><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div>
+    <div class="lyr" id="lyrBar" hidden role="button" tabindex="-1"><div class="lyr-text"><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div><button id="sheetOpen3" class="lyr-sheet" type="button" hidden aria-label="Open the lyrics sheet" title="Lyrics sheet"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 12h6M10 15.5h6M10 19h4"/></svg><span>Sheet</span></button></div>
     <canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas>
     <div class="edit-bar" id="editBar" hidden>
       <span class="edit-info" id="selInfo">Drag across the lane to select a section, or tap to select one beat (a whole fragment when Snap is off).</span>
@@ -581,7 +584,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 f';
+const APP_VERSION='2026-10-24 g';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1689,7 +1692,7 @@ function sheetColumns(sheet){
 }
 async function pdfColumns(file){ return sheetColumns(await pdfSheet(file)); }
 // ===== lyrics sheet view =====
-function renderSheetBtns(){ const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.length); $('#sheetOpen').disabled=!has; $('#sheetOpen2').hidden=!has; }
+function renderSheetBtns(){ const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.length); $('#sheetOpen').disabled=!has; $('#sheetOpen2').hidden=!has; $('#sheetOpen3').hidden=!has; }
 function sheetHidden(){ try{ return JSON.parse(localStorage.getItem('pc-sheethide')||'[]'); }catch(e){ return []; } }
 function openSheet(){
   const sh=S.sheet; if(!sh) return; let mine=bestColumn(sh.cols.map(n=>({name:n})),S.curPart||S.part);
@@ -2474,6 +2477,8 @@ $('#lyrPdfCol').addEventListener('change',fillFromPdf);
 $('#sheetOpen').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
 $('#sheetOpen2').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
 $('#sheetClose').addEventListener('click',closeSheet);
+$('#sheetOpen3').addEventListener('pointerdown',e=>e.stopPropagation());
+$('#sheetOpen3').addEventListener('click',e=>{ e.stopPropagation(); const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
 $('#sheetTable').addEventListener('click',e=>{ const td=e.target.closest('td.tap'); if(td) toggleShape(td); });
 $('#sheetTable').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.matches('td.tap')){ e.preventDefault(); toggleShape(e.target); } });
 $('#sheetSmaller').addEventListener('click',()=>setSheetType({fs:sheetType().fs-1}));
