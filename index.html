@@ -601,7 +601,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 b';
+const APP_VERSION='2026-10-25 c';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1486,6 +1486,7 @@ function updateSelInfo(){
   const r=selRange();
   ['edOne','edFill','edUp','edDown','edOctUp','edOctDown','edDel','edLoop'].forEach(id=>$('#'+id).disabled=!r);
   $('#edUndo').disabled=!S.undo||!S.undo.length;
+  { const b=$('#edReset'); if(!b.dataset.armed){ b.textContent=resetLabel(); b.title=r?'Bring back the original pitch line in the selection':'Bring back the original pitch line for the whole song'; } }
   if(!r){ el.textContent='Drag across the lane to select a section, or tap to select one beat (a whole fragment when Snap is off).'; return; }
   const v=voicedIn(r), m=v.length?Math.round(median(v)):null;
   const fm=fillNote(r,v);
@@ -1581,9 +1582,14 @@ function edShift(d){
 }
 function edRemove(){ const r=selRange(); if(!r) return; pushUndo(); for(let i=r.i0;i<=r.i1;i++) S.tM[i]=NaN; targetEdited('Removed the target in the selection.'); }
 function edUndo(){ if(!S.undo.length) return; const u=S.undo.pop(); if(u&&u.lyr!=null){ if(S.lyrics[u.lyr]) S.lyrics[u.lyr].t=u.t; lyrChanged(); updateSelInfo(); setStatus('Lyric move undone.'); return; } S.tM=u; targetEdited('Undone.'); }
+function resetLabel(){ return selRange()?'Reset selection':'Reset to original'; }
 function edReset(btn){
-  if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent='Tap again to reset'; setTimeout(()=>{ delete btn.dataset.armed; btn.textContent='Reset to original'; },4000); return; }
-  delete btn.dataset.armed; btn.textContent='Reset to original'; pushUndo(); S.tM=Float32Array.from(S.tMorig); targetEdited('The whole target line is back to the original.');
+  const r=selRange();
+  if(r){ // only the selected stretch goes back to the original line
+    pushUndo(); for(let i=r.i0;i<=r.i1;i++) S.tM[i]=S.tMorig[i];
+    targetEdited('The selection '+fmtT1(r.a)+'–'+fmtT1(r.b)+' is back to the original pitch line.'); return; }
+  if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent='Tap again to reset everything'; setTimeout(()=>{ if(btn.dataset.armed){ delete btn.dataset.armed; btn.textContent=resetLabel(); } },4000); return; }
+  delete btn.dataset.armed; btn.textContent=resetLabel(); pushUndo(); S.tM=Float32Array.from(S.tMorig); targetEdited('The whole target line is back to the original.');
 }
 async function edRefind(btn){
   if(!S.guideBuf) return;
