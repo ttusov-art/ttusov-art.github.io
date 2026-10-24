@@ -329,6 +329,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   <section class="panel transport">
     <button class="primary" id="play" type="button"><span id="playLbl">Play</span></button>
     <button id="songLoop" type="button" aria-pressed="false" aria-label="Repeat the whole song" title="Repeat the whole song: off" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
+    <button id="nextSong" type="button" class="icon-btn" aria-label="Next song in this part" title="Next song in this part"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l9 7-9 7z" fill="currentColor"/><path d="M18 5v14"/></svg></button>
     <button id="restart" type="button">Start over</button>
     <button id="updBtn" type="button" class="upd-btn" hidden><span class="upd-dot" aria-hidden="true"></span><span id="updLbl">Update</span></button>
     <span class="time" id="time">0:00 / 0:00</span>
@@ -600,7 +601,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 x';
+const APP_VERSION='2026-10-24 y';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -918,18 +919,20 @@ function setPMode(m){
   const part=S.curPart||S.part;
   setStatus({off:'The song plays once.',song:'This song repeats.',part:'Playing through '+part+': the next song (newest first) starts when this one ends.',partloop:'Repeating all songs of '+part+'.',shuffle:'Shuffling the songs of '+part+'.'}[m]);
 }
-async function playNextSong(){
+async function playNextSong(manual){
   const part=S.curPart||S.part, list=(await libList()).filter(x=>partOf(x)===part).sort((a,b)=>b.created-a.created);
   if(!list.length) return;
   const curId=S.cur&&S.cur.libId!=null?S.cur.libId:null, cur=list.findIndex(x=>x.id===curId); let next;
   if(S.pmode==='shuffle'){
     if(!S.shuf||!S.shuf.length){ const ids=list.map(x=>x.id).filter(id=>id!==curId); for(let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; } S.shuf=ids.length?ids:[list[0].id]; }
     next=S.shuf.shift();
-  } else { let k=cur+1; if(k>=list.length){ if(S.pmode==='partloop') k=0; else { setStatus('That was the last song of '+part+'.'); return; } } next=list[k].id; }
+  } else { let k=cur+1; if(k>=list.length){ if(S.pmode==='partloop'||manual) k=0; else { setStatus('That was the last song of '+part+'.'); return; } } next=list[k].id; }
+  const was=!manual||S.playing; if(manual) stop();
+  if(manual&&list.length===1&&next===curId){ setStatus(list[0].name+' is the only song in '+part+'.'); if(was) play(); return; }
   const rate=S.rate; if(!(await openLibSong(next,true))) return;
   if(rate!==1){ S.rate=rate; $('#tempo').value=String(rate); await prepareTempo(); }
-  const k=list.findIndex(x=>x.id===next); await play();
-  setStatus('Now playing: '+list[k].name+' ('+(k+1)+' of '+list.length+' in '+part+').');
+  const k=list.findIndex(x=>x.id===next); if(was) await play();
+  setStatus((was?'Now playing: ':'Next song: ')+list[k].name+' ('+(k+1)+' of '+list.length+' in '+part+').');
 }
 function updateLoopUI(){
   { const L=S.loop; if(L.a!=null&&L.b!=null&&L.b-L.a>=0.5&&!L.on){ L.on=true; $('#loopOn').checked=true; } }
@@ -2334,6 +2337,7 @@ function mediaOn(){
         navigator.mediaSession.setActionHandler('play',()=>{ if(!S.playing&&!S.review) play(); });
         navigator.mediaSession.setActionHandler('pause',()=>stop());
         try{ navigator.mediaSession.setActionHandler('stop',()=>stop()); }catch(e){}
+        try{ navigator.mediaSession.setActionHandler('nexttrack',()=>playNextSong(true)); }catch(e){}
         try{ navigator.mediaSession.setActionHandler('seekbackward',()=>seek(songTime()-5)); }catch(e){}
       }
     }
@@ -2709,6 +2713,7 @@ $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
 $('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); });
 $('#play').addEventListener('click',()=>(S.playing||S.review)?stop():play());
+$('#nextSong').addEventListener('click',()=>playNextSong(true));
 $('#songLoop').addEventListener('click',()=>{ const m=(S.pmode==='song'&&!isWholeLoop())?'off':S.pmode; setPMode(PMODES[(PMODES.indexOf(m)+1)%PMODES.length]); });
 paintSongLoop();
 $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop(); resetRun(true); S.pos=0; if(was) play(); else { updateTime(); draw(); } });
