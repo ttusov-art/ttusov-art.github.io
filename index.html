@@ -120,7 +120,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .sheet-parts button{padding:5px 12px;border-radius:999px;font-size:13px}
 .sheet-parts button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .sheet-body{flex:1;overflow:auto;padding:8px 12px 40px;-webkit-overflow-scrolling:touch}
-table.sheet{width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;line-height:1.35}
+table.sheet{width:100%;border-collapse:collapse;table-layout:fixed;font-size:var(--sheet-fs,14px);line-height:1.4;font-family:var(--sheet-font,var(--font-body))}
+.sheet-type{display:inline-flex;gap:6px;align-items:center}
+.sheet-type button{padding:6px 10px;font-weight:600}
+.sheet-type .sel{padding:6px 8px;max-width:150px}
 table.sheet th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 6px;position:sticky;top:-8px;background:var(--bg);z-index:1}
 table.sheet td{vertical-align:top;padding:6px;overflow-wrap:anywhere}
 table.sheet .lab{width:70px;font-size:11px;font-weight:600;letter-spacing:0;text-transform:uppercase;color:var(--muted);overflow-wrap:normal;word-break:normal;hyphens:none}
@@ -137,8 +140,9 @@ table.sheet tr.st-pre td{background-color:var(--sec-pre)} table.sheet tr.st-pre 
 table.sheet tr.st-chorus td{background-color:var(--sec-chorus)} table.sheet tr.st-chorus td.lab{box-shadow:inset 3px 0 var(--edge-chorus)}
 table.sheet tr.st-bridge td{background-color:var(--sec-bridge)} table.sheet tr.st-bridge td.lab{box-shadow:inset 3px 0 var(--edge-bridge)}
 table.sheet td.lab{padding-left:9px}
+table.sheet th,table.sheet td.lab{font-family:var(--font-body)}
 table.sheet tr.empty{display:none}
-@media (max-width:480px){ table.sheet{font-size:13px} table.sheet .lab{width:58px;font-size:10px} table.sheet td{padding:6px 4px} }
+@media (max-width:480px){ table.sheet .lab{width:58px;font-size:10px} table.sheet td{padding:6px 4px} }
 .upd-btn{border-color:var(--accent);color:var(--accent);font-weight:600}
 .upd-dot{width:8px;height:8px;border-radius:50%;background:var(--warm);box-shadow:0 0 0 3px color-mix(in srgb,var(--warm) 25%,transparent)}
 #micNote.warn{color:var(--off)}
@@ -224,6 +228,16 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 <div class="sheet-view" id="sheetView" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="sheet-bar">
     <b id="sheetTitle">Lyrics</b>
+    <span class="sheet-type" role="group" aria-label="Text size and font">
+      <button id="sheetSmaller" type="button" aria-label="Smaller text">A−</button>
+      <button id="sheetBigger" type="button" aria-label="Bigger text">A+</button>
+      <select id="sheetFont" class="sel" aria-label="Font">
+        <option value="app">App font</option>
+        <option value="atkinson">Atkinson Hyperlegible</option>
+        <option value="verdana">Verdana / wide sans</option>
+        <option value="serif">Serif (Georgia)</option>
+      </select>
+    </span>
     <button id="sheetClose" type="button">Close</button>
     <div class="sheet-parts" id="sheetParts" role="group" aria-label="Parts to show"></div>
   </div>
@@ -561,7 +575,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 d';
+const APP_VERSION='2026-10-24 e';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1694,8 +1708,16 @@ function openSheet(){
     let any=false; r.cells.forEach((c,k)=>{ if(!show[k]) return; const td=document.createElement('td'); td.textContent=c||''; if(c) any=true; if(k===mine) td.className='mine'; tr.appendChild(td); });
     if(!any&&!r.label) tr.classList.add('empty'); tb.appendChild(tr); });
   t.appendChild(tb);
-  $('#sheetView').hidden=false; document.body.style.overflow='hidden';
+  applySheetType(); $('#sheetView').hidden=false; document.body.style.overflow='hidden';
 }
+// text size and font of the lyrics sheet (per device)
+const SHEET_FONTS={app:'var(--font-body)',atkinson:'"Atkinson Hyperlegible",Verdana,system-ui,sans-serif',verdana:'Verdana,"DejaVu Sans","Segoe UI",system-ui,sans-serif',serif:'Georgia,"Times New Roman",serif'};
+function sheetType(){ let t={}; try{ t=JSON.parse(localStorage.getItem('pc-sheettype')||'{}')||{}; }catch(e){} return {fs:Math.max(11,Math.min(30,+t.fs||(innerWidth<480?14:15))),font:SHEET_FONTS[t.font]?t.font:'app'}; }
+function applySheetType(t){
+  t=t||sheetType(); const tb=$('#sheetTable'); tb.style.setProperty('--sheet-fs',t.fs+'px'); tb.style.setProperty('--sheet-font',SHEET_FONTS[t.font]); $('#sheetFont').value=t.font;
+  if(t.font==='atkinson'&&!document.getElementById('atkFont')){ const l=document.createElement('link'); l.id='atkFont'; l.rel='stylesheet'; l.href='https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap'; document.head.appendChild(l); }
+}
+function setSheetType(ch){ const t={...sheetType(),...ch}; try{ localStorage.setItem('pc-sheettype',JSON.stringify(t)); }catch(e){} applySheetType(t); }
 function closeSheet(){ if($('#sheetView').hidden) return; $('#sheetView').hidden=true; document.body.style.overflow=''; }
 function partKey(n){ n=String(n||'').toLowerCase(); const num=(n.match(/\d/)||[''])[0]; const v=/^s|sop/.test(n)?'s':/^a|alt/.test(n)?'a':/^t|ten/.test(n)?'t':/^b|bas|bar/.test(n)?'b':''; return {v,num}; }
 function bestColumn(cols,part){ const p=partKey(part); let best=-1,score=0; cols.forEach((c,i)=>{ const k=partKey(c.name); const sc=(k.v&&k.v===p.v?2:0)+(k.num&&k.num===p.num?1:0)+(!k.num&&k.v===p.v?0.5:0); if(sc>score){ score=sc; best=i; } }); return best; }
@@ -2420,6 +2442,9 @@ $('#lyrPdfCol').addEventListener('change',fillFromPdf);
 $('#sheetOpen').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
 $('#sheetOpen2').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
 $('#sheetClose').addEventListener('click',closeSheet);
+$('#sheetSmaller').addEventListener('click',()=>setSheetType({fs:sheetType().fs-1}));
+$('#sheetBigger').addEventListener('click',()=>setSheetType({fs:sheetType().fs+1}));
+$('#sheetFont').addEventListener('change',e=>setSheetType({font:e.target.value}));
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
 $('#lyrApply').addEventListener('click',applyLyricText);
 $('#lyrAuto').addEventListener('click',()=>autoPlace(false));
