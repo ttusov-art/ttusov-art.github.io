@@ -519,7 +519,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-23 c';
+const APP_VERSION='2026-10-24 a';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -963,7 +963,7 @@ async function openZip(file){
     const method=cd.getUint16(p+10,true), csize=cd.getUint32(p+20,true), nl=cd.getUint16(p+28,true), xl=cd.getUint16(p+30,true), cl=cd.getUint16(p+32,true), lo=cd.getUint32(p+42,true);
     const name=dec.decode(new Uint8Array(cd.buffer,cd.byteOffset+p+46,nl)); map[name]={method,csize,lo,nl,xl}; p+=46+nl+xl+cl;
   }
-  return {names:Object.keys(map), async get(name){ const en=map[name]; if(!en) return null; if(file.prefetch) await file.prefetch(en.lo,en.lo+30+en.nl+en.xl+en.csize+512); const lh=new DataView(await file.slice(en.lo,en.lo+30).arrayBuffer()); const ds=en.lo+30+lh.getUint16(26,true)+lh.getUint16(28,true); const b=file.slice(ds,ds+en.csize); return en.method===0?b:new Blob([await inflateRaw(new Uint8Array(await b.arrayBuffer()))]); }};
+  return {names:Object.keys(map), size(name){ const en=map[name]; return en?en.csize:0; }, async get(name){ const en=map[name]; if(!en) return null; if(file.prefetch) await file.prefetch(en.lo,en.lo+30+en.nl+en.xl+en.csize+512); const lh=new DataView(await file.slice(en.lo,en.lo+30).arrayBuffer()); const ds=en.lo+30+lh.getUint16(26,true)+lh.getUint16(28,true); const b=file.slice(ds,ds+en.csize); return en.method===0?b:new Blob([await inflateRaw(new Uint8Array(await b.arrayBuffer()))]); }};
 }
 const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
 async function backupLibrary(fixedName,btn0,txt0){
@@ -990,12 +990,24 @@ async function backupLibrary(fixedName,btn0,txt0){
   }catch(err){ txt.textContent='Backup failed: '+((err&&err.message)||'unknown error')+'.'; }
   finally{ btn.disabled=false; }
 }
-async function restoreLibrary(file,out){
+function neededBytes(z,man,byUid){
+  let need=0;
+  for(const m of man.songs){ const cur=byUid[m.uid]; if(cur&&(cur.updated||cur.created)>=(m.updated||m.created)) continue;
+    const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) need+=z.size(m.files.pcm);
+    for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) need+=z.size(f);
+    const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
+  return need;
+}
+async function restoreLibrary(file,out,askBig){
   const txt=out||$('#bkText'); txt.textContent='Reading '+(file.name||'the library')+'…';
   try{
     const z=await openZip(file), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
     const man=JSON.parse(await mb.text()); if(man.app!=='part-coach') throw new Error('this is not a Part Coach backup file');
     const existing=await libList(), byUid={}; existing.forEach(s=>{ if(s.uid) byUid[s.uid]=s; });
+    if(askBig){ // how much this will download: only new audio and changed edits
+      const need=neededBytes(z,man,byUid);
+      if(!(await okToDownload(need))){ txt.textContent='Download cancelled. Tap again when you are on Wi-Fi, or to download anyway.'; return false; }
+    }
     let added=0,updated=0,skipped=0,i=0;
     for(const m of man.songs){
       i++; txt.textContent='Restoring song '+i+' of '+man.songs.length+'…';
@@ -2379,10 +2391,20 @@ function directUrl(u){
   }
   return x.href;
 }
-async function fetchBlob(url,onProg){
+// mobile data: ask before downloading more than 25 MB
+const BIG_DL=25*1048576;
+function onMobileData(){ const c=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  if(c&&c.type) return c.type==='cellular'?true:(c.type==='wifi'||c.type==='ethernet')?false:null;
+  return matchMedia('(pointer:coarse)').matches?null:false; }  // phone without connection info: unknown
+async function okToDownload(bytes){
+  if(bytes<=BIG_DL) return true; const mob=onMobileData(); if(mob===false) return true;
+  return confirm('This download is about '+Math.round(bytes/1048576)+' MB.'+(mob?' You are on mobile data.':' If you are on mobile data, it uses that much of your data plan.')+'\n\nDownload now?');
+}
+async function fetchBlob(url,onProg,askBig){
   let r; try{ r=await fetch(url); }catch(e){ throw new Error('the download was blocked. Check that it is a Dropbox link to the file and that anyone with the link can view it'); }
   if(!r.ok) throw new Error('the download failed (error '+r.status+'). Check that the link still works');
   const total=+r.headers.get('content-length')||0;
+  if(askBig&&!(await okToDownload(total))){ try{ r.body&&r.body.cancel(); }catch(e){} return null; }
   if(!r.body) return await r.blob();
   const rd=r.body.getReader(), parts=[]; let got=0;
   for(;;){ const {done,value}=await rd.read(); if(done) break; parts.push(value); got+=value.length; onProg(got,total); }
@@ -2421,9 +2443,9 @@ async function sharedChanges(url){
   const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
   const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
   let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if((c.updated||c.created)<(m.updated||m.created)) updated++; }
-  return {added,updated,total:man.songs.length,part:man.part||null};
+  return {added,updated,total:man.songs.length,part:man.part||null,bytes:neededBytes(z,man,byUid)};
 }
-function changesTxt(c){ const p=[]; if(c.added) p.push(c.added+' new song'+(c.added>1?'s':'')); if(c.updated) p.push(c.updated+' changed song'+(c.updated>1?'s':'')); return p.join(' and '); }
+function changesTxt(c){ const p=[]; if(c.added) p.push(c.added+' new song'+(c.added>1?'s':'')); if(c.updated) p.push(c.updated+' changed song'+(c.updated>1?'s':'')); return p.join(' and ')+(c.bytes!=null?' ('+(c.bytes<1048576?'under 1 MB':'about '+Math.round(c.bytes/1048576)+' MB')+')':''); }
 async function addFromLink(){
   const out=$('#linkText'), btn=$('#linkGo'); let url; const raw=$('#linkIn').value.trim();
   try{ url=directUrl(raw); }catch(e){ out.textContent=e.message[0].toUpperCase()+e.message.slice(1)+'.'; return; }
@@ -2431,10 +2453,11 @@ async function addFromLink(){
   try{
     let ok=false; const rf=await remoteFile(url);
     if(rf){
-      ok=await restoreLibrary(rf,out);
+      ok=await restoreLibrary(rf,out,true);
       if(ok) out.textContent+=' Downloaded '+mbTxt(rf.stats.bytes)+'.';
     } else {
-      const blob=await fetchBlob(url,(got,total)=>{ out.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); });
+      const blob=await fetchBlob(url,(got,total)=>{ out.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); },true);
+      if(!blob){ out.textContent='Download cancelled. Tap again when you are on Wi-Fi, or to download anyway.'; return; }
       ok=await restoreLibrary(new File([blob],'shared library.zip'),out);
     }
     if(ok){ setShared(raw,typeof ok==='string'?ok:null,S.pendingSlug||null); S.pendingSlug=null; setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>{ if(!(S.updReady&&S.updReady.length)) checkShared(false); },800); }
