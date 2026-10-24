@@ -113,6 +113,22 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pick-menu .pm-add{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;color:var(--accent);font-weight:600}
 .pick-menu .pm-empty{padding:10px;color:var(--muted);font-size:13px}
 .file-name:empty{display:none}
+.sheet-view{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column}
+.sheet-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line);background:var(--surface)}
+.sheet-bar b{font-family:var(--font-display);font-size:18px;flex:1 1 auto;min-width:0}
+.sheet-parts{display:flex;flex-wrap:wrap;gap:6px;flex-basis:100%}
+.sheet-parts button{padding:5px 12px;border-radius:999px;font-size:13px}
+.sheet-parts button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.sheet-body{flex:1;overflow:auto;padding:8px 12px 40px;-webkit-overflow-scrolling:touch}
+table.sheet{width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;line-height:1.35}
+table.sheet th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 6px;position:sticky;top:-8px;background:var(--bg);z-index:1}
+table.sheet td{vertical-align:top;padding:6px;overflow-wrap:anywhere}
+table.sheet .lab{width:70px;font-size:11px;font-weight:600;letter-spacing:0;text-transform:uppercase;color:var(--muted);overflow-wrap:normal;word-break:normal;hyphens:none}
+table.sheet tr.sec td{border-top:1px solid var(--line);padding-top:10px}
+table.sheet .mine{background:var(--accent-soft)}
+table.sheet th.mine{color:var(--accent)}
+table.sheet tr.empty{display:none}
+@media (max-width:480px){ table.sheet{font-size:13px} table.sheet .lab{width:58px;font-size:10px} table.sheet td{padding:6px 4px} }
 .upd-btn{border-color:var(--accent);color:var(--accent);font-weight:600}
 .upd-dot{width:8px;height:8px;border-radius:50%;background:var(--warm);box-shadow:0 0 0 3px color-mix(in srgb,var(--warm) 25%,transparent)}
 #micNote.warn{color:var(--off)}
@@ -195,6 +211,14 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 </style>
 </head>
 <body>
+<div class="sheet-view" id="sheetView" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-bar">
+    <b id="sheetTitle">Lyrics</b>
+    <button id="sheetClose" type="button">Close</button>
+    <div class="sheet-parts" id="sheetParts" role="group" aria-label="Parts to show"></div>
+  </div>
+  <div class="sheet-body"><table class="sheet" id="sheetTable"></table></div>
+</div>
 <div class="wrap">
   <header>
     <h1>Part Coach</h1>
@@ -293,6 +317,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
           <input id="guideFile" class="vh" type="file" tabindex="-1" aria-label="Load a .ntpsession file or a vocals-only audio file">
         </div>
         <button id="addLib" type="button" hidden>Add to library</button>
+        <button id="sheetOpen2" type="button" hidden>Lyrics sheet</button>
       </div>
       <span class="file-name" id="guideName"></span>
       <div class="link-box" id="linkBox" hidden>
@@ -410,6 +435,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="lyrAuto" type="button">Place lines automatically</button>
         <button id="lyrTap" type="button">Tap to time</button>
         <button id="lyrClear" type="button">Remove lyrics</button>
+        <button id="sheetOpen" type="button" disabled>View lyrics sheet</button>
         <span class="btn">Import from PDF<input id="lyrPdf" type="file" accept="application/pdf,.pdf" aria-label="Import lyrics from a PDF with one column per part"></span>
       </div>
       <div class="row" id="lyrPdfRow" hidden>
@@ -525,7 +551,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 b';
+const APP_VERSION='2026-10-24 c';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -624,6 +650,7 @@ async function pitchLineOf(buf,onProg,rk){
   return {tt,mm,hop:tr.hop,t0:tr.t0};
 }
 function songReady(name,label){
+  renderSheetBtns(); closeSheet();
   setTimeout(()=>scheduleBeatDetect(false),50);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
@@ -647,7 +674,7 @@ async function loadGuide(file){
       const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'),rangeKey(S.part));
       setTarget(pl.tt,pl.mm);
     }
-    normalize(); S.stretch=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    normalize(); S.stretch=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -980,7 +1007,7 @@ async function backupLibrary(fixedName,btn0,txt0){
     const entries=[], man={app:'part-coach',version:1,created:Date.now(),part:sharePart,songs:[]};
     for(const s0 of songs){
       let s=s0; if(!s.uid){ s.uid=newUid(); await libPutRaw(s); }
-      const dir='songs/'+s.uid+'/', m={uid:s.uid,part:partOf(s),beat:s.beat||null,view:s.view||null,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
+      const dir='songs/'+s.uid+'/', m={uid:s.uid,part:partOf(s),beat:s.beat||null,view:s.view||null,sheet:s.sheet||null,name:s.name,created:s.created,updated:s.updated||s.created,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
       entries.push({name:dir+'vocals.pcm',data:s.pcm}); m.files.pcm=dir+'vocals.pcm';
       if(s.contour){ entries.push({name:dir+'contour.f32',data:f32buf(s.contour)}); m.files.contour=dir+'contour.f32'; }
       if(s.contourOrig){ entries.push({name:dir+'contour-original.f32',data:f32buf(s.contourOrig)}); m.files.contourOrig=dir+'contour-original.f32'; }
@@ -1022,7 +1049,7 @@ async function restoreLibrary(file,out,askBig){
       const rd=async f=>f?await (await z.get(f)).arrayBuffer():null;
       const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01;
       const part=m.part||man.part||(cur&&cur.part)||S.part; ensurePart(part);
-      const rec={uid:m.uid,part,beat:m.beat||null,view:m.view||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:samePcm?cur.pcm:await rd(m.files.pcm)};
+      const rec={uid:m.uid,part,beat:m.beat||null,view:m.view||null,sheet:m.sheet||null,name:m.name,created:m.created,updated:m.updated||m.created,dur:m.dur,sr:m.sr,lyrics:m.lyrics||[],pcm:samePcm?cur.pcm:await rd(m.files.pcm)};
       if(m.hop!=null) rec.hop=m.hop; if(m.t0!=null) rec.t0=m.t0;
       const c=await rd(m.files.contour); if(c) rec.contour=new Float32Array(c);
       const co=await rd(m.files.contourOrig); if(co) rec.contourOrig=new Float32Array(co);
@@ -1107,7 +1134,7 @@ async function openLibSong(id){
     S.guideBuf=buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
     S.curBacks=backsOf(s).slice(); S.curBackSel=S.curBacks.length?Math.max(0,Math.min(S.curBacks.length-1,s.backSel==null?0:s.backSel)):-1;
     if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
-    S.cur={libId:id,fromFile:false}; S.curPart=partOf(s); RT.cm=null; S.beat=s.beat?{...s.beat}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
+    S.cur={libId:id,fromFile:false}; S.curPart=partOf(s); RT.cm=null; S.sheet=s.sheet||null; S.beat=s.beat?{...s.beat}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
     setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } songReady(s.name,s.name+' (vocals, from library)');
     setStatus(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.');
     window.scrollTo({top:0,behavior:'smooth'});
@@ -1216,7 +1243,7 @@ async function separateSong(file){
     for(let i=0;i<n;i++){ bl[i]=oL[i]-VL[i]; br[i]=oR[i]-VR[i]; } back.copyToChannel(bl,0); back.copyToChannel(br,1);
     const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1),rangeKey(S.part));
     S.guideBuf=voc; S.backBuf=back; $('#backName').textContent='Backing from the separation (this time only)'; $('#backClear').hidden=false;
-    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     S.beat=null; S.beatTok++;
     setTarget(pl.tt,pl.mm); songReady(name,name+' (separated vocals)');
     let note='';
@@ -1575,51 +1602,99 @@ async function loadPdfJs(){
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   return pdfjsLib;
 }
-async function pdfColumns(file){
+// read the PDF table into a sheet: title, part columns, rows (with section labels on the left)
+async function pdfSheet(file){
   const lib=await loadPdfJs(), doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
   const pages=[];
   for(let pn=1;pn<=doc.numPages;pn++){
     const pg=await doc.getPage(pn), vp=pg.getViewport({scale:1}), tc=await pg.getTextContent();
     const items=tc.items.filter(it=>it.str&&it.str.trim()).map(it=>({s:it.str, x:it.transform[4], y:vp.height-it.transform[5], h:Math.abs(it.transform[3])||10, w:it.width||0}));
-    // group into visual rows
     items.sort((a,b)=>a.y-b.y||a.x-b.x); const rows=[];
     for(const it of items){ const r=rows[rows.length-1]; if(r&&Math.abs(r.y-it.y)<3) r.items.push(it); else rows.push({y:it.y,items:[it]}); }
     pages.push(rows);
   }
-  // header: first row on a page with at least 3 short items (e.g. SOPS  A1  A2  TENORS)
-  let head=null;
-  for(const rows of pages){ for(const r of rows){ const sh=r.items.filter(i=>i.s.trim().length<=14); if(sh.length>=3&&sh.length===r.items.length){ head=r.items.map(i=>({name:i.s.trim(),x:i.x})).sort((a,b)=>a.x-b.x); break; } } if(head) break; }
+  // header: first row with at least 3 short items (e.g. SOPS  A1  A2  TENORS)
+  let head=null, title='';
+  for(const rows of pages){ for(const r of rows){ const sh=r.items.filter(i=>i.s.trim().length<=14); if(sh.length>=3&&sh.length===r.items.length){ head=r; break; } } if(head) break; }
   if(!head) throw new Error('could not find the part names at the top of the columns');
-  const names=head.map(h=>h.name.toUpperCase()), cols=head.map(h=>({name:h.name,x:h.x,lines:[]}));
-  const colOf=x=>{ let k=-1; cols.forEach((c,i)=>{ if(x>=c.x-8) k=i; }); return k; };
+  const hd=head.items.map(i=>({name:i.s.trim(),x:i.x})).sort((a,b)=>a.x-b.x);
+  const names=hd.map(h=>h.name.toUpperCase()), K=hd.length;
+  { const first=pages[0].find(r=>r!==head&&r.y<head.y); if(first) title=first.items.map(i=>i.s.trim()).join(' '); }
+  const colOf=x=>{ let k=-1; hd.forEach((c,i)=>{ if(x>=c.x-8) k=i; }); return k; };   // -1 = section labels on the left
+  const lines=[]; // {p,k,y,h,s}
   pages.forEach((rows,pi)=>{
     for(const r of rows){
       const txt=r.items.map(i=>i.s.trim().toUpperCase());
       if(txt.every(t=>names.includes(t))) continue;                 // repeated header row
       if(r.items.length===1&&/^\d+$/.test(txt[0])) continue;        // page number
-      for(const it of r.items){ const k=colOf(it.x); if(k<0) continue;  // section labels on the left
-        const L=cols[k].lines, last=L[L.length-1];
-        if(last&&last.p===pi&&Math.abs(last.y-it.y)<3) last.s+=' '+it.s.trim(); else L.push({p:pi,y:it.y,h:it.h,s:it.s.trim()}); }
+      if(pi===0&&r.y<head.y) continue;                               // title
+      for(const it of r.items){ const k=colOf(it.x); const last=lines.filter(l=>l.p===pi&&l.k===k).pop();
+        if(last&&Math.abs(last.y-it.y)<3){ last.s+=' '+it.s.trim(); last.x1=Math.max(last.x1,it.x+it.w); } else lines.push({p:pi,k,y:it.y,h:it.h,s:it.s.trim(),x0:it.x,x1:it.x+it.w}); }
     }
   });
-  // join wrapped lines of one cell; a bigger gap starts the next lyric line
-  const gaps=[]; cols.forEach(c=>{ for(let i=1;i<c.lines.length;i++){ const a=c.lines[i-1],b=c.lines[i]; if(a.p===b.p) gaps.push(Math.round(b.y-a.y)); } });
-  const lead=gaps.length?Math.min(...gaps.filter(g=>g>2)):20;
-  return cols.map(c=>{ const out=[]; let cur=null;
-    c.lines.forEach((l,i)=>{ const prev=c.lines[i-1]; if(cur&&prev&&prev.p===l.p&&l.y-prev.y<=lead*1.12) cur.push(l.s); else { cur=[l.s]; out.push(cur); } });
-    const lines=out.map(a=>a.join(' ').replace(/\s+/g,' ').replace(/\s*[—–-]{2,}\s*$/,'').trim()).filter(t=>t&&!/^\(.*\)$/.test(t)&&!/^\d+\.?$/.test(t));
-    return {name:c.name,lines}; });
+  // wrapped lines inside one cell sit closer together than separate cells
+  const gaps=[]; for(let k=-1;k<K;k++){ const L=lines.filter(l=>l.k===k); for(let i=1;i<L.length;i++) if(L[i].p===L[i-1].p) gaps.push(Math.round(L[i].y-L[i-1].y)); }
+  const lead=gaps.filter(g=>g>2).length?Math.min(...gaps.filter(g=>g>2)):20;
+  // a line only continues the cell above if the first word would not have fitted on that line
+  const sp=hd.length>1?Math.min(...hd.slice(1).map((c,i)=>c.x-hd[i].x)):200;
+  const colW=k=>k<0?(hd[0].x-8)-0:(k+1<K?hd[k+1].x-hd[k].x:sp);
+  const wraps=(prev,l)=>{ if(!prev.x1||!l.x1) return true; const cw=(l.x1-l.x0)/Math.max(1,l.s.length), fw=(l.s.split(' ')[0].length+1)*cw; return (prev.x1-prev.x0)+fw>colW(l.k)-16; };
+  const cells=[];
+  for(let k=-1;k<K;k++){ let cur=null, prev=null; lines.filter(l=>l.k===k).sort((a,b)=>a.p-b.p||a.y-b.y).forEach(l=>{
+    if(cur&&cur.p===l.p&&l.y-cur.last<=lead*1.12&&(k<0||wraps(prev,l))){ cur.parts.push(l.s); cur.last=l.y; cur.bottom=l.y+l.h; prev=l; return; }
+    prev=l;
+    cur={p:l.p,k,top:l.y,last:l.y,bottom:l.y+l.h,parts:[l.s]}; cells.push(cur); }); }
+  // rows: cells whose vertical extent overlaps belong to the same table row
+  cells.sort((a,b)=>a.p-b.p||a.top-b.top||a.k-b.k);
+  const rows=[]; let row=null;
+  for(const c of cells){
+    const text=c.parts.join(' ').replace(/\s+/g,' ').trim();
+    if(!row||row.p!==c.p||c.top>row.bottom+1||(c.k>=0&&row.cells[c.k]!=null)||(c.k<0&&row.label)){ row={p:c.p,top:c.top,bottom:c.bottom,label:null,cells:new Array(K).fill(null)}; rows.push(row); }
+    if(c.k<0) row.label=text; else row.cells[c.k]=text; row.bottom=Math.max(row.bottom,c.bottom);
+  }
+  return {title,cols:hd.map(h=>h.name),rows:rows.map(r=>({label:r.label,cells:r.cells}))};
 }
+function sheetColumns(sheet){
+  return sheet.cols.map((name,k)=>({name,lines:sheet.rows.map(r=>r.cells[k]).filter(Boolean).map(t=>t.replace(/\s*[—–-]{2,}\s*$/,'').trim()).filter(t=>t&&!/^\(.*\)$/.test(t)&&!/^\d+\.?$/.test(t))}));
+}
+async function pdfColumns(file){ return sheetColumns(await pdfSheet(file)); }
+// ===== lyrics sheet view =====
+function renderSheetBtns(){ const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.length); $('#sheetOpen').disabled=!has; $('#sheetOpen2').hidden=!has; }
+function sheetHidden(){ try{ return JSON.parse(localStorage.getItem('pc-sheethide')||'[]'); }catch(e){ return []; } }
+function openSheet(){
+  const sh=S.sheet; if(!sh) return; const mine=bestColumn(sh.cols.map(n=>({name:n})),S.curPart||S.part);
+  $('#sheetTitle').textContent=sh.title||($('#songName').textContent||'Lyrics');
+  let hide=sheetHidden().filter(n=>sh.cols.includes(n)); if(hide.length>=sh.cols.length) hide=[];
+  const bar=$('#sheetParts'); bar.innerHTML='';
+  sh.cols.forEach((n,k)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=n+(k===mine?' (you)':''); b.setAttribute('aria-pressed',String(!hide.includes(n)));
+    b.addEventListener('click',()=>{ let h=sheetHidden().filter(x=>sh.cols.includes(x)); if(h.includes(n)) h=h.filter(x=>x!==n); else if(h.length<sh.cols.length-1) h.push(n); try{ localStorage.setItem('pc-sheethide',JSON.stringify(h)); }catch(e){} openSheet(); });
+    bar.appendChild(b); });
+  const show=sh.cols.map(n=>!hide.includes(n)), t=$('#sheetTable'); t.innerHTML='';
+  const anyLab=sh.rows.some(r=>r.label);
+  const cg=document.createElement('colgroup'); if(anyLab){ const c=document.createElement('col'); c.className='lab'; cg.appendChild(c); } sh.cols.forEach((n,k)=>{ if(show[k]) cg.appendChild(document.createElement('col')); }); t.appendChild(cg);
+  const hr=document.createElement('tr'); if(anyLab) hr.appendChild(document.createElement('th')).className='lab';
+  sh.cols.forEach((n,k)=>{ if(!show[k]) return; const th=document.createElement('th'); th.textContent=n; if(k===mine) th.className='mine'; hr.appendChild(th); });
+  const thead=document.createElement('thead'); thead.appendChild(hr); t.appendChild(thead);
+  const tb=document.createElement('tbody');
+  sh.rows.forEach(r=>{ const tr=document.createElement('tr'); if(r.label) tr.className='sec';
+    if(anyLab){ const td=document.createElement('td'); td.className='lab'; td.textContent=r.label||''; tr.appendChild(td); }
+    let any=false; r.cells.forEach((c,k)=>{ if(!show[k]) return; const td=document.createElement('td'); td.textContent=c||''; if(c) any=true; if(k===mine) td.className='mine'; tr.appendChild(td); });
+    if(!any&&!r.label) tr.classList.add('empty'); tb.appendChild(tr); });
+  t.appendChild(tb);
+  $('#sheetView').hidden=false; document.body.style.overflow='hidden';
+}
+function closeSheet(){ if($('#sheetView').hidden) return; $('#sheetView').hidden=true; document.body.style.overflow=''; }
 function partKey(n){ n=String(n||'').toLowerCase(); const num=(n.match(/\d/)||[''])[0]; const v=/^s|sop/.test(n)?'s':/^a|alt/.test(n)?'a':/^t|ten/.test(n)?'t':/^b|bas|bar/.test(n)?'b':''; return {v,num}; }
 function bestColumn(cols,part){ const p=partKey(part); let best=-1,score=0; cols.forEach((c,i)=>{ const k=partKey(c.name); const sc=(k.v&&k.v===p.v?2:0)+(k.num&&k.num===p.num?1:0)+(!k.num&&k.v===p.v?0.5:0); if(sc>score){ score=sc; best=i; } }); return best; }
 async function importLyricsPdf(file){
   setStatus('Reading the lyrics PDF…');
   try{
-    const cols=(await pdfColumns(file)).filter(c=>c.lines.length); if(!cols.length) throw new Error('no lyrics found in the columns');
+    const sheet=await pdfSheet(file), cols=sheetColumns(sheet).filter(c=>c.lines.length); if(!cols.length) throw new Error('no lyrics found in the columns');
+    S.sheet=sheet; if(S.cur&&S.cur.libId!=null) libUpdate(S.cur.libId,{sheet}).catch(()=>{}); renderSheetBtns();
     S.pdfCols=cols; const sel=$('#lyrPdfCol'); sel.innerHTML='';
     cols.forEach((c,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=c.name+' ('+c.lines.length+' lines)'; sel.appendChild(o); });
     const k=bestColumn(cols,S.curPart||S.part); sel.value=String(k<0?0:k); $('#lyrPdfRow').hidden=false; fillFromPdf();
-    setStatus('Found '+cols.length+' parts in the PDF. Pick the column, check the lines, then tap Use these lines.');
+    setStatus('Found '+cols.length+' parts in the PDF. Pick the column, check the lines, then tap Use these lines. The whole table is kept: tap Lyrics sheet to see it.');
   }catch(e){ setStatus('Could not read the lyrics PDF: '+((e&&e.message)||'unknown error')+'.',true); }
 }
 function fillFromPdf(){ const c=S.pdfCols&&S.pdfCols[+$('#lyrPdfCol').value]; if(c) $('#lyrText').value=c.lines.join('\n'); }
@@ -2269,7 +2344,7 @@ async function addCurrentToLib(btn){
   try{
     const name=$('#songName').textContent.trim()||'Song';
     const pcm=await toInt16(S.guideBuf,LIB_SR);
-    const id=await libPut({name,part:S.part,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,view:S.viewManual?{...S.view}:null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
+    const id=await libPut({name,part:S.part,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,view:S.viewManual?{...S.view}:null,sheet:S.sheet||null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
     let note='Added to the library.';
     if(S.backBuf){
       try{ const bb=S.curBackBlob||await encodeMp3(S.backBuf,96,p=>setStatus('Saving the backing track… '+Math.round(p*100)+'%'));
@@ -2329,6 +2404,10 @@ $('#edPlay').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 updateSelInfo();
 $('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>e.target.value=''); });
 $('#lyrPdfCol').addEventListener('change',fillFromPdf);
+$('#sheetOpen').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
+$('#sheetOpen2').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
+$('#sheetClose').addEventListener('click',closeSheet);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
 $('#lyrApply').addEventListener('click',applyLyricText);
 $('#lyrAuto').addEventListener('click',()=>autoPlace(false));
 $('#lyrTap').addEventListener('click',()=>S.tap?stopTap():startTap());
