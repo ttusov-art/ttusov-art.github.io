@@ -549,7 +549,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
           <option value="tone">Guide tone</option>
           <option value="piano">Piano</option>
         </select>
-        <span class="small">Tap a key on the keyboard left of the pitch lane to hear its note, also while the song plays.</span>
+        <span class="small">Tap a key on the keyboard left of the pitch lane to hear its note, also while the song plays. Its volume follows the guide tone volume.</span>
       </div>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
       <div class="field">
@@ -611,7 +611,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 e';
+const APP_VERSION='2026-10-25 g';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2576,9 +2576,11 @@ const pinchMid=()=>{ const v=[...touchPts.values()]; return (v[0]+v[1])/2; };
 // keyboard column: drag to move the note range up or down, pinch to show more or fewer notes, double-tap for the automatic range
 let kb=null, kbLastTap=0, kbSaveTimer=null;
 // playable keyboard: one note at a time, sounds while held
+// key volume follows the guide tone slider (at off, the keys still sound quietly)
+function keyVol(){ const v=+$('#volTone').value; return (v>0?v:0.12)*0.45; }
 function keyNoteOn(m){
   const c=ensureCtx(); if(c.state==='suspended') c.resume(); keyNoteOff(true);
-  const t=c.currentTime, f=m2f(m), out=c.createGain(); out.gain.value=0.5; out.connect(S.limiter);
+  const t=c.currentTime, f=m2f(m), out=c.createGain(); out.gain.value=keyVol(); out.connect(S.limiter);
   const env=c.createGain(); env.gain.setValueAtTime(0,t); env.connect(out); const oscs=[];
   if(S.keySound==='piano'){
     // a few partials with a quick attack and a natural fade, brighter at the start
@@ -3027,7 +3029,7 @@ $('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBack
 const pct=v=>Math.round(v*100)+'%';
 $('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); });
 $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
-$('#volTone').addEventListener('input',e=>{ const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; S.toneMuted=v<=0; try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){} paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); });
+$('#volTone').addEventListener('input',e=>{ if(S.key) S.key.out.gain.setTargetAtTime(keyVol(),S.ctx.currentTime,0.02); const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; S.toneMuted=v<=0; try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){} paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); });
 $('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} if(!S.mic){ setStatus('Microphone chosen. It is used when you turn the microphone on.'); return; } const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; paintMic(); if(was) play(); });
 $('#delay').addEventListener('input',e=>setDelay(+e.target.value));
 $('#calBtn').addEventListener('click',measureDelay);
