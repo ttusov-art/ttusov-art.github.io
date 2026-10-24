@@ -587,7 +587,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 k';
+const APP_VERSION='2026-10-24 l';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1865,7 +1865,7 @@ function startTap(){
   S.loop.on=false; $('#loopOn').checked=false; updateLoopUI();
   S.tap={i,hist:[]}; $('#lyrBar').classList.add('tap'); $('#lyrUndo').hidden=false; $('#lyrUndo').disabled=true; $('#lyrBar').hidden=false; $('#lyrTap').textContent='Stop timing';
   S.lyrBarKey=null; updateLyricBar(from);
-  setStatus('Tap the lyrics bar (or press Space) at the start of each line. You can also pause, drag the playhead to the exact spot and tap. Undo takes back the last tap.');
+  setStatus('Tap the lyrics bar (or press Space) at the start of each line. You can also pause, drag the playhead to the exact spot and tap. Drag a line’s label at the bottom of the lane to nudge it. Undo takes back the last step.');
   seek(from); if(!S.playing) play();
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -1884,8 +1884,8 @@ function tapNow(){
 }
 function tapUndo(){
   if(!S.tap||!S.tap.hist.length) return;
-  const rec=S.tap.hist.pop(); S.lyrics[rec.i].t=rec.t; rec.cleared.forEach(([j,t])=>{ S.lyrics[j].t=t; }); S.tap.i=rec.i;
-  $('#lyrUndo').disabled=!S.tap.hist.length; setStatus('Undone. Tap again for: '+S.lyrics[rec.i].text);
+  const rec=S.tap.hist.pop(); S.lyrics[rec.i].t=rec.t; rec.cleared.forEach(([j,t])=>{ S.lyrics[j].t=t; }); S.tap.i=rec.moved?rec.back:rec.i;
+  $('#lyrUndo').disabled=!S.tap.hist.length; setStatus(rec.moved?'Move undone.':'Undone. Tap again for: '+S.lyrics[rec.i].text);
   S.lyrBarKey=null; lyrChanged();
 }
 function updateLyricBar(now){
@@ -2377,15 +2377,19 @@ function draw(){
   // lyric line starts along the bottom of the lane
   if(S.lyrShow&&S.lyrics.length){
     g.font='500 12px '+col('--font-body'); g.textAlign='left'; g.textBaseline='bottom';
-    const timed=S.lyrics.filter(l=>l.t!=null);
+    const timed=S.lyrics.filter(l=>l.t!=null); S.lyrHits=[];
     for(let k=0;k<timed.length;k++){
       const L=timed[k], x=xOf(L.t); if(x>w||x<LABELW-400) continue;
-      const xn=k+1<timed.length?xOf(timed[k+1].t):w, room=Math.max(0,Math.min(w,xn)-x-10); if(room<24) continue;
+      const drag=S.lyrDrag&&S.lyrics[S.lyrDrag.i]===L, tickCol=drag?col('--accent'):S.tap?col('--loop-edge'):col('--lane-c');
+      if(x>=LABELW){ g.fillStyle=tickCol; g.fillRect(Math.round(x)-(S.tap?1:0),h-22,S.tap?2:1,22); }
+      const xn=k+1<timed.length?xOf(timed[k+1].t):w, room=Math.max(0,Math.min(w,xn)-x-10);
+      if(room<24){ S.lyrHits.push({i:S.lyrics.indexOf(L),x,x1:x+10}); continue; }
       let txt=L.text; while(txt.length>1&&g.measureText(txt).width>room-8) txt=txt.slice(0,-2)+'…';
       const tw=g.measureText(txt).width, x0=Math.max(LABELW+2,x);
-      g.fillStyle=col('--lane-c'); if(x>=LABELW) g.fillRect(Math.round(x),h-22,1,22);
       g.fillStyle=col('--lyr-bg'); g.fillRect(x0+3,h-20,tw+8,17);
+      if(drag){ g.strokeStyle=col('--accent'); g.lineWidth=1.5; g.strokeRect(x0+3.5,h-19.5,tw+7,16); }
       g.fillStyle=col('--fg'); g.fillText(txt,x0+7,h-6);
+      S.lyrHits.push({i:S.lyrics.indexOf(L),x,x1:x0+tw+11});
     }
   }
   updateLyricBar(now);
@@ -2423,7 +2427,15 @@ function kbMove(){ const v=[...kb.pts.values()];
   if(v.length===1){ const d=(v[0]-kb.y0)/kb.rh0; if(Math.abs(v[0]-kb.y0)>4) kb.moved=true; const sh=Math.round(d); setViewRange(kb.lo0+sh,kb.hi0+sh); }
   else if(v.length>=2){ kb.moved=true; const d=Math.max(20,Math.abs(v[0]-v[1])), span=Math.max(8,Math.min(60,Math.round((kb.hi0-kb.lo0+1)*kb.d0/d)-1)), rect=canvas.getBoundingClientRect(), rh=(rect.height-8)/(span+1), mid=(v[0]+v[1])/2;
     const hi=kb.c0-0.5+(mid-kb.top-4)/rh; setViewRange(Math.round(hi)-span,Math.round(hi)); } }
+function lyricHitAt(e){
+  if(!S.tap||!S.lyrHits||!S.lyrHits.length) return null; const r=canvas.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+  if(y<r.height-30) return null; let best=null,bd=1e9;
+  for(const hb of S.lyrHits){ if(x>=hb.x-12&&x<=hb.x1){ const d=Math.abs(x-hb.x); if(d<bd){ bd=d; best=hb; } } } return best;
+}
 canvas.addEventListener('pointerdown',e=>{
+  const lh=touchPts.size===0&&!kb?lyricHitAt(e):null;
+  if(lh){ const L=S.lyrics[lh.i], prev=S.lyrics.slice(0,lh.i).filter(l=>l.t!=null).pop(), next=S.lyrics.slice(lh.i+1).find(l=>l.t!=null);
+    S.lyrDrag={i:lh.i,x0:e.clientX,t0:L.t,min:prev?prev.t+0.05:0,max:next?next.t-0.05:S.dur}; canvas.setPointerCapture(e.pointerId); e.preventDefault(); draw(); return; }
   if(kb||(e.clientX-canvas.getBoundingClientRect().left<LABELW&&touchPts.size===0)){
     if(!kb) kb={pts:new Map(),moved:false}; kb.pts.set(e.pointerId,e.clientY); kbStart(); canvas.setPointerCapture(e.pointerId); e.preventDefault(); return; }
   touchPts.set(e.pointerId,e.clientX);
@@ -2433,8 +2445,9 @@ canvas.addEventListener('pointerdown',e=>{
   drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX)}; canvas.setPointerCapture(e.pointerId);
   const d=drag; d.timer=setTimeout(()=>{ if(drag===d&&!d.moved){ d.long=true; holdLoopPoint(d.t); } },550); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-canvas.addEventListener('pointermove',e=>{ if(kb&&kb.pts.has(e.pointerId)){ kb.pts.set(e.pointerId,e.clientY); kbMove(); return; } if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
+canvas.addEventListener('pointermove',e=>{ if(S.lyrDrag){ const d=S.lyrDrag, pps=(canvas.clientWidth-LABELW)/S.win; let t=lyrT(d.t0+(e.clientX-d.x0)/pps); if(t<d.min) t=lyrT(d.min+(S.beat&&S.snap?beatP()/2:0)); if(t>d.max) t=lyrT(d.max-(S.beat&&S.snap?beatP()/2:0)); if(t>=d.min&&t<=d.max) S.lyrics[d.i].t=t; draw(); return; } if(kb&&kb.pts.has(e.pointerId)){ kb.pts.set(e.pointerId,e.clientY); kbMove(); return; } if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,e.clientX); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
+  if(S.lyrDrag){ const d=S.lyrDrag; S.lyrDrag=null; const L=S.lyrics[d.i]; if(L.t!==d.t0){ if(S.tap) S.tap.hist.push({i:d.i,t:d.t0,cleared:[],moved:true,back:S.tap.i}); $('#lyrUndo').disabled=false; setStatus('“'+L.text+'” moved to '+fmtT1(L.t)+'.'); } lyrChanged(); return; }
   if(kb&&kb.pts.has(e.pointerId)){ kb.pts.delete(e.pointerId);
     if(kb.pts.size){ kbStart(); return; }
     if(!kb.moved&&ev==='pointerup'){ const now=Date.now(); if(now-kbLastTap<350){ S.viewManual=false; computeView(); draw(); setStatus('Note range set back to automatic.'); kbLastTap=0; } else kbLastTap=now; }
