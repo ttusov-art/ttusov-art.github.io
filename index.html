@@ -601,7 +601,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 z';
+const APP_VERSION='2026-10-25 a';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1217,10 +1217,25 @@ async function renderLib(){
     mk('Save vocals',b=>saveLibVocals(s.id,b));
     if(S.parts.length>1){ const mv=document.createElement('select'); mv.className='sel move'; mv.setAttribute('aria-label','Move to another part');
       mv.innerHTML='<option value="">Move to…</option>'; S.parts.filter(n=>n!==S.part).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; mv.appendChild(o); });
-      mv.addEventListener('change',async()=>{ if(!mv.value) return; const rec=await libGet(s.id); if(rec){ rec.part=mv.value; await libPut(rec); } setStatus(s.name+' moved to '+mv.value+'.'); renderLib(); }); row.appendChild(mv); }
+      mv.addEventListener('change',async()=>{ if(!mv.value) return; const rec=await libGet(s.id); if(rec){ rec.part=mv.value; await libPut(rec); } setStatus(s.name+' moved to '+mv.value+'.'); renderLib(); }); row.appendChild(mv);
+      const cp=document.createElement('select'); cp.className='sel move'; cp.setAttribute('aria-label','Copy to another part');
+      cp.innerHTML='<option value="">Copy to…</option>'; S.parts.filter(n=>n!==S.part).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; cp.appendChild(o); });
+      cp.addEventListener('change',async()=>{ const to=cp.value; cp.value=''; if(to) await copySongTo(s.id,to); }); row.appendChild(cp); }
     mk('Delete',b=>{ if(b.dataset.armed){ libDel(s.id).then(renderLib); return; } b.dataset.armed='1'; b.textContent='Tap again to delete'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; b.classList.remove('danger'); } },4000); });
     list.appendChild(row);
   }
+}
+// copy a song (audio, pitch line, lyrics, timing, sheet, backings, beat grid) into another part
+async function copySongTo(id,part){
+  const src=await libGet(id); if(!src) return;
+  const same=(await libList()).find(x=>partOf(x)===part&&x.name===src.name);
+  const data={...src}; delete data.id; delete data.uid; delete data.updated; data.part=part;
+  if(same){
+    if(!confirm(part+' already has “'+src.name+'”. Replace its pitch line, lyrics, timing and backings with this one?')) return;
+    const rec={...data,id:same.id,uid:same.uid,created:same.created}; await libPut(rec);
+    setStatus('“'+src.name+'” in '+part+' now matches this one.');
+  } else { data.created=Date.now(); await libPut(data); setStatus('“'+src.name+'” copied to '+part+'.'); }
+  renderLib();
 }
 async function openLibSong(id,auto){
   stop(); setStatus(auto?'Opening your last song…':'Opening from the library…');
