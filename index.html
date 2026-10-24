@@ -125,8 +125,18 @@ table.sheet th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;colo
 table.sheet td{vertical-align:top;padding:6px;overflow-wrap:anywhere}
 table.sheet .lab{width:70px;font-size:11px;font-weight:600;letter-spacing:0;text-transform:uppercase;color:var(--muted);overflow-wrap:normal;word-break:normal;hyphens:none}
 table.sheet tr.sec td{border-top:1px solid var(--line);padding-top:10px}
-table.sheet .mine{background:var(--accent-soft)}
-table.sheet th.mine{color:var(--accent)}
+table.sheet{--sec-intro:rgba(90,106,118,.07);--sec-verse:rgba(59,91,219,.07);--sec-pre:rgba(200,111,12,.08);--sec-chorus:rgba(12,113,101,.09);--sec-bridge:rgba(140,80,190,.08);--sec-mine:rgba(19,33,43,.05);
+  --edge-intro:rgba(90,106,118,.55);--edge-verse:rgba(59,91,219,.6);--edge-pre:rgba(200,111,12,.65);--edge-chorus:rgba(12,113,101,.7);--edge-bridge:rgba(140,80,190,.6)}
+@media (prefers-color-scheme: dark){ table.sheet{--sec-intro:rgba(147,163,174,.07);--sec-verse:rgba(138,164,255,.08);--sec-pre:rgba(240,160,60,.08);--sec-chorus:rgba(59,182,164,.09);--sec-bridge:rgba(190,140,255,.08);--sec-mine:rgba(255,255,255,.05);
+  --edge-intro:rgba(147,163,174,.5);--edge-verse:rgba(138,164,255,.6);--edge-pre:rgba(240,160,60,.6);--edge-chorus:rgba(59,182,164,.65);--edge-bridge:rgba(190,140,255,.6)} }
+table.sheet td.mine{background-image:linear-gradient(var(--sec-mine),var(--sec-mine));font-weight:500}
+table.sheet th.mine{color:var(--fg)}
+table.sheet tr.st-intro td{background-color:var(--sec-intro)} table.sheet tr.st-intro td.lab{box-shadow:inset 3px 0 var(--edge-intro)}
+table.sheet tr.st-verse td{background-color:var(--sec-verse)} table.sheet tr.st-verse td.lab{box-shadow:inset 3px 0 var(--edge-verse)}
+table.sheet tr.st-pre td{background-color:var(--sec-pre)} table.sheet tr.st-pre td.lab{box-shadow:inset 3px 0 var(--edge-pre)}
+table.sheet tr.st-chorus td{background-color:var(--sec-chorus)} table.sheet tr.st-chorus td.lab{box-shadow:inset 3px 0 var(--edge-chorus)}
+table.sheet tr.st-bridge td{background-color:var(--sec-bridge)} table.sheet tr.st-bridge td.lab{box-shadow:inset 3px 0 var(--edge-bridge)}
+table.sheet td.lab{padding-left:9px}
 table.sheet tr.empty{display:none}
 @media (max-width:480px){ table.sheet{font-size:13px} table.sheet .lab{width:58px;font-size:10px} table.sheet td{padding:6px 4px} }
 .upd-btn{border-color:var(--accent);color:var(--accent);font-weight:600}
@@ -551,7 +561,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 c';
+const APP_VERSION='2026-10-24 d';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1676,7 +1686,10 @@ function openSheet(){
   sh.cols.forEach((n,k)=>{ if(!show[k]) return; const th=document.createElement('th'); th.textContent=n; if(k===mine) th.className='mine'; hr.appendChild(th); });
   const thead=document.createElement('thead'); thead.appendChild(hr); t.appendChild(thead);
   const tb=document.createElement('tbody');
-  sh.rows.forEach(r=>{ const tr=document.createElement('tr'); if(r.label) tr.className='sec';
+  const secType=l=>{ l=String(l||'').toLowerCase(); return /pre/.test(l)?'pre':/chor|refrain|kehr/.test(l)?'chorus':/verse|strophe|stro/.test(l)?'verse':/bridge|middle|brücke/.test(l)?'bridge':/intro|outro|coda|ending|end|tag/.test(l)?'intro':null; };
+  let st='intro', alt=0;
+  sh.rows.forEach(r=>{ const tr=document.createElement('tr'); if(r.label){ st=secType(r.label)||['verse','chorus','bridge','pre'][alt++%4]; }
+    tr.className=(r.label?'sec ':'')+'st-'+st;
     if(anyLab){ const td=document.createElement('td'); td.className='lab'; td.textContent=r.label||''; tr.appendChild(td); }
     let any=false; r.cells.forEach((c,k)=>{ if(!show[k]) return; const td=document.createElement('td'); td.textContent=c||''; if(c) any=true; if(k===mine) td.className='mine'; tr.appendChild(td); });
     if(!any&&!r.label) tr.classList.add('empty'); tb.appendChild(tr); });
