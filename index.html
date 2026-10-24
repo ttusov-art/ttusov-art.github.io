@@ -601,7 +601,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 c';
+const APP_VERSION='2026-10-25 d';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1729,11 +1729,37 @@ async function loadPdfJs(){
   return pdfjsLib;
 }
 // read the PDF table into a sheet: title, part columns, rows (with section labels on the left)
+// vertical border lines of a PDF page (table grid), as {x, y0, y1} from the top of the page
+async function pdfVLines(lib,pg,H){
+  const ol=await pg.getOperatorList(), O=lib.OPS; let ctm=[1,0,0,1,0,0], last=null; const st=[], out=[];
+  const mul=(m,n)=>[m[0]*n[0]+m[2]*n[1],m[1]*n[0]+m[3]*n[1],m[0]*n[2]+m[2]*n[3],m[1]*n[2]+m[3]*n[3],m[0]*n[4]+m[2]*n[5]+m[4],m[1]*n[4]+m[3]*n[5]+m[5]];
+  const ap=(x,y)=>[ctm[0]*x+ctm[2]*y+ctm[4],H-(ctm[1]*x+ctm[3]*y+ctm[5])];
+  const hz=[]; const seg=(a,b)=>{ if(Math.abs(a[0]-b[0])<0.6&&Math.abs(a[1]-b[1])>2) out.push({x:(a[0]+b[0])/2,y0:Math.min(a[1],b[1]),y1:Math.max(a[1],b[1])}); else if(Math.abs(a[1]-b[1])<0.6&&Math.abs(a[0]-b[0])>2) hz.push({y:(a[1]+b[1])/2,x0:Math.min(a[0],b[0]),x1:Math.max(a[0],b[0])}); };
+  for(let i=0;i<ol.fnArray.length;i++){ const f=ol.fnArray[i], a=ol.argsArray[i];
+    if(f===O.save) st.push(ctm.slice()); else if(f===O.restore) ctm=st.pop()||[1,0,0,1,0,0]; else if(f===O.transform) ctm=mul(ctm,a);
+    else if(f===O.constructPath) last=a;
+    else if((f===O.stroke||f===O.closeStroke||f===O.fill||f===O.eoFill||f===O.fillStroke)&&last){ const [ops,args]=last; let k=0, cur=null, start=null; const pts=[];
+      for(const op of ops){
+        if(op===O.moveTo){ cur=start=ap(args[k],args[k+1]); pts.length=0; pts.push(cur); k+=2; }
+        else if(op===O.lineTo){ const p=ap(args[k],args[k+1]); k+=2; if(f===O.stroke||f===O.closeStroke) seg(cur,p); cur=p; pts.push(p); }
+        else if(op===O.rectangle){ const x=args[k],y=args[k+1],w=args[k+2],h=args[k+3]; k+=4; const p1=ap(x,y),p2=ap(x+w,y+h);
+          if(f===O.stroke){ seg(p1,[p1[0],p2[1]]); seg([p2[0],p1[1]],p2); seg(p1,[p2[0],p1[1]]); seg([p1[0],p2[1]],p2); } else if(Math.abs(p2[0]-p1[0])<2.5) seg([(p1[0]+p2[0])/2,p1[1]],[(p1[0]+p2[0])/2,p2[1]]); else if(Math.abs(p2[1]-p1[1])<2.5) seg([p1[0],(p1[1]+p2[1])/2],[p2[0],(p1[1]+p2[1])/2]); }
+        else if(op===O.curveTo){ k+=6; } else if(op===O.curveTo2||op===O.curveTo3){ k+=4; }
+        else if(op===O.closePath){ if((f===O.stroke||f===O.closeStroke)&&cur&&start) seg(cur,start); }
+      }
+      if(f!==O.stroke&&f!==O.closeStroke&&pts.length>=4){ const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]), w=Math.max(...xs)-Math.min(...xs), hh=Math.max(...ys)-Math.min(...ys);
+        if(w<2.5) seg([(Math.max(...xs)+Math.min(...xs))/2,Math.min(...ys)],[(Math.max(...xs)+Math.min(...xs))/2,Math.max(...ys)]);
+        else if(hh<2.5) seg([Math.min(...xs),(Math.max(...ys)+Math.min(...ys))/2],[Math.max(...xs),(Math.max(...ys)+Math.min(...ys))/2]); }
+      last=null; }
+  }
+  return {v:out,h:hz};
+}
 async function pdfSheet(file){
   const lib=await loadPdfJs(), doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
-  const pages=[];
+  const pages=[], vlines=[], hlines=[];
   for(let pn=1;pn<=doc.numPages;pn++){
     const pg=await doc.getPage(pn), vp=pg.getViewport({scale:1}), tc=await pg.getTextContent();
+    try{ const g=await pdfVLines(lib,pg,vp.height); vlines.push(g.v); hlines.push(g.h); }catch(e){ vlines.push([]); hlines.push([]); }
     const items=tc.items.filter(it=>it.str&&it.str.trim()).map(it=>({s:it.str, x:it.transform[4], y:vp.height-it.transform[5], h:Math.abs(it.transform[3])||10, w:it.width||0}));
     items.sort((a,b)=>a.y-b.y||a.x-b.x); const rows=[];
     for(const it of items){ const r=rows[rows.length-1]; if(r&&Math.abs(r.y-it.y)<3) r.items.push(it); else rows.push({y:it.y,items:[it]}); }
@@ -1764,21 +1790,33 @@ async function pdfSheet(file){
   // a line only continues the cell above if the first word would not have fitted on that line
   const sp=hd.length>1?Math.min(...hd.slice(1).map((c,i)=>c.x-hd[i].x)):200;
   const colW=k=>k<0?(hd[0].x-8)-0:(k+1<K?hd[k+1].x-hd[k].x:sp);
-  const wraps=(prev,l)=>{ if(!prev.x1||!l.x1) return true; const cw=(l.x1-l.x0)/Math.max(1,l.s.length), fw=(l.s.split(' ')[0].length+1)*cw; return (prev.x1-prev.x0)+fw>colW(l.k)-16; };
+  // with a drawn table: the cell's real width runs to the next vertical border on the right (wider for merged cells),
+  // and a horizontal border between two lines always starts a new cell
+  const cellW=l=>{ const V=vlines[l.p]||[], y=l.y-3; let L=null,Rx=null; for(const v of V){ if(v.y0>y+1||v.y1<y-1) continue; if(v.x<=l.x0+1&&(L==null||v.x>L)) L=v.x; if(v.x>l.x0+6&&(Rx==null||v.x<Rx)) Rx=v.x; } return L!=null&&Rx!=null?Rx-L:colW(l.k); };
+  const ruled=(prev,l)=>(hlines[l.p]||[]).some(h=>h.y>prev.y+1&&h.y<l.y-l.h*0.5&&h.x0<=l.x0+4&&h.x1>=l.x0+4);
+  // a line starting with a capital letter (other than the word I) begins a new lyric line
+  const capStart=t=>/^["“'‘(]?[A-ZÀ-Ý]/.test(t)&&!/^["“'‘(]?I([\s'’]|$)/.test(t);
+  const wraps=(prev,l)=>{ if(ruled(prev,l)||capStart(l.s)) return false; if(!prev.x1||!l.x1) return true; const cw=(l.x1-l.x0)/Math.max(1,l.s.length), fw=(l.s.split(' ')[0].length+1)*cw; return (prev.x1-prev.x0)+fw>cellW(prev)-16; };
   const cells=[];
   for(let k=-1;k<K;k++){ let cur=null, prev=null; lines.filter(l=>l.k===k).sort((a,b)=>a.p-b.p||a.y-b.y).forEach(l=>{
-    if(cur&&cur.p===l.p&&l.y-cur.last<=lead*1.12&&(k<0||wraps(prev,l))){ cur.parts.push(l.s); cur.last=l.y; cur.bottom=l.y+l.h; prev=l; return; }
+    if(cur&&cur.p===l.p&&l.y-cur.last<=lead*1.12&&(k<0?!ruled(prev,l):wraps(prev,l))){ cur.parts.push(l.s); cur.last=l.y; cur.bottom=l.y+l.h; prev=l; return; }
     prev=l;
     cur={p:l.p,k,top:l.y,last:l.y,bottom:l.y+l.h,parts:[l.s]}; cells.push(cur); }); }
   // rows: cells whose vertical extent overlaps belong to the same table row
+  // merged table cells: no border line between two columns next to a cell means the text belongs to both
+  const bx=vlines.map(V=>hd.map((h,j)=>{ if(j===0) return null; const c=V.filter(v=>v.x<=h.x+3&&v.x>=h.x-24); if(!c.length) return null;
+    const by={}; c.forEach(v=>{ const k=Math.round(v.x); by[k]=(by[k]||0)+(v.y1-v.y0); }); return +Object.keys(by).sort((a,b)=>by[b]-by[a])[0]; }));
+  const border=(p,j,y)=>{ const x=bx[p]&&bx[p][j]; if(x==null) return true; return vlines[p].some(v=>Math.abs(v.x-x)<2.5&&v.y0<=y+1&&v.y1>=y-1); };
+  for(const c of cells.slice()){ if(c.k<0) continue; const y=c.top-3;
+    for(let j=c.k+1;j<K&&!border(c.p,j,y);j++) cells.push({...c,k:j,cont:true}); }
   cells.sort((a,b)=>a.p-b.p||a.top-b.top||a.k-b.k);
   const rows=[]; let row=null;
   for(const c of cells){
     const text=c.parts.join(' ').replace(/\s+/g,' ').trim();
-    if(!row||row.p!==c.p||c.top>row.bottom+1||(c.k>=0&&row.cells[c.k]!=null)||(c.k<0&&row.label)){ row={p:c.p,top:c.top,bottom:c.bottom,label:null,cells:new Array(K).fill(null)}; rows.push(row); }
-    if(c.k<0) row.label=text; else row.cells[c.k]=text; row.bottom=Math.max(row.bottom,c.bottom);
+    if(!row||row.p!==c.p||c.top>row.bottom+1||(c.k>=0&&row.cells[c.k]!=null)||(c.k<0&&row.label)){ row={p:c.p,top:c.top,bottom:c.bottom,label:null,cells:new Array(K).fill(null),cont:null}; rows.push(row); }
+    if(c.k<0) row.label=text; else { row.cells[c.k]=text; if(c.cont){ row.cont=row.cont||new Array(K).fill(false); row.cont[c.k]=true; } } row.bottom=Math.max(row.bottom,c.bottom);
   }
-  return {title,cols:hd.map(h=>h.name),rows:rows.map(r=>({label:r.label,cells:r.cells}))};
+  return {title,cols:hd.map(h=>h.name),rows:rows.map(r=>r.cont?{label:r.label,cells:r.cells,cont:r.cont}:{label:r.label,cells:r.cells})};
 }
 function sheetColumns(sheet){
   return sheet.cols.map((name,k)=>({name,lines:sheet.rows.map(r=>r.cells[k]).filter(Boolean).map(t=>t.replace(/\s*[—–-]{2,}\s*$/,'').trim()).filter(t=>t&&!/^\(.*\)$/.test(t)&&!/^\d+\.?$/.test(t))}));
@@ -1821,7 +1859,11 @@ function openSheet(){
   sh.rows.forEach((r,ri)=>{ const tr=document.createElement('tr'); if(r.label){ st=secType(r.label)||['verse','chorus','bridge','pre'][alt++%4]; }
     tr.className=(r.label?'sec ':'')+'st-'+st;
     if(anyLab){ const td=document.createElement('td'); td.className='lab'; td.textContent=r.label||''; tr.appendChild(td); }
-    let any=false; r.cells.forEach((c,k)=>{ const idx=(k===mine&&usable(clean(c)))?li++:-1; if(!show[k]) return; const td=document.createElement('td'); td.textContent=c||''; if(c) any=true;
+    let any=false, prevTd=null, prevK=-2; r.cells.forEach((c,k)=>{ const idx=(k===mine&&usable(clean(c)))?li++:-1; if(!show[k]) return;
+      if(r.cont&&r.cont[k]&&prevTd&&prevK===k-1&&prevTd.textContent===(c||'')){ prevTd.colSpan=(prevTd.colSpan||1)+1; prevK=k;
+        if(k===mine){ prevTd.classList.add('mine'); const sp=idx>=0?mineSpans[idx]:null; if(sp&&!prevTd.classList.contains('tap')){ prevTd.dataset.r=ri; prevTd.classList.add('tap'); prevTd.dataset.a=sp.a; prevTd.dataset.b=sp.b; prevTd.title='Tap to see the melody shape'; prevTd.setAttribute('role','button'); prevTd.tabIndex=0; } }
+        return; }
+      const td=document.createElement('td'); td.textContent=c||''; if(c) any=true; prevTd=td; prevK=k;
       if(k===mine){ td.className='mine'; const sp=idx>=0?mineSpans[idx]:null; if(sp){ td.dataset.r=ri; td.classList.add('tap'); td.dataset.a=sp.a; td.dataset.b=sp.b; td.title='Tap to see the melody shape'; td.setAttribute('role','button'); td.tabIndex=0; } }
       tr.appendChild(td); });
     if(!any&&!r.label) tr.classList.add('empty'); tb.appendChild(tr); });
