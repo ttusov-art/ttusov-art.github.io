@@ -600,7 +600,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 u';
+const APP_VERSION='2026-10-24 w';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1182,8 +1182,8 @@ async function renderLib(){
     list.appendChild(row);
   }
 }
-async function openLibSong(id){
-  stop(); setStatus('Opening from the library…');
+async function openLibSong(id,auto){
+  stop(); setStatus(auto?'Opening your last song…':'Opening from the library…');
   try{
     const s=await libGet(id); if(!s) throw new Error('song not found');
     const pcm=new Int16Array(s.pcm), f=new Float32Array(pcm.length); for(let i=0;i<pcm.length;i++) f[i]=pcm[i]/32768;
@@ -1195,9 +1195,11 @@ async function openLibSong(id){
     if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
     S.cur={libId:id,fromFile:false}; S.curPart=partOf(s); RT.cm=null; S.sheet=s.sheet||null; S.beat=s.beat?{...s.beat}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
     setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } songReady(s.name,s.name+' (vocals, from library)');
-    setStatus(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.');
-    window.scrollTo({top:0,behavior:'smooth'});
-  }catch(err){ setStatus('Could not open this song: '+((err&&err.message)||'unknown error')+'.',true); }
+    setStatus((auto?'Opened your last song, '+s.name+'. ':'')+(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.'));
+    try{ localStorage.setItem('pc-last',String(id)); }catch(e){}
+    if(!auto) window.scrollTo({top:0,behavior:'smooth'});
+    return true;
+  }catch(err){ if(!auto) setStatus('Could not open this song: '+((err&&err.message)||'unknown error')+'.',true); return false; }
 }
 async function saveLibVocals(id,btn){
   const s=await libGet(id); if(!s) return; btn.disabled=true; const old=btn.textContent; btn.textContent='Preparing…';
@@ -1751,17 +1753,18 @@ function openSheet(){
   const tb=document.createElement('tbody');
   const secType=l=>{ l=String(l||'').toLowerCase(); return /pre/.test(l)?'pre':/chor|refrain|kehr/.test(l)?'chorus':/verse|strophe|stro/.test(l)?'verse':/bridge|middle|brücke/.test(l)?'bridge':/intro|outro|coda|ending|end|tag/.test(l)?'intro':null; };
   let st='intro', alt=0;
-  sh.rows.forEach(r=>{ const tr=document.createElement('tr'); if(r.label){ st=secType(r.label)||['verse','chorus','bridge','pre'][alt++%4]; }
+  sh.rows.forEach((r,ri)=>{ const tr=document.createElement('tr'); if(r.label){ st=secType(r.label)||['verse','chorus','bridge','pre'][alt++%4]; }
     tr.className=(r.label?'sec ':'')+'st-'+st;
     if(anyLab){ const td=document.createElement('td'); td.className='lab'; td.textContent=r.label||''; tr.appendChild(td); }
     let any=false; r.cells.forEach((c,k)=>{ const idx=(k===mine&&usable(clean(c)))?li++:-1; if(!show[k]) return; const td=document.createElement('td'); td.textContent=c||''; if(c) any=true;
-      if(k===mine){ td.className='mine'; const sp=idx>=0?mineSpans[idx]:null; if(sp){ td.classList.add('tap'); td.dataset.a=sp.a; td.dataset.b=sp.b; td.title='Tap to see the melody shape'; td.setAttribute('role','button'); td.tabIndex=0; } }
+      if(k===mine){ td.className='mine'; const sp=idx>=0?mineSpans[idx]:null; if(sp){ td.dataset.r=ri; td.classList.add('tap'); td.dataset.a=sp.a; td.dataset.b=sp.b; td.title='Tap to see the melody shape'; td.setAttribute('role','button'); td.tabIndex=0; } }
       tr.appendChild(td); });
     if(!any&&!r.label) tr.classList.add('empty'); tb.appendChild(tr); });
   t.appendChild(tb);
   applySheetType(); $('#sheetView').hidden=false; document.body.style.overflow='hidden';
-  if(S.shapesAll==null){ try{ S.shapesAll=localStorage.getItem('pc-shapesall')==='1'; }catch(e){ S.shapesAll=false; } }
-  if(S.shapesAll) requestAnimationFrame(()=>setShapesAll(true)); else paintShapesAll();
+  // reopen the shapes that were open last time for this song
+  const open=shapesOpen(); paintShapesAll();
+  if(open.length) requestAnimationFrame(()=>{ document.querySelectorAll('#sheetTable td.tap').forEach(td=>{ if(open.includes(+td.dataset.r)&&!td.querySelector('.shape')) toggleShape(td,true); }); paintShapesAll(); });
 }
 // text size and font of the lyrics sheet (per device)
 const SHEET_FONTS={app:'var(--font-body)',atkinson:'"Atkinson Hyperlegible",Verdana,system-ui,sans-serif',verdana:'Verdana,"DejaVu Sans","Segoe UI",system-ui,sans-serif',serif:'Georgia,"Times New Roman",serif'};
@@ -1789,7 +1792,8 @@ function mapCells(cells,LS){
     const a=LS.timeAt(at), b=LS.timeAt(at+n.length); p=at+n.length;
     if(a==null) return null; return {a,b:b==null||b<=a?a+4:b}; });
 }
-function toggleShape(td){
+function toggleShape(td,quiet){
+  if(!quiet) setTimeout(()=>{ saveShapes(); paintShapesAll(); },0);
   const old=td.querySelector('.shape'); if(old){ old.remove(); return; }
   const box=document.createElement('div'); box.className='shape';
   const a=+td.dataset.a, b=Math.min(+td.dataset.b,a+15);
@@ -1807,11 +1811,13 @@ function toggleShape(td){
   for(const [t,m] of pts){ if(t<tStart||t>tEnd) continue; if(isNaN(m)){ pen=false; continue; } if(pen&&pv&&t-pv>0.15) pen=false; if(pen) g2.lineTo(X(t),Y(m)); else { g2.moveTo(X(t),Y(m)); pen=true; } pv=t; }
   g2.stroke();
 }
-function paintShapesAll(){ const on=!!S.shapesAll; $('#shapesAll').setAttribute('aria-pressed',String(on)); $('#shapesAllLbl').textContent=on?'Hide all shapes':'Show all shapes'; $('#shapesAll').hidden=!document.querySelector('#sheetTable td.tap'); }
+function shapesKey(){ return S.cur&&S.cur.libId!=null?'pc-shapes-'+S.cur.libId:null; }
+function shapesOpen(){ const k=shapesKey(); if(!k) return []; try{ return JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){ return []; } }
+function saveShapes(){ const k=shapesKey(); if(!k) return; const r=[...document.querySelectorAll('#sheetTable td.tap')].filter(td=>td.querySelector('.shape')).map(td=>+td.dataset.r); try{ if(r.length) localStorage.setItem(k,JSON.stringify(r)); else localStorage.removeItem(k); }catch(e){} }
+function paintShapesAll(){ const taps=[...document.querySelectorAll('#sheetTable td.tap')], on=taps.length>0&&taps.every(td=>td.querySelector('.shape')); $('#shapesAll').setAttribute('aria-pressed',String(on)); $('#shapesAllLbl').textContent=on?'Hide all shapes':'Show all shapes'; $('#shapesAll').hidden=!document.querySelector('#sheetTable td.tap'); }
 function setShapesAll(on){
-  S.shapesAll=on; try{ localStorage.setItem('pc-shapesall',on?'1':'0'); }catch(e){}
-  document.querySelectorAll('#sheetTable td.tap').forEach(td=>{ const has=!!td.querySelector('.shape'); if(has!==on) toggleShape(td); });
-  paintShapesAll();
+  document.querySelectorAll('#sheetTable td.tap').forEach(td=>{ const has=!!td.querySelector('.shape'); if(has!==on) toggleShape(td,true); });
+  saveShapes(); paintShapesAll();
 }
 function closeSheet(){ if($('#sheetView').hidden) return; $('#sheetView').hidden=true; document.body.style.overflow=''; }
 function partKey(n){ n=String(n||'').toLowerCase(); const num=(n.match(/\d/)||[''])[0]; const v=/^s|sop/.test(n)?'s':/^a|alt/.test(n)?'a':/^t|ten/.test(n)?'t':/^b|bas|bar/.test(n)?'b':''; return {v,num}; }
@@ -2614,7 +2620,7 @@ $('#sheetClose').addEventListener('click',closeSheet);
 function setSheetCompact(on){ const bar=$('.sheet-bar'); bar.classList.toggle('compact',on); const b=$('#sheetMore'); b.setAttribute('aria-expanded',String(!on)); const t=on?'Show the sheet options':'Hide the sheet options'; b.title=t; b.setAttribute('aria-label',t); try{ localStorage.setItem('pc-sheetcompact',on?'1':'0'); }catch(e){} }
 $('#sheetMore').addEventListener('click',()=>setSheetCompact(!$('.sheet-bar').classList.contains('compact')));
 try{ if(localStorage.getItem('pc-sheetcompact')==='1') setSheetCompact(true); }catch(e){}
-$('#shapesAll').addEventListener('click',()=>setShapesAll(!S.shapesAll));
+$('#shapesAll').addEventListener('click',()=>setShapesAll($('#shapesAll').getAttribute('aria-pressed')!=='true'));
 $('#sheetOpen3').addEventListener('pointerdown',e=>e.stopPropagation());
 $('#lyrUndo').addEventListener('pointerdown',e=>e.stopPropagation());
 $('#lyrSkip').addEventListener('pointerdown',e=>e.stopPropagation());
@@ -2929,6 +2935,9 @@ async function makeDemo(){
 }
 (async()=>{
   size(); draw();
+  // reopen the song used last on this device; the demo only when there is none
+  let last=null; try{ last=localStorage.getItem('pc-last'); }catch(e){}
+  if(last!=null){ try{ ensureCtx(); const id=isNaN(+last)?last:+last; if(await libGet(id)&&await openLibSong(id,true)) return; }catch(e){} }
   try{ ensureCtx(); const d=await makeDemo(); S.guideBuf=d.buf; normalize(); setTarget(d.tt,d.mm); updateDur(); updateTime(); draw(); scheduleBeatDetect(false); }catch(e){}
 })();
 </script>
