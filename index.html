@@ -600,7 +600,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-24 w';
+const APP_VERSION='2026-10-24 x';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -703,7 +703,8 @@ function songReady(name,label){
   setTimeout(()=>scheduleBeatDetect(false),50);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
-  updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
+  S.songOpening=true; updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
+  if(S.pmode==='song') loopWholeSong(); S.songOpening=false; paintSongLoop();
 }
 async function loadGuide(file){
   stop(); setStatus('Loading '+file.name+'…');
@@ -893,7 +894,43 @@ function setLoopPoint(which,at){
   S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw();
 }
 function isWholeLoop(){ const L=S.loop; return L.on&&L.a!=null&&L.b!=null&&L.a<=0.05&&L.b>=S.dur-0.5; }
-function paintSongLoop(){ const b=document.getElementById('songLoop'); if(!b) return; const on=isWholeLoop(); b.setAttribute('aria-pressed',String(on)); b.classList.toggle('guide-on',on); b.title='Repeat the whole song: '+(on?'on':'off'); }
+// playback mode, cycled by the repeat button: off → repeat song → play part → repeat part → shuffle part
+const PMODES=['off','song','part','partloop','shuffle'];
+const PM_INFO={
+  off:['Repeat: off. Tap to repeat this song',''],
+  song:['Repeat this song','<text x="12" y="15.2" font-size="8.5" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">1</text>'],
+  part:['Play the part: the next song starts when this one ends',''],
+  partloop:['Repeat the whole part','<text x="12" y="14.8" font-size="6.5" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">all</text>'],
+  shuffle:['Shuffle the part','']
+};
+const PM_REPEAT='<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/>';
+const PM_ICON={off:PM_REPEAT,song:PM_REPEAT,partloop:PM_REPEAT,part:'<path d="M4 6h11M4 11h11M4 16h7"/><path d="M15 14l6 3.5-6 3.5z" fill="currentColor"/>',shuffle:'<path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/>'};
+function paintSongLoop(){ const b=document.getElementById('songLoop'); if(!b) return; if(S.pmode==null){ S.pmode='off'; try{ const v=localStorage.getItem('pc-pmode'); if(PMODES.includes(v)) S.pmode=v; }catch(e){} }
+  if(S.pmode==='song'&&!isWholeLoop()&&!S.songOpening){ S.pmode='off'; try{ localStorage.setItem('pc-pmode','off'); }catch(e){} }
+  const m=S.pmode, on=m!=='off'; b.setAttribute('aria-pressed',String(on)); b.classList.toggle('guide-on',on); b.title=PM_INFO[m][0]; b.setAttribute('aria-label',PM_INFO[m][0]);
+  b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+PM_ICON[m]+PM_INFO[m][1]+'</svg>'; }
+function setPMode(m){
+  const was=S.pmode; S.pmode=m; try{ localStorage.setItem('pc-pmode',m); }catch(e){}
+  if(m==='song') loopWholeSong();
+  else if(was==='song'&&isWholeLoop()){ S.loop.a=S.loop.b=null; S.loop.on=false; $('#loopOn').checked=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); }
+  if(m==='shuffle') S.shuf=null;
+  paintSongLoop();
+  const part=S.curPart||S.part;
+  setStatus({off:'The song plays once.',song:'This song repeats.',part:'Playing through '+part+': the next song (newest first) starts when this one ends.',partloop:'Repeating all songs of '+part+'.',shuffle:'Shuffling the songs of '+part+'.'}[m]);
+}
+async function playNextSong(){
+  const part=S.curPart||S.part, list=(await libList()).filter(x=>partOf(x)===part).sort((a,b)=>b.created-a.created);
+  if(!list.length) return;
+  const curId=S.cur&&S.cur.libId!=null?S.cur.libId:null, cur=list.findIndex(x=>x.id===curId); let next;
+  if(S.pmode==='shuffle'){
+    if(!S.shuf||!S.shuf.length){ const ids=list.map(x=>x.id).filter(id=>id!==curId); for(let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; } S.shuf=ids.length?ids:[list[0].id]; }
+    next=S.shuf.shift();
+  } else { let k=cur+1; if(k>=list.length){ if(S.pmode==='partloop') k=0; else { setStatus('That was the last song of '+part+'.'); return; } } next=list[k].id; }
+  const rate=S.rate; if(!(await openLibSong(next,true))) return;
+  if(rate!==1){ S.rate=rate; $('#tempo').value=String(rate); await prepareTempo(); }
+  const k=list.findIndex(x=>x.id===next); await play();
+  setStatus('Now playing: '+list[k].name+' ('+(k+1)+' of '+list.length+' in '+part+').');
+}
 function updateLoopUI(){
   { const L=S.loop; if(L.a!=null&&L.b!=null&&L.b-L.a>=0.5&&!L.on){ L.on=true; $('#loopOn').checked=true; } }
   paintSongLoop();
@@ -2239,7 +2276,7 @@ function step(){
   if(!S.playing) return;
   const now=songTime();
   if(loopActive()&&now>=S.loop.b){ loopRestart(); return; }
-  if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); return; }
+  if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); if(S.pmode==='part'||S.pmode==='partloop'||S.pmode==='shuffle') playNextSong(); return; }
   let you=NaN; updateTone(now); metSchedule(now);
   if(S.mic){
     const raw=micPitch();
@@ -2672,7 +2709,8 @@ $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
 $('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); });
 $('#play').addEventListener('click',()=>(S.playing||S.review)?stop():play());
-$('#songLoop').addEventListener('click',()=>{ if(isWholeLoop()){ S.loop.a=S.loop.b=null; S.loop.on=false; $('#loopOn').checked=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); setStatus('The song plays once.'); } else loopWholeSong(); });
+$('#songLoop').addEventListener('click',()=>{ const m=(S.pmode==='song'&&!isWholeLoop())?'off':S.pmode; setPMode(PMODES[(PMODES.indexOf(m)+1)%PMODES.length]); });
+paintSongLoop();
 $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop(); resetRun(true); S.pos=0; if(was) play(); else { updateTime(); draw(); } });
 function paintMic(){ const on=$('#micOn').checked, l=$('#micLbl'); l.classList.toggle('guide-on',on); l.title='Sing with microphone: '+(on?'on':'off'); }
 $('#micOn').addEventListener('change',async e=>{ paintMic(); if(e.target.checked){ const ok=await startMic(); if(!ok){ e.target.checked=false; paintMic(); } } else stopMic(); });
