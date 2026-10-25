@@ -322,6 +322,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="bHalf" type="button" title="Half the tempo">÷2</button>
         <button id="bDouble" type="button" title="Double the tempo">×2</button>
         <button id="bDetect" type="button">Detect</button>
+        <button id="bOne" type="button" title="Make the beat at the playhead the first beat of a bar">Beat 1 here</button>
+        <label class="small" for="bBpb">Beats per bar</label>
+        <select id="bBpb" class="sel" style="width:auto"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option></select>
         <label class="check" for="snapOn"><input id="snapOn" type="checkbox" checked>Snap</label>
         <span class="small" id="beatInfo"></span>
       </div>
@@ -629,7 +632,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 t';
+const APP_VERSION='2026-10-25 u';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1490,7 +1493,7 @@ function saveBeat(){ if(S.cur.libId==null) return; clearTimeout(beatSaveTimer); 
 function renderBeatInfo(msg){
   if(typeof renderLyrSnap==='function'&&document.getElementById('lyrSnapRow')) renderLyrics(false);
   const inp=$('#bpmIn'), has=!!S.beat;
-  ['bShiftL','bShiftR','bHalf','bDouble'].forEach(id=>$('#'+id).disabled=!has);
+  ['bShiftL','bShiftR','bHalf','bDouble','bOne','bBpb'].forEach(id=>$('#'+id).disabled=!has); $('#bBpb').value=String(beatsPerBar());
   if(has&&document.activeElement!==inp) inp.value=S.beat.bpm.toFixed(1); if(!has) inp.value='';
   $('#beatInfo').textContent=msg||(has?(S.beat.auto?'found from the '+(S.beat.from||'backing'):'adjusted by you'):'no beat grid yet');
 }
@@ -1508,6 +1511,7 @@ async function scheduleBeatDetect(force){
     saveBeat(); renderBeatInfo(); draw();
   }catch(e){ if(tok===S.beatTok) renderBeatInfo('could not find a beat'); }
 }
+function markBeatOne(){ if(!S.beat) return; const P=beatP(), t=S.playing?songTime():S.pos, k=Math.round((t-S.beat.offset)/P); S.beat.bar=S.beat.offset+k*P; S.beat.bpb=beatsPerBar(); beatEdited(); setStatus('Beat 1 set at '+fmtT1(S.beat.bar)+'. Bars of '+beatsPerBar()+' beats run through the song from here.'); }
 function beatEdited(){ if(!S.beat) return; S.beat.auto=false; saveBeat(); renderBeatInfo(); draw(); }
 function setBpm(bpm){
   if(!S.beat||!(bpm>=30&&bpm<=240)) return;
@@ -2373,12 +2377,21 @@ function tick(){
   if(!document.hidden) step();
   if(S.playing) requestAnimationFrame(tick);
 }
-// ===== metronome: a click on every beat of the song's beat grid, scheduled slightly ahead =====
-S.met={on:false,k:null,epoch:null,nodes:[]};
+// ===== bars: which beat is "1" (beat.bar = time of a first beat, beat.bpb = beats per bar) =====
+function beatsPerBar(){ return S.beat&&[2,3,4,6].includes(S.beat.bpb)?S.beat.bpb:4; }
+function barPos(k){ // position in the bar (0 = beat 1) of grid beat k (beat k is at offset + k·P)
+  const P=beatP(), n=beatsPerBar(), one=S.beat.bar!=null?Math.round((S.beat.bar-S.beat.offset)/P):0; return (((k-one)%n)+n)%n; }
+// ===== metronome: clicks on the beat grid, scheduled slightly ahead =====
+// modes: all beats (beat 1 accented) → backbeat (2 and 4) → beat 1 only → off
+const MET_MODES=['off','all','back','one'], MET_LABEL={off:'off',all:'all beats',back:'2 & 4',one:'beat 1'};
+S.met={on:false,mode:'off',k:null,epoch:null,nodes:[]};
+function metWants(pos){ const n=beatsPerBar(), m=S.met.mode;
+  if(m==='all') return true; if(m==='one') return pos===0;
+  if(m==='back') return n===3?pos!==0:n===6?pos===3:pos%2===1; return false; }
 function metClick(at,strong){
   const c=S.ctx, o=c.createOscillator(), g=c.createGain();
-  o.type='square'; o.frequency.value=strong?2000:1500;
-  g.gain.setValueAtTime(0.0001,at); g.gain.exponentialRampToValueAtTime(0.6,at+0.002); g.gain.exponentialRampToValueAtTime(0.0001,at+0.035);
+  o.type='square'; o.frequency.value=strong?2200:1400;
+  g.gain.setValueAtTime(0.0001,at); g.gain.exponentialRampToValueAtTime(strong?1:0.45,at+0.002); g.gain.exponentialRampToValueAtTime(0.0001,at+0.035);
   const f=c.createBiquadFilter(); f.type='bandpass'; f.frequency.value=o.frequency.value; f.Q.value=2;
   o.connect(f).connect(g).connect(S.gMet); o.start(at); o.stop(at+0.05);
   S.met.nodes.push(o); o.onended=()=>{ const i=S.met.nodes.indexOf(o); if(i>=0) S.met.nodes.splice(i,1); };
@@ -2389,10 +2402,11 @@ function metSchedule(now){
   if(S.met.epoch!==S.startAt){ metCancel(); S.met.epoch=S.startAt; }
   const P=60/S.beat.bpm, off=S.beat.offset, end=Math.min(now+0.25*S.rate,loopActive()?S.loop.b-0.01:S.dur);
   let k=S.met.k; if(k==null) k=Math.ceil((Math.max(now,S.pos0)-off)/P-1e-6);
-  for(;;){ const t=off+k*P; if(t>end) break; const at=S.startAt+(t-S.pos0)/S.rate; if(at>=S.ctx.currentTime) metClick(at,false); k++; }
+  for(;;){ const t=off+k*P; if(t>end) break; const at=S.startAt+(t-S.pos0)/S.rate; const pos=barPos(k); if(at>=S.ctx.currentTime&&metWants(pos)) metClick(at,pos===0&&S.met.mode!=='back'); k++; }
   S.met.k=k;
 }
-function setMetOn(on){ S.met.on=on; paintToggle('metBtn','Click',on); if(!on) metCancel(); try{localStorage.setItem('pc-met',on?'1':'0')}catch(x){} }
+function setMetMode(m){ S.met.mode=m; S.met.on=m!=='off'; const b=$('#metBtn'); b.setAttribute('aria-pressed',String(S.met.on)); b.classList.toggle('guide-on',S.met.on); b.textContent='Click: '+MET_LABEL[m]; metCancel(); try{localStorage.setItem('pc-met',m)}catch(x){} }
+function setMetOn(on){ setMetMode(on?'all':'off'); }
 function step(){
   if(!S.playing) return;
   const now=songTime();
@@ -2522,7 +2536,7 @@ function draw(){
   if(S.beat){
     const P=beatP(), q=P/4, showHalf=pps*P/2>=12, showQ=S.editMode&&S.snap&&fineSnap(), cb=col('--beat'), ch=col('--halfbeat');
     for(let k=Math.ceil((t0-S.beat.offset)/q);;k++){ const t=S.beat.offset+k*q; if(t>t1) break; const x=Math.round(xOf(t))+0.5; if(x<=LABELW) continue;
-      if(k%4===0){ g.fillStyle=cb; g.fillRect(x,0,1,h); } else if(k%2===0){ if(showHalf){ g.fillStyle=ch; g.fillRect(x,0,1,h); } }
+      if(k%4===0){ const bar=S.beat.bar!=null&&barPos(k/4)===0; g.fillStyle=cb; if(bar){ g.globalAlpha=1; g.fillRect(x-0.5,0,2,h); } else g.fillRect(x,0,1,h); } else if(k%2===0){ if(showHalf){ g.fillStyle=ch; g.fillRect(x,0,1,h); } }
       else if(showQ){ g.fillStyle=ch; g.globalAlpha=0.55; g.fillRect(x,0,1,h); g.globalAlpha=1; } }
   } else {
     g.fillStyle=col('--lane-line');
@@ -2787,9 +2801,11 @@ function setToneOn(on){
   paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){}
 }
 $('#backBtn').addEventListener('click',()=>{ setBackMuted(!S.backMuted); setStatus(S.backMuted?'Backing off.':'Backing on.'+(S.backBuf?'':' (No backing track is loaded for this song.)')); });
-$('#metBtn').addEventListener('click',()=>{ setMetOn(!S.met.on); setStatus(S.met.on?(S.beat?'Metronome on: a click on every beat ('+Math.round(S.beat.bpm*S.rate)+' BPM at this tempo).':'Metronome on. It starts clicking once the beat grid for this song is found.'):'Metronome off.'); });
+$('#metBtn').addEventListener('click',()=>{ const m=MET_MODES[(MET_MODES.indexOf(S.met.mode)+1)%MET_MODES.length]; setMetMode(m);
+  const bpm=S.beat?Math.round(S.beat.bpm*S.rate):0, noBar=S.beat&&S.beat.bar==null?' Mark the first beat of a bar with “Beat 1 here” in the editor so the accents fall right.':'';
+  setStatus(!S.beat&&m!=='off'?'Metronome on. It starts clicking once the beat grid for this song is found.':{off:'Metronome off.',all:'Click on every beat, beat 1 accented ('+bpm+' BPM).'+noBar,back:'Click on the backbeat (2 and 4).'+noBar,one:'Click on beat 1 of each bar only.'+noBar}[m]); });
 $('#volMet').addEventListener('input',e=>{ $('#volMetV').textContent=pct(+e.target.value); applyGains(); try{localStorage.setItem('pc-volmet',e.target.value)}catch(x){} });
-try{ const v=localStorage.getItem('pc-volmet'); if(v){ $('#volMet').value=v; $('#volMetV').textContent=Math.round(+v*100)+'%'; } if(localStorage.getItem('pc-met')==='1') setMetOn(true); }catch(x){}
+try{ const v=localStorage.getItem('pc-volmet'); if(v){ $('#volMet').value=v; $('#volMetV').textContent=Math.round(+v*100)+'%'; } { const mv=localStorage.getItem('pc-met'); if(mv==='1') setMetMode('all'); else if(MET_MODES.includes(mv)) setMetMode(mv); } }catch(x){}
 $('#toneBtn').addEventListener('click',()=>{ setToneOn(!toneIsOn()); setStatus(toneIsOn()?'Guide tone on.':'Guide tone off.'); });
 try{ if(localStorage.getItem('pc-back-muted')==='1') setBackMuted(true); }catch(x){}
 // volume sliders keep their last position on this device (the Tone toggle no longer moves its slider)
@@ -2803,6 +2819,8 @@ $('#edOne').addEventListener('click',edOneNote);
 $('#bpmIn').addEventListener('change',e=>{ const v=+e.target.value; if(!S.beat&&v>=30&&v<=240){ S.beat={bpm:v,offset:0,auto:false}; beatEdited(); } else setBpm(v); });
 $('#bShiftL').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=((S.beat.offset-0.02)%P+P)%P; beatEdited(); });
 $('#bShiftR').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=(S.beat.offset+0.02)%P; beatEdited(); });
+$('#bOne').addEventListener('click',markBeatOne);
+$('#bBpb').addEventListener('change',e=>{ if(!S.beat) return; S.beat.bpb=+e.target.value; beatEdited(); setStatus('Bars of '+S.beat.bpb+' beats.'); });
 $('#bHalf').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm/2); });
 $('#bDouble').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm*2); });
 $('#bDetect').addEventListener('click',()=>{ S.beat=null; scheduleBeatDetect(true); });
