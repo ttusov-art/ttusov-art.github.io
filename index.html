@@ -304,7 +304,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <button id="edOne" type="button" class="primary">One note</button>
       <button id="edFill" type="button">Fill</button>
       <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
-      <button id="edAlign" type="button" title="Move every note start and end to the nearest quarter of a beat">Align to grid</button>
+      <button id="edAlign" type="button" title="Move every note start and end to the nearest quarter of a beat (first moving the line if it is consistently early or late)">Align to grid</button>
+      <button id="edShL" type="button" title="Move the line (or the selection) a quarter beat earlier" aria-label="Move the line a quarter beat earlier">Line ◀</button>
+      <button id="edShR" type="button" title="Move the line (or the selection) a quarter beat later" aria-label="Move the line a quarter beat later">Line ▶</button>
       <button id="edUp" type="button" aria-label="Up a semitone">▲ ½</button>
       <button id="edDown" type="button" aria-label="Down a semitone">▼ ½</button>
       <button id="edOctUp" type="button">Octave ▲</button>
@@ -637,7 +639,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 ab';
+const APP_VERSION='2026-10-25 ac';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1712,6 +1714,23 @@ function warpSel(orig,a0,b0,a1,b1){
     if(t>=a1&&t<=b1){ const src=a0+(t-a1)*(b0-a0)/Math.max(1e-6,b1-a1); out[i]=orig[at(src)]; } else out[i]=NaN; }   // uncovered after squeezing: rest
   return out;
 }
+// how much to move a set of note starts so most land on beats and eighths (0 if no clear gain); at most about a quarter beat either way
+function bestLineShift(starts){
+  if(starts.length<6||!S.beat) return 0; const P=segAt(starts[0]).P, w=0.03, gs=x=>Math.exp(-0.5*(x/w)*(x/w));
+  const score=d=>{ let s=0; for(const t of starts){ const x=t+d, sg=segAt(x), u=(x-sg.off)/sg.P;
+      const db=Math.abs(u-Math.round(u))*sg.P, de=Math.abs(2*u-Math.round(2*u))*sg.P/2, dq=Math.abs(4*u-Math.round(4*u))*sg.P/4; s+=gs(db)+0.6*gs(de)+0.3*gs(dq); } return s; };
+  const s0=score(0); let bd=0, bs=s0; for(let d=-0.3*P;d<=0.3*P;d+=0.005){ const v=score(d); if(v>bs){ bs=v; bd=d; } }
+  return Math.abs(bd)>0.02&&bs>s0*1.15?bd:0;
+}
+// move the whole line (or the selected part) earlier / later by a quarter beat (0.05 s without a beat grid)
+function edShiftLine(dir){
+  if(!S.tT||!S.tM) return; const T=S.tT, M=S.tM, n=T.length, r=selRange(), i0=r?r.i0:0, i1=r?r.i1:n-1, dt=(T[n-1]-T[0])/Math.max(1,n-1);
+  const d=dir*(S.beat?beatP(r?r.a:curT())/4:0.05), k=Math.round(d/dt); if(!k) return;
+  pushUndo(); const out=Float32Array.from(M); for(let i=i0;i<=i1;i++) out[i]=NaN;
+  for(let i=i0;i<=i1;i++){ const j=i+k; if(j>=0&&j<n) out[j]=M[i]; }
+  if(S.sel){ S.sel={...S.sel,a:S.sel.a+k*dt,b:S.sel.b+k*dt}; updateSelInfo(); }
+  S.tM=out; targetEdited((r?'Selection':'Whole line')+' moved '+(dir<0?'earlier':'later')+' by '+(S.beat?'a quarter beat':'0.05 s')+'. Undo brings it back.');
+}
 function edAlign(){
   if(!S.tT||!S.tM) return; if(!S.beat){ setStatus('This song has no beat grid yet. Detect it or use Tap tempo first.',true); return; }
   const T=S.tT, M=S.tM, r=selRange(), i0=r?r.i0:0, i1=r?r.i1:T.length-1; if(i1-i0<2) return;
@@ -1723,13 +1742,17 @@ function edAlign(){
   // notes = runs of the same pitch
   const segs=[]; for(let i=i0;i<=i1;i++){ const m=M[i]; if(isNaN(m)) continue; const L=segs[segs.length-1];
     if(L&&L.m===m&&L.last===i-1){ L.last=i; L.b=T[i]+dt; } else segs.push({m,a:T[i],b:T[i]+dt,last:i}); }
+  // first find how far the line is consistently early or late (per tempo section) and move it by that, so notes snap to the right side
+  const groups=new Map(); for(const g of segs){ const k=segAt(g.a).i; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(g); }
+  const shifts=[]; for(const gs of groups.values()){ const d=bestLineShift(gs.map(g=>g.a)); if(d){ gs.forEach(g=>{ g.a+=d; g.b+=d; }); shifts.push(d); } }
   // snap the edges; a note that would shrink to nothing gives its time to its neighbour
   let fin=[]; for(const g of segs){ let a=Math.max(ta,Math.min(tb,snap(g.a))), b=Math.max(ta,Math.min(tb,snap(g.b))); const P=fin[fin.length-1];
     if(P&&a<P.b) a=P.b; if(b-a<beatP(g.a)/8){ if(P&&Math.abs(g.a-P.b)<dt*2) P.b=Math.max(P.b,b); continue; }
     if(P&&P.m===g.m&&Math.abs(P.b-a)<1e-6){ P.b=b; continue; } fin.push({m:g.m,a,b}); }
   pushUndo(); const out=Float32Array.from(M); for(let i=i0;i<=i1;i++) out[i]=NaN;
   let k=0; for(let i=i0;i<=i1;i++){ const t=T[i]; while(k<fin.length-1&&t>=fin[k].b-1e-9) k++; const g=fin[k]; if(g&&t>=g.a-1e-9&&t<g.b-1e-9) out[i]=g.m; }
-  S.tM=out; targetEdited('Aligned '+fin.length+' notes '+(r?'in '+fmtT1(r.a)+'–'+fmtT1(r.b):'in the whole song')+' to the nearest quarter beat. Undo brings the old line back.');
+  const sh=shifts.length?' The line was '+Math.round(Math.abs(shifts[0])*1000)+' ms '+(shifts[0]>0?'early':'late')+', so it was first moved '+(shifts[0]>0?'later':'earlier')+(shifts.length>1?' (each tempo section by its own amount)':'')+'.':'';
+  S.tM=out; targetEdited('Aligned '+fin.length+' notes '+(r?'in '+fmtT1(r.a)+'–'+fmtT1(r.b):'in the whole song')+' to the nearest quarter beat.'+sh+' Undo brings the old line back.');
 }
 function edSmooth(){
   if(!S.tT||!S.tM) return;
@@ -3011,6 +3034,8 @@ $('#edFill').addEventListener('click',edFill);
 $('#edRefind').addEventListener('click',e=>edRefind(e.currentTarget));
 $('#edSmooth').addEventListener('click',edSmooth);
 $('#edAlign').addEventListener('click',edAlign);
+$('#edShL').addEventListener('click',()=>edShiftLine(-1));
+$('#edShR').addEventListener('click',()=>edShiftLine(1));
 $('#edUp').addEventListener('click',()=>edShift(1));
 $('#edDown').addEventListener('click',()=>edShift(-1));
 $('#edOctUp').addEventListener('click',()=>edShift(12));
