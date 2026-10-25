@@ -283,7 +283,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </header>
 
   <section class="panel readout" aria-live="off">
-    <div id="rTargetBox" role="button" tabindex="0" title="Press to hear the target note"><span>Target ♪</span><b id="rTarget">–</b></div>
+    <div id="rTargetBox" role="button" tabindex="0" title="Press to hear the target note; hold while playing to hear the tune follow the line"><span>Target ♪</span><b id="rTarget">–</b></div>
     <div><span>You</span><b id="rYou">–</b></div>
     <div><span>Off by</span><b id="rCents">–</b></div>
     <div><span>On pitch</span><b id="rScore">–</b></div>
@@ -619,7 +619,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 l';
+const APP_VERSION='2026-10-25 m';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2385,7 +2385,7 @@ function step(){
   const now=songTime();
   if(loopActive()&&now>=S.loop.b){ loopRestart(); return; }
   if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); if(S.pmode==='part'||S.pmode==='partloop'||S.pmode==='shuffle') playNextSong(); return; }
-  let you=NaN; updateTone(now); metSchedule(now);
+  let you=NaN; updateTone(now); metSchedule(now); if(S.targetHold){ const v=targetAt(now); keyFollow(isNaN(v)?null:Math.round(v)); }
   if(S.mic){
     const raw=micPitch();
     S.micHist.push(raw); if(S.micHist.length>5) S.micHist.shift();
@@ -2645,7 +2645,16 @@ function keyNoteOn(m){
     const o=c.createOscillator(); o.type='triangle'; o.frequency.value=f; const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1800;
     o.connect(lp).connect(env); o.start(t); oscs.push(o); env.gain.setTargetAtTime(0.8,t,0.01);
   }
-  S.key={env,out,oscs}; S.kbNote=m; draw();
+  S.key={env,out,oscs,m}; S.kbNote=m; draw();
+}
+// while the Target box is held during playback, the sound follows the target line (a temporary guide tone)
+function keyFollow(m){
+  const k=S.key, c=S.ctx;
+  if(m==null){ if(k&&!k.rest){ k.env.gain.cancelScheduledValues(c.currentTime); k.env.gain.setTargetAtTime(0,c.currentTime,0.03); k.rest=true; S.kbNote=null; } return; }
+  if(!k){ keyNoteOn(m); return; }
+  if(m===k.m&&!k.rest) return;
+  if(S.keySound==='piano'){ keyNoteOn(m); return; }
+  const t=c.currentTime; k.oscs[0].frequency.setTargetAtTime(m2f(m),t,k.rest?0.001:0.015); k.env.gain.cancelScheduledValues(t); k.env.gain.setTargetAtTime(0.8,t,0.01); k.rest=false; k.m=m; S.kbNote=m;
 }
 function keyNoteOff(quick){
   const k=S.key; if(!k) return; S.key=null; S.kbNote=null; const c=S.ctx, t=c.currentTime;
@@ -3152,8 +3161,10 @@ S.keySound='tone'; try{ const v=localStorage.getItem('pc-keysound'); if(v==='pia
 $('#keySound').addEventListener('change',e=>{ S.keySound=e.target.value; try{ localStorage.setItem('pc-keysound',S.keySound); }catch(x){} });
 // Target box: press to hear the note you should sing now (like a piano key)
 { const tb=$('#rTargetBox'); let held=false;
-  const on=e=>{ const t=S.playing?songTime()-(S.delay+ANA_LAG)*S.rate:songTime(); const m=targetNoteNear(t); if(m==null){ setStatus('No target note here.'); return; } held=true; tb.classList.add('on'); keyNoteOn(m); if(e) e.preventDefault(); };
-  const off=()=>{ if(!held) return; held=false; tb.classList.remove('on'); keyNoteOff(); };
+  const on=e=>{ if(e) e.preventDefault(); held=true; S.targetHold=true; tb.classList.add('on');
+    if(S.playing){ const v=targetAt(songTime()); if(!isNaN(v)) keyNoteOn(Math.round(v)); return; }   // playing: follows the line while held
+    const m=targetNoteNear(songTime()); if(m==null){ setStatus('No target note here.'); return; } keyNoteOn(m); };
+  const off=()=>{ if(!held) return; held=false; S.targetHold=false; tb.classList.remove('on'); keyNoteOff(); };
   tb.addEventListener('pointerdown',e=>{ tb.setPointerCapture(e.pointerId); on(e); });
   ['pointerup','pointercancel'].forEach(ev=>tb.addEventListener(ev,off));
   tb.addEventListener('contextmenu',e=>e.preventDefault());
