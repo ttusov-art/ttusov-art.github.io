@@ -123,10 +123,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pick-menu .pm-meta{font-family:var(--font-mono);font-size:12px;color:var(--muted);flex:none}
 .pick-menu .pm-add.pm-add2{border-top:0;margin-top:0}
 .pick-menu .pm-add{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;color:var(--accent);font-weight:600}
-.pick-menu .pm-row{display:flex;align-items:center;gap:4px}
-.pick-menu .pm-row>button:first-child{flex:1;min-width:0}
-.pick-menu button.pm-mv{width:auto;flex:none;padding:8px 12px;border:1px solid var(--line);font-size:13px;justify-content:center}
-.pick-menu button.pm-mv:disabled{opacity:.3}
+#songList .song-row button.pm-mv{padding:7px 14px}
+#songList .song-row button.pm-mv:disabled{opacity:.3}
 .pick-menu .pm-empty{padding:10px;color:var(--muted);font-size:13px}
 .file-name:empty{display:none}
 .sheet-view{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column}
@@ -474,6 +472,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <span class="small">Keep this page open and the screen on while it works. On a laptop this takes a few minutes; on a phone it can take much longer.</span>
     </div>
+    <div class="row" id="libOrderRow" hidden><button id="libOrder" type="button" title="Change the order of the songs in this part (also used for playback and shared with members)">⇅ Change the order</button></div>
     <div id="songList"></div>
     <div class="sep-row" style="border-top:1px solid var(--line);padding-top:10px">
       <button id="bkSave" type="button">Back up library</button>
@@ -644,7 +643,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 af';
+const APP_VERSION='2026-10-25 ag';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1268,9 +1267,15 @@ async function renderLib(){
   showStorage();
   const all=await libList(); renderParts(all);
   const songs=sortSongs(all.filter(x=>partOf(x)===S.part)).map(s=>({id:s.id,name:s.name,created:s.created,dur:s.dur,nb:backsOf(s).length}));
-  const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0; $('#libCount').textContent=' · '+S.part+(songs.length?' ('+songs.length+')':'');
-  for(const s of songs){
+  const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0;
+  if(songs.length<2) S.libReorder=false; $('#libOrderRow').hidden=songs.length<2; $('#libOrder').textContent=S.libReorder?'✓ Done changing the order':'⇅ Change the order'; $('#libOrder').classList.toggle('primary',!!S.libReorder); $('#libCount').textContent=' · '+S.part+(songs.length?' ('+songs.length+')':'');
+  for(const [k,s] of songs.entries()){
     const row=document.createElement('div'); row.className='song-row';
+    if(S.libReorder){ // order mode: just the name and ▲ ▼
+      row.innerHTML='<div class="take-info"><b></b></div>'; row.querySelector('b').textContent=s.name;
+      for(const [lab,dir,al] of [['▲',-1,'Move up'],['▼',1,'Move down']]){ const a=document.createElement('button'); a.type='button'; a.className='pm-mv'; a.textContent=lab; a.dataset.mv=s.id+':'+dir; a.setAttribute('aria-label',al+': '+s.name);
+        a.disabled=dir<0?k===0:k===songs.length-1; a.addEventListener('click',()=>moveSong(s.id,dir)); row.appendChild(a); }
+      list.appendChild(row); continue; }
     const d=new Date(s.created);
     row.innerHTML=`<div class="take-info"><b></b><span>${fmtT(s.dur)} · ${s.nb>1?'vocals + '+s.nb+' backings':s.nb?'vocals + backing':'vocals only'} · added ${d.toLocaleDateString()}</span></div>`;
     row.querySelector('b').textContent=s.name;
@@ -3181,31 +3186,24 @@ function paintMic(){ const on=$('#micOn').checked, l=$('#micLbl'); l.classList.t
 $('#micOn').addEventListener('change',async e=>{ paintMic(); if(e.target.checked){ const ok=await startMic(); if(!ok){ e.target.checked=false; paintMic(); } } else stopMic(); });
 async function openGuideMenu(){
   const m=$('#guideMenu'); m.innerHTML='';
-  let songs=[]; const keepScroll=m.dataset.keep?+m.dataset.keep:null; delete m.dataset.keep; try{ songs=sortSongs((await libList()).filter(x=>partOf(x)===S.part)).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})); }catch(e){}
+  let songs=[]; try{ songs=sortSongs((await libList()).filter(x=>partOf(x)===S.part)).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})); }catch(e){}
   if(S.parts.length>1){ const bar=document.createElement('div'); bar.className='pm-parts'; bar.setAttribute('role','group'); bar.setAttribute('aria-label','Part');
     S.parts.forEach(n=>{ const c=document.createElement('button'); c.type='button'; c.textContent=n; if(n===S.part){ c.className='on'; c.setAttribute('aria-pressed','true'); } c.addEventListener('click',e=>{ e.stopPropagation(); setPart(n); openGuideMenu(); }); bar.appendChild(c); }); m.appendChild(bar); }
   const item=(html,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','menuitem'); if(cls) b.className=cls; b.innerHTML=html; b.addEventListener('click',()=>{ closeGuideMenu(); fn(); }); m.appendChild(b); return b; };
   if(!songs.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent=S.parts.length>1?'No songs in '+S.part+' yet.':'Your library is empty. Songs you separate or add are listed here.'; m.appendChild(e); }
-  songs.forEach((x,k)=>{ const b=item('<span class="pm-name"></span><span class="pm-meta">'+fmtT(x.dur)+'</span>',S.cur&&S.cur.libId===x.id?'cur':'',()=>openLibSong(x.id)); b.querySelector('.pm-name').textContent=x.name;
-    if(!S.reorder) return;
-    const row=document.createElement('div'); row.className='pm-row'; m.insertBefore(row,b); row.appendChild(b);
-    for(const [lab,dir,al] of [['▲',-1,'Move up'],['▼',1,'Move down']]){ const a=document.createElement('button'); a.type='button'; a.className='pm-mv'; a.textContent=lab; a.dataset.mv=x.id+':'+dir; a.setAttribute('aria-label',al+': '+x.name);
-      a.disabled=dir<0?k===0:k===songs.length-1; a.addEventListener('click',e=>{ e.stopPropagation(); moveSong(x.id,dir); }); row.appendChild(a); } });
-  if(songs.length>1) item('<span class="pm-name">'+(S.reorder?'✓ Done changing the order':'⇅ Change the order')+'</span>','pm-add',()=>{});
-  { const t=m.lastElementChild; if(songs.length>1&&t){ t.onclick=e=>{ e.stopPropagation(); S.reorder=!S.reorder; openGuideMenu(); }; } }
-  item('<span class="pm-name">+ Add vocals from this device…</span>','pm-add'+(songs.length>1?' pm-add2':''),()=>$('#guideFile').click());
+  for(const x of songs){ const b=item('<span class="pm-name"></span><span class="pm-meta">'+fmtT(x.dur)+'</span>',S.cur&&S.cur.libId===x.id?'cur':'',()=>openLibSong(x.id)); b.querySelector('.pm-name').textContent=x.name; }
+  item('<span class="pm-name">+ Add vocals from this device…</span>','pm-add',()=>$('#guideFile').click());
   item('<span class="pm-name">+ Add songs from a shared link…</span>','pm-add pm-add2',()=>showLinkBox(''));
   if(getShared().length) item('<span class="pm-name">↻ Check shared songs for updates</span>','pm-add pm-add2',()=>checkShared(true));
   m.hidden=false; $('#guidePick').setAttribute('aria-expanded','true');
-  if(keepScroll!=null){ m.scrollTop=keepScroll; return; }
   const c=m.querySelector('button.cur')||m.querySelector('[role=menuitem]'); if(c) c.focus({preventScroll:true});
   m.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 async function moveSong(id,dir){
-  const m=$('#guideMenu'), list=sortSongs((await libList()).filter(x=>partOf(x)===S.part)), i=list.findIndex(x=>x.id===id), j=i+dir;
+  const m=$('#songList'), list=sortSongs((await libList()).filter(x=>partOf(x)===S.part)), i=list.findIndex(x=>x.id===id), j=i+dir;
   if(i<0||j<0||j>=list.length) return;
   [list[i],list[j]]=[list[j],list[i]]; await saveSongOrder(list);
-  m.dataset.keep=m.scrollTop; await openGuideMenu(); renderLib();
+  await renderLib();
   const a=m.querySelector('[data-mv="'+id+':'+dir+'"]'); if(a&&!a.disabled) a.focus({preventScroll:true}); else { const o=m.querySelector('[data-mv="'+id+':'+(-dir)+'"]'); if(o) o.focus({preventScroll:true}); }
 }
 // ----- shared library links -----
@@ -3355,6 +3353,7 @@ async function shareLibrary(){
 }
 $('#linkGo').addEventListener('click',addFromLink);
 $('#updBtn').addEventListener('click',runUpdates);
+$('#libOrder').addEventListener('click',()=>{ S.libReorder=!S.libReorder; renderLib(); });
 $('#linksMake').addEventListener('click',makeLinksJson);
 $('#linkIn').addEventListener('keydown',e=>{ if(e.key==='Enter') addFromLink(); });
 $('#linkCancel').addEventListener('click',()=>{ $('#linkBox').hidden=true; });
@@ -3392,7 +3391,7 @@ async function openSharedLink(url,slug,partName){
   $('#linkIntro').textContent='You already have '+have+' of the '+c.total+' songs of '+name+'. Updates are ready: '+changesTxt(c)+'.'; $('#linkGo').textContent='Update';
   setStatus('Updates are ready for '+name+'. Tap Update in the Song section.');
 }
-function closeGuideMenu(){ S.reorder=false; $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
+function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
 $('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
 document.addEventListener('click',e=>{ if(!$('#guideMenu').hidden&&!e.target.closest('.pick-wrap')) closeGuideMenu(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#guideMenu').hidden){ closeGuideMenu(); $('#guidePick').focus(); } });
