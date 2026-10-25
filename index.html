@@ -637,7 +637,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 aa';
+const APP_VERSION='2026-10-25 ab';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1507,6 +1507,20 @@ function findTempoSections(env,fps){
   }
   return out.length>1?out:null;
 }
+// 3:2 check: at a tempo ⅔ too slow each "beat" holds three eighth notes, so the hits between beats fall at the thirds;
+// at the right tempo they fall halfway. Switch to 1.5× when the beat splits in three and 1.5× fits better (halfway hits, stronger beats).
+function beatShape(env,fps,P0,t0,t1){
+  const a=Math.max(0,Math.round(t0*fps)), seg=env.subarray(a,Math.min(env.length,Math.round(t1*fps))); let best={s:-1,P:P0,o:0};
+  for(let r=-0.01;r<=0.01001;r+=0.001){ const P=P0*(1+r); for(let o=0;o<P;o+=0.005){ const v=combScore(seg,fps,P,o); if(v>best.s) best={s:v,P,o}; } }
+  const P=best.P, at=q=>combScore(seg,fps,P,((best.o+q*P)%P+P)%P); let rest=0; for(let i=0;i<20;i++) rest+=at((i+0.5)/20); rest=rest/20||1e-9;
+  return {P, o:a/fps+best.o, beat:best.s/rest, half:at(0.5)/rest, thirds:(at(1/3)+at(2/3))/2/rest};
+}
+function fixTriple(env,fps,P,o,t0,t1){
+  if(60*1.5/P>200) return null;
+  const A=beatShape(env,fps,P,t0,t1), B=beatShape(env,fps,P/1.5,t0,t1);
+  if(!(A.thirds>2*A.half&&B.half>B.thirds&&B.beat>A.beat)) return null;
+  const g=refineGrid(env,fps,t0,t1,B.P); return {P:g.P,o:g.o};
+}
 // beat or off-beat? the whole grid can sit half a beat off; if the kick drum clearly hits the half-beat lines, use those
 function kickPhase(low,fps,P,o,t0,t1){
   const a=Math.max(0,Math.round(t0*fps)), seg=low.subarray(a,Math.min(low.length,Math.round(t1*fps))), ph=x=>((x-a/fps)%P+P)%P;
@@ -1518,9 +1532,12 @@ async function detectBeatGrid(x, sr, onProg){
   if(env.length<fps*8) return null;
   const confOf=(P,o)=>{ const on=combScore(env,fps,P,((o%P)+P)%P), off=combScore(env,fps,P,(((o+P/2)%P)+P)%P); return off>0?on/off:9; };
   const sec=findTempoSections(env,fps);
-  if(sec){ sec.forEach((s,i)=>{ const t1=i+1<sec.length?sec[i+1].t:env.length/fps, t0=i?s.t:0, o=kickPhase(low,fps,s.P,s.o,t0,t1); if(i){ s.t=o; s.o=o; } else s.o=o; });
+  if(sec){ sec.forEach((s,i)=>{ const t1=i+1<sec.length?sec[i+1].t:env.length/fps, t0=i?s.t:0, f=fixTriple(env,fps,s.P,s.o,t0,t1);
+      if(f){ s.P=f.P; s.o=i?f.o+Math.round((s.t-f.o)/f.P)*f.P:f.o; }
+      const o=kickPhase(low,fps,s.P,s.o,t0,t1); if(i){ s.t=o; s.o=o; } else s.o=o; });
     const s0=sec[0]; return {bpm:60/s0.P, offset:((s0.o%s0.P)+s0.P)%s0.P, conf:confOf(s0.P,s0.o), changes:sec.slice(1).map(s=>({t:s.t,bpm:60/s.P,bar:null}))}; }
-  const g=refineGrid(env,fps,0,env.length/fps,60/acTempo(env,fps,0,env.length)); g.o=kickPhase(low,fps,g.P,g.o,0,env.length/fps);
+  const g=refineGrid(env,fps,0,env.length/fps,60/acTempo(env,fps,0,env.length)), f=fixTriple(env,fps,g.P,g.o,0,env.length/fps); if(f){ g.P=f.P; g.o=f.o; }
+  g.o=kickPhase(low,fps,g.P,g.o,0,env.length/fps);
   return {bpm:60/g.P, offset:((g.o%g.P)+g.P)%g.P, conf:confOf(g.P,g.o)};
 }
 
