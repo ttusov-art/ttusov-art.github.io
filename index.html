@@ -679,7 +679,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 aj';
+const APP_VERSION='2026-10-25 ak';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1806,7 +1806,7 @@ function updateSelInfo(){
   ['edOne','edFill','edUp','edDown','edOctUp','edOctDown','edDel','edLoop'].forEach(id=>$('#'+id).disabled=!r);
   $('#edUndo').disabled=!S.undo||!S.undo.length;
   { const b=$('#edReset'); if(!b.dataset.armed){ b.textContent=resetLabel(); b.title=r?'Bring back the original pitch line in the selection':'Bring back the original pitch line for the whole song'; } }
-  if(!r){ el.textContent='Drag across the lane to select a section, or tap to select one beat (a whole fragment when Snap is off).'; return; }
+  if(!r){ el.textContent=matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) across the lane to select a section, or right-click to select one beat. Click plays and pauses; drag to move along the song.':'Drag across the lane to select a section, or tap to select one beat (a whole fragment when Snap is off).'; return; }
   const v=voicedIn(r), m=v.length?Math.round(median(v)):null;
   const fm=fillNote(r,v);
   el.innerHTML=`Selected <b>${fmtT1(r.a)}–${fmtT1(r.b)}</b> · ${m!=null?'mostly <b>'+noteName(m)+'</b>':'no sung pitch'}`+(fm!=null?` · Fill makes the whole selection <b>${noteName(fm)}</b>`:'');
@@ -3076,10 +3076,13 @@ canvas.addEventListener('pointerdown',e=>{
     const t=laneTimeAt(e.clientX), pps=(canvas.clientWidth-LABELW)/S.win, a=Math.min(S.sel.a,S.sel.b), b=Math.max(S.sel.a,S.sel.b), tol=(e.pointerType==='mouse'?8:16)/pps;
     const edge=Math.abs(t-a)<=tol?'a':Math.abs(t-b)<=tol?'b':null;
     if(edge&&b-a>0.05){ drag={stretch:edge,a0:a,b0:b,orig:Float32Array.from(S.tM),x:e.clientX}; canvas.setPointerCapture(e.pointerId); return; } }
-  if(S.editMode){ const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t,sel0:S.sel,mouse:e.pointerType==='mouse'}; S.sel={a:snapT(t),b:snapT(t),m:laneNoteAt(e.clientY)}; canvas.setPointerCapture(e.pointerId); draw(); return; }
+  // mouse in the editor: left button plays / pauses (click) and pans (drag) as in practice; right or middle button selects
+  if(S.editMode&&!(e.pointerType==='mouse'&&e.button===0)){ if(e.pointerType==='mouse') e.preventDefault(); const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t,sel0:S.sel,mouse:e.pointerType==='mouse'}; S.sel={a:snapT(t),b:snapT(t),m:laneNoteAt(e.clientY)}; canvas.setPointerCapture(e.pointerId); draw(); return; }
   stopGlide(); drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX),samples:[[performance.now(),e.clientX]]}; canvas.setPointerCapture(e.pointerId);
   const d=drag; d.timer=setTimeout(()=>{ if(drag===d&&!d.moved){ d.long=true; holdLoopPoint(d.t); } },550); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('mousedown',e=>{ if(e.button===1) e.preventDefault(); });   // no autoscroll on middle click
+canvas.addEventListener('auxclick',e=>{ if(e.button===1) e.preventDefault(); });
 // stop the phone's own long-press buzz and menus on the lane (the app's loop-mark buzz still works)
 canvas.addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
 canvas.addEventListener('pointermove',e=>{ if(drag&&drag.stretch){ const d=drag, t=snapT(laneTimeAt(e.clientX)); let a1=d.a0,b1=d.b0; const minL=Math.max(0.1,(d.b0-d.a0)*0.25);
