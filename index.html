@@ -322,6 +322,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="bHalf" type="button" title="Half the tempo">÷2</button>
         <button id="bDouble" type="button" title="Double the tempo">×2</button>
         <button id="bDetect" type="button">Detect</button>
+        <button id="bTap" type="button" title="Tap along with the beat while the song plays (keyboard: T)">Tap tempo</button>
         <button id="bOne" type="button" title="Make the beat at the playhead the first beat of a bar">Beat 1 here</button>
         <label class="small" for="bBpb">Beats per bar</label>
         <select id="bBpb" class="sel" style="width:auto"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option></select>
@@ -632,7 +633,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 u';
+const APP_VERSION='2026-10-25 v';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1510,6 +1511,26 @@ async function scheduleBeatDetect(force){
     S.beat={bpm:Math.round(r.bpm*100)/100,offset:r.offset,auto:true,from:S.backBuf?'backing':'guide voice'};
     saveBeat(); renderBeatInfo(); draw();
   }catch(e){ if(tok===S.beatTok) renderBeatInfo('could not find a beat'); }
+}
+// tap tempo: tap along with the beat while the song plays; the grid follows the taps (least-squares fit)
+S.tapT=null;
+function tapTempo(){
+  if(S.review) return;
+  if(!S.playing){ play(); S.tapT={times:[],last:0}; setStatus('Tap along with the beat (at least 4 taps). Start on beat 1 if you can.'); return; }
+  const now=performance.now(), t=songTime()-((S.ctx&&S.ctx.outputLatency)||0)*S.rate;
+  if(!S.tapT||now-S.tapT.last>2500) S.tapT={times:[],last:0};
+  S.tapT.times.push(t); S.tapT.last=now; const T=S.tapT.times, n=T.length;
+  $('#bTap').textContent='Tap ('+n+')'; clearTimeout(S.tapT.timer); S.tapT.timer=setTimeout(()=>{ $('#bTap').textContent='Tap tempo'; },2600);
+  if(n<4){ setStatus('Keep tapping… '+n+' of at least 4.'); return; }
+  // fit t = a + i·P over the taps (drop the first tap if it is far off the rest)
+  let xs=T.map((_,i)=>i), ys=T.slice();
+  const fit=(xs,ys)=>{ const m=xs.length, mx=xs.reduce((a,b)=>a+b)/m, my=ys.reduce((a,b)=>a+b)/m; let sxy=0,sxx=0; for(let i=0;i<m;i++){ sxy+=(xs[i]-mx)*(ys[i]-my); sxx+=(xs[i]-mx)**2; } const P=sxy/sxx; return {P,a:my-P*mx}; };
+  let f=fit(xs,ys); if(n>=5&&Math.abs(ys[0]-(f.a))>f.P*0.25){ xs=xs.slice(1); ys=ys.slice(1); f=fit(xs,ys); }
+  const bpm=60/f.P; if(!(bpm>=30&&bpm<=240)){ setStatus('That tempo is out of range; tap again on every beat.',true); return; }
+  const first=f.a, off=((first%f.P)+f.P)%f.P;
+  if(!S.beat) S.beat={bpm,offset:off,auto:false}; else { S.beat.bpm=bpm; S.beat.offset=off; }
+  if(S.tapT.times.length===4||S.beat.bar==null) S.beat.bar=first;   // the first tap counts as beat 1
+  beatEdited(); setStatus('Tap tempo: '+bpm.toFixed(1)+' BPM from '+n+' taps. Keep tapping to refine it. Your first tap counts as beat 1 (change it with Beat 1 here).');
 }
 function markBeatOne(){ if(!S.beat) return; const P=beatP(), t=S.playing?songTime():S.pos, k=Math.round((t-S.beat.offset)/P); S.beat.bar=S.beat.offset+k*P; S.beat.bpb=beatsPerBar(); beatEdited(); setStatus('Beat 1 set at '+fmtT1(S.beat.bar)+'. Bars of '+beatsPerBar()+' beats run through the song from here.'); }
 function beatEdited(){ if(!S.beat) return; S.beat.auto=false; saveBeat(); renderBeatInfo(); draw(); }
@@ -2820,6 +2841,9 @@ $('#bpmIn').addEventListener('change',e=>{ const v=+e.target.value; if(!S.beat&&
 $('#bShiftL').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=((S.beat.offset-0.02)%P+P)%P; beatEdited(); });
 $('#bShiftR').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=(S.beat.offset+0.02)%P; beatEdited(); });
 $('#bOne').addEventListener('click',markBeatOne);
+$('#bTap').addEventListener('pointerdown',e=>{ e.preventDefault(); tapTempo(); });
+$('#bTap').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); e.stopPropagation(); tapTempo(); } });
+$('#bTap').addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
 $('#bBpb').addEventListener('change',e=>{ if(!S.beat) return; S.beat.bpb=+e.target.value; beatEdited(); setStatus('Bars of '+S.beat.bpb+' beats.'); });
 $('#bHalf').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm/2); });
 $('#bDouble').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm*2); });
@@ -2888,6 +2912,7 @@ document.addEventListener('keydown',e=>{
   else if(k==='Enter') edFill();
   else if(k==='Delete'||k==='Backspace') edRemove();
   else if(k==='Escape'){ S.sel=null; updateSelInfo(); draw(); }
+  else if(k==='t'||k==='T') tapTempo();
   else done=false;
   if(done){ e.preventDefault(); e.stopPropagation(); if(tg==='BUTTON') document.activeElement.blur(); }
 },true);
