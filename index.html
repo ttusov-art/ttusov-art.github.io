@@ -619,7 +619,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 m';
+const APP_VERSION='2026-10-25 n';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2743,7 +2743,7 @@ function paintToggle(id,label,on){ const b=$('#'+id); b.setAttribute('aria-press
 function setBackMuted(m){ S.backMuted=m; paintToggle('backBtn','Backing',!m); applyGains(); try{localStorage.setItem('pc-back-muted',m?'1':'0')}catch(x){} }
 function toneIsOn(){ return !S.toneMuted&&+$('#volTone').value>0; }
 function setToneOn(on){
-  if(on){ S.toneMuted=false; if(+$('#volTone').value<=0){ const r=$('#volTone'); r.value='0.4'; $('#volToneV').textContent=pct(0.4); } }
+  if(on){ S.toneMuted=false; if(+$('#volTone').value<=0){ const r=$('#volTone'); r.value='0.4'; $('#volToneV').textContent='40%'; try{localStorage.setItem('pc-voltone','0.4')}catch(x){} } }
   else S.toneMuted=true;
   paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){}
 }
@@ -2753,6 +2753,8 @@ $('#volMet').addEventListener('input',e=>{ $('#volMetV').textContent=pct(+e.targ
 try{ const v=localStorage.getItem('pc-volmet'); if(v){ $('#volMet').value=v; $('#volMetV').textContent=Math.round(+v*100)+'%'; } if(localStorage.getItem('pc-met')==='1') setMetOn(true); }catch(x){}
 $('#toneBtn').addEventListener('click',()=>{ setToneOn(!toneIsOn()); setStatus(toneIsOn()?'Guide tone on.':'Guide tone off.'); });
 try{ if(localStorage.getItem('pc-back-muted')==='1') setBackMuted(true); }catch(x){}
+// volume sliders keep their last position on this device (the Tone toggle no longer moves its slider)
+try{ [['volGuide','volGuideV','pc-volguide'],['volBack','volBackV','pc-volback'],['volTone','volToneV','pc-voltone']].forEach(([id,lab,key])=>{ const v=localStorage.getItem(key); if(v!=null&&v!==''&&isFinite(+v)){ $('#'+id).value=v; $('#'+lab).textContent=+v>0?Math.round(+v*100)+'%':'off'; } }); }catch(x){}
 S.toneMuted=true; try{ if(localStorage.getItem('pc-tone-muted')==='0') setToneOn(true); }catch(x){}
 paintToggle('toneBtn','Tone',toneIsOn());
 try{ if(localStorage.getItem('pc-guide-muted')==='1') setGuideMuted(true); }catch(x){}
@@ -3097,9 +3099,9 @@ $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.
 $('#backFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadBack(f).finally(()=>e.target.value=''); });
 $('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; renderBackPick(); S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
 const pct=v=>Math.round(v*100)+'%';
-$('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); });
-$('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); });
-$('#volTone').addEventListener('input',e=>{ if(S.key) S.key.out.gain.setTargetAtTime(keyVol(),S.ctx.currentTime,0.02); const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; S.toneMuted=v<=0; try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){} paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); });
+$('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); try{localStorage.setItem('pc-volguide',e.target.value)}catch(x){} });
+$('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); try{localStorage.setItem('pc-volback',e.target.value)}catch(x){} });
+$('#volTone').addEventListener('input',e=>{ if(S.key) S.key.out.gain.setTargetAtTime(keyVol(),S.ctx.currentTime,0.02); const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; S.toneMuted=v<=0; try{localStorage.setItem('pc-voltone',String(v))}catch(x){} try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){} paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); });
 $('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} if(!S.mic){ setStatus('Microphone chosen. It is used when you turn the microphone on.'); return; } const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; paintMic(); if(was) play(); });
 $('#delay').addEventListener('input',e=>setDelay(+e.target.value));
 $('#calBtn').addEventListener('click',measureDelay);
