@@ -626,7 +626,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 p';
+const APP_VERSION='2026-10-25 q';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2648,11 +2648,14 @@ const GRAND_URL='https://tonejs.github.io/audio/salamander/', GRAND_PC={0:'C',3:
 const GRAND_NOTES=(()=>{ const a=[]; for(let m=21;m<=108;m++) if(GRAND_PC[m%12]!==undefined) a.push(m); return a; })();
 S.grand={};
 function grandLoad(m){ if(S.grand[m]) return S.grand[m]; const name=GRAND_PC[m%12]+(Math.floor(m/12)-1)+'.mp3';
-  S.grand[m]=fetch(GRAND_URL+name).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); }).then(b=>ensureCtx().decodeAudioData(b)).then(buf=>(S.grand[m+'b']=buf),e=>{ delete S.grand[m]; throw e; });
+  // kept in the browser's cache storage after the first download, so the piano works offline and costs no data later
+  const get=async()=>{ const url=GRAND_URL+name; let cache=null; try{ cache=await caches.open('pc-grand-v1'); const hit=await cache.match(url); if(hit) return hit.arrayBuffer(); }catch(e){}
+    const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); if(cache){ try{ await cache.put(url,r.clone()); }catch(e){} } return r.arrayBuffer(); };
+  S.grand[m]=get().then(b=>ensureCtx().decodeAudioData(b)).then(buf=>(S.grand[m+'b']=buf),e=>{ delete S.grand[m]; throw e; });
   return S.grand[m]; }
 function grandNearest(m){ let best=GRAND_NOTES[0]; for(const n of GRAND_NOTES) if(Math.abs(n-m)<Math.abs(best-m)) best=n; return best; }
-function grandPrefetch(){ const lo=Math.max(21,Math.min(S.view.lo,45)-3), hi=Math.min(108,Math.max(S.view.hi,72)+3); let n=0,ok=0;
-  const list=GRAND_NOTES.filter(m=>m>=lo&&m<=hi); list.forEach(m=>grandLoad(m).then(()=>{ ok++; },()=>{}).finally(()=>{ if(++n===list.length&&(S.keySound==='grand'||S.toneSound==='grand')) setStatus(ok===list.length?'Grand piano ready.':'Some piano notes could not be downloaded; the simple piano fills in.',ok<list.length); })); }
+function grandPrefetch(quiet){ const lo=Math.max(21,Math.min(S.view.lo,45)-3), hi=Math.min(108,Math.max(S.view.hi,72)+3); let n=0,ok=0;
+  const list=GRAND_NOTES.filter(m=>m>=lo&&m<=hi); list.forEach(m=>grandLoad(m).then(()=>{ ok++; },()=>{}).finally(()=>{ if(++n===list.length&&!quiet&&(S.keySound==='grand'||S.toneSound==='grand')) setStatus(ok===list.length?'Grand piano ready.':'Some piano notes could not be downloaded; the simple piano fills in.',ok<list.length); })); }
 // one sounding note in the chosen sound ('tone', 'piano' or 'grand'), into dest at the given level
 function voiceOn(m,sound,dest,level){
   const c=ensureCtx(); if(c.state==='suspended') c.resume();
@@ -3186,10 +3189,10 @@ canvas.addEventListener('wheel',e=>{ e.preventDefault();
   else setWin(S.win*Math.exp(e.deltaY*0.0015),true); },{passive:false});
 S.timMarks='gentle'; try{ const v=localStorage.getItem('pc-timmarks'); if(['gentle','detailed','off'].includes(v)) S.timMarks=v; }catch(x){} $('#timMarks').value=S.timMarks;
 $('#timMarks').addEventListener('change',e=>{ S.timMarks=e.target.value; try{localStorage.setItem('pc-timmarks',S.timMarks)}catch(x){} draw(); });
-S.keySound='tone'; try{ const v=localStorage.getItem('pc-keysound'); if(v==='piano'||v==='grand') S.keySound=v; }catch(e){} $('#keySound').value=S.keySound;
-if(S.keySound==='grand') setTimeout(()=>{ try{ grandPrefetch(); }catch(e){} },1500);
-S.toneSound='tone'; try{ const v=localStorage.getItem('pc-tonesound'); if(v==='piano'||v==='grand') S.toneSound=v; }catch(e){} $('#toneSound').value=S.toneSound;
-if(S.toneSound==='grand'&&S.keySound!=='grand') setTimeout(()=>{ try{ grandPrefetch(); }catch(e){} },1500);
+// default: the recorded grand piano, until someone picks another sound on this device
+S.keySound='grand'; try{ const v=localStorage.getItem('pc-keysound'); if(v==='tone'||v==='piano'||v==='grand') S.keySound=v; }catch(e){} $('#keySound').value=S.keySound;
+S.toneSound='grand'; try{ const v=localStorage.getItem('pc-tonesound'); if(v==='tone'||v==='piano'||v==='grand') S.toneSound=v; }catch(e){} $('#toneSound').value=S.toneSound;
+if(S.toneSound==='grand'||S.keySound==='grand') setTimeout(()=>{ try{ grandPrefetch(true); }catch(e){} },1500);
 $('#toneSound').addEventListener('change',e=>{ S.toneSound=e.target.value; try{ localStorage.setItem('pc-tonesound',S.toneSound); }catch(x){} if(S.toneSound==='grand'){ setStatus('Downloading the grand piano…'); grandPrefetch(); } if(S.tone){ stopTone(); startTone(); } });
 $('#keySound').addEventListener('change',e=>{ S.keySound=e.target.value; try{ localStorage.setItem('pc-keysound',S.keySound); }catch(x){} if(S.keySound==='grand'){ setStatus('Downloading the grand piano…'); grandPrefetch(); } });
 // Target box: press to hear the note you should sing now (like a piano key)
