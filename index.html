@@ -325,6 +325,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="bDetect" type="button">Detect</button>
         <button id="bTap" type="button" title="Tap along with the beat while the song plays (keyboard: T)">Tap tempo</button>
         <button id="bOne" type="button" title="Make the beat at the playhead the first beat of a bar">Beat 1 here</button>
+        <button id="bTempo" type="button" title="The song changes tempo at the playhead: start a new tempo section here">New tempo here</button>
+        <button id="bTempoMove" type="button" hidden title="Move the nearest tempo change to the playhead (on a beat of the new tempo)">Move tempo change here</button>
+        <button id="bTempoDel" type="button" hidden title="Remove the nearest tempo change">Remove tempo change</button>
         <label class="small" for="bBpb">Beats per bar</label>
         <select id="bBpb" class="sel" style="width:auto"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option></select>
         <label class="check" for="snapOn"><input id="snapOn" type="checkbox" checked>Snap</label>
@@ -634,7 +637,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 x';
+const APP_VERSION='2026-10-25 y';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1018,7 +1021,7 @@ function updateTone(now){
 }
 function seek(t){ const was=S.playing; if(was) stop(); S.pos=Math.max(0,Math.min(S.dur,t)); if(was) play(); else { updateTime(); draw(); } }
 function resetRun(clearPts){ if(clearPts){ S.pts=[]; S.tim.res=new Map(); } S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; $('#rScore').textContent='–'; $('#rTime').textContent='–'; $('#result').hidden=true; }
-function updateTime(){ $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur); if(!S.playing){ const m=targetNoteNear(songTime()); $('#rTarget').textContent=m==null?'–':noteName(m); } }
+function updateTime(){ beatSegCheck(); $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur); if(!S.playing){ const m=targetNoteNear(songTime()); $('#rTarget').textContent=m==null?'–':noteName(m); } }
 // the target note at t, or the next one coming up (for the Target box)
 function targetNoteNear(t){ if(!S.tT) return null; const v=targetAt(t); if(!isNaN(v)) return Math.round(v);
   let i=0; while(i<S.tT.length&&S.tT[i]<t) i++; for(;i<S.tT.length;i++) if(!isNaN(S.tM[i])) return Math.round(S.tM[i]); return null; }
@@ -1464,41 +1467,92 @@ function combScore(env,fps,P,o){
   let s=0,n=0; for(let t=o;;t+=P){ const x=t*fps; const i=Math.floor(x); if(i+1>=env.length) break; const f=x-i; s+=env[i]*(1-f)+env[i+1]*f; n++; }
   return n?s/n:0;
 }
+function refineGrid(env,fps,t0,t1,P0){ // best period near P0 and phase over t0…t1 (comb search); o is an absolute time
+  const i0=Math.max(0,Math.round(t0*fps)), seg=env.subarray(i0,Math.min(env.length,Math.round(t1*fps))); let best={s:-1,P:P0,o:0};
+  for(let r=-0.02;r<=0.02001;r+=0.0004){ const P=P0*(1+r); for(let o=0;o<P;o+=0.01){ const s=combScore(seg,fps,P,o); if(s>best.s) best={s,P,o}; } }
+  for(let r=-0.0006;r<=0.00061;r+=0.00005){ const P=best.P*(1+r); for(let o=best.o-0.012;o<=best.o+0.012;o+=0.002){ const oo=((o%P)+P)%P, s=combScore(seg,fps,P,oo); if(s>best.s) best={s,P,o:oo}; } }
+  return {P:best.P, o:i0/fps+best.o, s:best.s};
+}
+function acTempo(env,fps,a,b){ // autocorrelation tempo of env[a…b), weighted towards ~110 BPM
+  const lmin=Math.floor(fps*60/200), lmax=Math.ceil(fps*60/55), ac=new Float64Array(lmax+2);
+  for(let L=lmin;L<=lmax+1;L++){ let s=0; for(let i=a;i+L<b;i++) s+=env[i]*env[i+L]; ac[L]=s/Math.max(1,b-a-L); }
+  let bestL=-1,bestV=-1;
+  for(let L=lmin+1;L<=lmax;L++){ if(!(ac[L]>=ac[L-1]&&ac[L]>=ac[L+1])) continue; const bpm=60*fps/L, wgt=Math.exp(-0.5*Math.pow(Math.log2(bpm/110)/0.8,2)), v=ac[L]*wgt; if(v>bestV){ bestV=v; bestL=L; } }
+  if(bestL<0) return 0; const A=ac[bestL-1],B=ac[bestL],C=ac[bestL+1],den=A-2*B+C;
+  return 60*fps/(bestL+(den<0?0.5*(A-C)/den:0));
+}
+// tempo sections: 16 s windows every 4 s; runs of 40 s or more that agree on a tempo (or its 3:2 feel) become sections
+function tempoKin(a,b){ const r=a/b; return [1,1.5,2/3].some(k=>Math.abs(r/k-1)<0.03); }
+function findTempoSections(env,fps){
+  const WS=16, W=Math.round(WS*fps), H=Math.round(4*fps), win=[];
+  for(let a=0;a+W<=env.length;a+=H){ let bpm=acTempo(env,fps,a,a+W); if(bpm){ while(bpm<78) bpm*=2; while(bpm>=156) bpm/=2; } win.push({t:a/fps,bpm}); }
+  if(win.length<20) return null;
+  const runs=[]; let cur=null;
+  for(const w of win){ if(cur&&w.bpm&&tempoKin(w.bpm,cur.ref)){ cur.w.push(w); continue; } cur={ref:w.bpm||1,w:[w]}; runs.push(cur); }
+  const m=[];
+  for(const r of runs){ if(r.w[r.w.length-1].t+WS-r.w[0].t<40) continue; const p=m[m.length-1]; if(p&&tempoKin(p.ref,r.ref)) p.w=p.w.concat(r.w); else m.push({ref:r.ref,w:r.w.slice()}); }
+  if(m.length<2) return null;
+  const secs=m.map(r=>{ let bv=0,bc=-1; for(const a of r.w){ const c=r.w.filter(b=>Math.abs(b.bpm/a.bpm-1)<0.02).length; if(c>bc){ bc=c; bv=a.bpm; } }
+    const near=r.w.filter(b=>Math.abs(b.bpm/bv-1)<0.02).map(b=>b.bpm).sort((a,b)=>a-b), t0=r.w[0].t, t1=r.w[r.w.length-1].t+WS;
+    return {...refineGrid(env,fps,t0,t1,60/near[near.length>>1]),a:t0,b:t1}; });
+  // boundary: where the new grid starts fitting better than the old one (middle of an undecided stretch)
+  const fit=(g,t,len)=>{ const a=Math.max(0,Math.round(t*fps)), seg=env.subarray(a,Math.min(env.length,Math.round((t+len)*fps))), o=((g.o-a/fps)%g.P+g.P)%g.P; return combScore(seg,fps,g.P,o)/(g.s||1); };
+  const out=[{t:0,P:secs[0].P,o:secs[0].o}];
+  for(let i=1;i<secs.length;i++){
+    const A=secs[i-1], B=secs[i], lo=Math.max(A.a,A.b-24), hi=Math.min(B.b,B.a+24), xs=[];
+    for(let t=lo;t+2<=hi;t+=2){ const d=fit(B,t,2)-fit(A,t,2); xs.push({t,v:Math.abs(d)<0.2?0:Math.sign(d)}); }
+    const fs=[]; for(let j=0;j<=xs.length;j++){ let f=0; for(let q=0;q<xs.length;q++) f+=q<j?-xs[q].v:xs[q].v; fs.push(f); }
+    const mx=Math.max(...fs), js=fs.map((f,j)=>f===mx?j:-1).filter(j=>j>=0), jm=js[(js.length-1)>>1], bt=jm<xs.length?xs[jm].t:hi;
+    const t=B.o+Math.round((bt-B.o)/B.P)*B.P; if(t>out[out.length-1].t+10) out.push({t,P:B.P,o:t});
+  }
+  return out.length>1?out:null;
+}
 async function detectBeatGrid(x, sr, onProg){
   const {env,fps}=await onsetEnvelope(x,sr,onProg);
   if(env.length<fps*8) return null;
-  // tempo candidates from autocorrelation, weighted towards ~110 BPM
-  const lmin=Math.floor(fps*60/200), lmax=Math.ceil(fps*60/55), ac=new Float64Array(lmax+2);
-  for(let L=lmin;L<=lmax+1;L++){ let s=0; for(let i=0;i+L<env.length;i++) s+=env[i]*env[i+L]; ac[L]=s/(env.length-L); }
-  let bestL=lmin,bestV=-1;
-  for(let L=lmin+1;L<=lmax;L++){ if(!(ac[L]>=ac[L-1]&&ac[L]>=ac[L+1])) continue; const bpm=60*fps/L, wgt=Math.exp(-0.5*Math.pow(Math.log2(bpm/110)/0.8,2)), v=ac[L]*wgt; if(v>bestV){ bestV=v; bestL=L; } }
-  const a=ac[bestL-1],b=ac[bestL],c=ac[bestL+1],den=a-2*b+c; const Lr=bestL+(den<0?0.5*(a-c)/den:0);
-  let P0=Lr/fps;
-  // refine period and phase together with a comb over the whole song
-  let best={s:-1,P:P0,o:0};
-  for(let r=-0.02;r<=0.02001;r+=0.0004){ const P=P0*(1+r); for(let o=0;o<P;o+=0.01){ const s=combScore(env,fps,P,o); if(s>best.s) best={s,P,o}; } }
-  for(let r=-0.0006;r<=0.00061;r+=0.00005){ const P=best.P*(1+r); for(let o=best.o-0.012;o<=best.o+0.012;o+=0.002){ const oo=((o%P)+P)%P, s=combScore(env,fps,P,oo); if(s>best.s) best={s,P,o:oo}; } }
-  // confidence: comb score on the beats vs. half a beat off
-  const off=combScore(env,fps,best.P,(best.o+best.P/2)%best.P);
-  return {bpm:60/best.P, offset:best.o, conf:off>0?best.s/off:9};
+  const confOf=(P,o)=>{ const on=combScore(env,fps,P,((o%P)+P)%P), off=combScore(env,fps,P,(((o+P/2)%P)+P)%P); return off>0?on/off:9; };
+  const sec=findTempoSections(env,fps);
+  if(sec){ const s0=sec[0]; return {bpm:60/s0.P, offset:((s0.o%s0.P)+s0.P)%s0.P, conf:confOf(s0.P,s0.o), changes:sec.slice(1).map(s=>({t:s.t,bpm:60/s.P,bar:null}))}; }
+  const g=refineGrid(env,fps,0,env.length/fps,60/acTempo(env,fps,0,env.length));
+  return {bpm:60/g.P, offset:((g.o%g.P)+g.P)%g.P, conf:confOf(g.P,g.o)};
 }
 
-
-function beatP(){ return S.beat?60/S.beat.bpm:0; }
+// ===== beat grid with tempo sections =====
+// S.beat = first section {bpm, offset, bar, bpb, …}; S.beat.changes = [{t, bpm, bar}]: from time t (a beat) a new tempo
+function beatSegs(){
+  if(!S.beat) return [];
+  const all=[{ref:S.beat,t0:-1e9,off:S.beat.offset}].concat((S.beat.changes||[]).slice().sort((a,b)=>a.t-b.t).map(c=>({ref:c,t0:c.t,off:c.t})));
+  all.forEach((s,i)=>{ s.i=i; s.P=60/s.ref.bpm; s.t1=i+1<all.length?all[i+1].t0:1e9; s.cut=s.t1-0.35*s.P; }); return all;   // grid points in (cut, t1) are dropped: no sliver of a beat just before a tempo change
+}
+function segAt(t){ const a=beatSegs(); let r=a[0]; for(const s of a) if(t>=s.t0-1e-6) r=s; return r; }
+function curT(){ return S.playing?songTime():S.pos; }
+function beatP(t){ return S.beat?segAt(t==null?curT():t).P:0; }
+function gridAt(t,div){ const s=segAt(t), st=s.P/div; let r=Math.max(s.t0,s.off+Math.round((t-s.off)/st)*st); if(r>s.cut){ let q=r; while(q>s.cut) q-=st; q=Math.max(s.t0,q); r=t-q<s.t1-t?q:s.t1; } return Math.min(s.t1,r); } // nearest grid point (beat / div)
+function beatsIn(a,b,div,fn){ // every grid point (beat / div) from a to b: fn(t, k, seg), k counted from the section's anchor
+  for(const s of beatSegs()){ const lo=Math.max(a,s.t0), hi=Math.min(b,s.t1); if(lo>hi) continue; const st=s.P/div;
+    for(let k=Math.ceil((lo-s.off)/st-1e-6);;k++){ const t=s.off+k*st; if(t>hi+1e-6||t>s.cut) break; fn(t,k,s); } }
+}
+function hasBars(){ return !!S.beat&&(S.beat.bar!=null||(S.beat.changes||[]).some(c=>c.bar!=null)); }
 // snap step: half a beat; a quarter beat when zoomed in far enough (quarter ≥ 24 px) or while Alt is held
 function lanePps(){ const c=document.getElementById('lane'); return ((c&&c.clientWidth)||600)-LABELW>0?(((c&&c.clientWidth)||600)-LABELW)/S.win:50; }
 function fineSnap(){ return !!(S.beat&&(S.altHeld||lanePps()*beatP()/4>=24)); }
-function snapStep(){ return S.beat&&S.snap?beatP()/(fineSnap()?4:2):0; }
-function snapT(t){ if(!S.beat||!S.snap) return t; const st=snapStep(); return S.beat.offset+Math.round((t-S.beat.offset)/st)*st; }
+function snapDiv(){ return fineSnap()?4:2; }
+function snapStep(t){ return S.beat&&S.snap?beatP(t)/snapDiv():0; }
+function snapT(t){ if(!S.beat||!S.snap) return t; return gridAt(t,snapDiv()); }
 let beatSaveTimer=null;
-function saveBeat(){ if(S.cur.libId==null) return; clearTimeout(beatSaveTimer); const id=S.cur.libId, b=S.beat?{...S.beat}:null; beatSaveTimer=setTimeout(()=>{ libUpdate(id,{beat:b}).catch(()=>{}); },400); }
+function saveBeat(){ if(S.cur.libId==null) return; clearTimeout(beatSaveTimer); const id=S.cur.libId, b=S.beat?{...S.beat,changes:(S.beat.changes||[]).map(c=>({...c}))}:null; if(b&&!b.changes.length) delete b.changes; beatSaveTimer=setTimeout(()=>{ libUpdate(id,{beat:b}).catch(()=>{}); },400); }
+function tempoSummary(){ const a=beatSegs(); if(a.length<2) return ''; return a.map((s,i)=>(i?'from '+fmtT(s.t0)+' ':'')+(Math.round(s.ref.bpm*10)/10)+' BPM').join(', '); }
+S.segShown=-1; S.ncShown=-1;
 function renderBeatInfo(msg){
   if(typeof renderLyrSnap==='function'&&document.getElementById('lyrSnapRow')) renderLyrics(false);
-  const inp=$('#bpmIn'), has=!!S.beat;
-  ['bShiftL','bShiftR','bHalf','bDouble','bOne','bBpb'].forEach(id=>$('#'+id).disabled=!has); $('#bBpb').value=String(beatsPerBar());
-  if(has&&document.activeElement!==inp) inp.value=S.beat.bpm.toFixed(1); if(!has) inp.value='';
-  $('#beatInfo').textContent=msg||(has?(S.beat.auto?'found from the '+(S.beat.from||'backing'):'adjusted by you'):'no beat grid yet');
+  const inp=$('#bpmIn'), has=!!S.beat, s=has?segAt(curT()):null; S.segShown=s?s.i:-1;
+  ['bShiftL','bShiftR','bHalf','bDouble','bOne','bBpb','bTempo'].forEach(id=>$('#'+id).disabled=!has); $('#bBpb').value=String(beatsPerBar());
+  const nc=has?nearChange(curT()):null; S.ncShown=nc?nc.i:-1; $('#bTempoMove').hidden=$('#bTempoDel').hidden=!nc;
+  if(has&&document.activeElement!==inp) inp.value=s.ref.bpm.toFixed(1); if(!has) inp.value='';
+  const sum=tempoSummary();
+  $('#beatInfo').textContent=msg||(has?(sum?sum+(S.beat.auto?' (found from the '+(S.beat.from||'backing')+')':'')+'. The tempo box shows the section at the playhead.':S.beat.auto?'found from the '+(S.beat.from||'backing'):'adjusted by you'):'no beat grid yet');
 }
+function beatSegCheck(){ if(S.beat&&S.beat.changes&&S.beat.changes.length){ const t=curT(), n=nearChange(t); if(segAt(t).i!==S.segShown||(n?n.i:-1)!==S.ncShown) renderBeatInfo(); } else if(S.ncShown>=0) renderBeatInfo(); }
 async function scheduleBeatDetect(force){
   if(S.beat&&!force){ renderBeatInfo(); draw(); return; }
   const src=S.backBuf||S.guideBuf; if(!src){ renderBeatInfo(); return; }
@@ -1510,10 +1564,12 @@ async function scheduleBeatDetect(force){
     if(tok!==S.beatTok) return;
     if(!r){ S.beat=null; renderBeatInfo('song too short to find a beat'); return; }
     S.beat={bpm:Math.round(r.bpm*100)/100,offset:r.offset,auto:true,from:S.backBuf?'backing':'guide voice'};
+    if(r.changes&&r.changes.length){ S.beat.changes=r.changes.map(c=>({t:c.t,bpm:Math.round(c.bpm*100)/100,bar:null}));
+      setStatus('The tempo changes in this song: '+tempoSummary()+'. Check the start of each new tempo (the marked line) and move it with “Move tempo change here” if needed.'); }
     saveBeat(); renderBeatInfo(); draw();
   }catch(e){ if(tok===S.beatTok) renderBeatInfo('could not find a beat'); }
 }
-// tap tempo: tap along with the beat while the song plays; the grid follows the taps (least-squares fit)
+// tap tempo: tap along with the beat while the song plays; the grid of the tempo section you tap in follows the taps (least-squares fit)
 S.tapT=null;
 function tapTempo(){
   if(S.review) return;
@@ -1528,18 +1584,40 @@ function tapTempo(){
   const fit=(xs,ys)=>{ const m=xs.length, mx=xs.reduce((a,b)=>a+b)/m, my=ys.reduce((a,b)=>a+b)/m; let sxy=0,sxx=0; for(let i=0;i<m;i++){ sxy+=(xs[i]-mx)*(ys[i]-my); sxx+=(xs[i]-mx)**2; } const P=sxy/sxx; return {P,a:my-P*mx}; };
   let f=fit(xs,ys); if(n>=5&&Math.abs(ys[0]-(f.a))>f.P*0.25){ xs=xs.slice(1); ys=ys.slice(1); f=fit(xs,ys); }
   const bpm=60/f.P; if(!(bpm>=30&&bpm<=240)){ setStatus('That tempo is out of range; tap again on every beat.',true); return; }
-  const first=f.a, off=((first%f.P)+f.P)%f.P;
-  if(!S.beat) S.beat={bpm,offset:off,auto:false}; else { S.beat.bpm=bpm; S.beat.offset=off; }
-  if(S.tapT.times.length===4||S.beat.bar==null) S.beat.bar=first;   // the first tap counts as beat 1
+  const first=f.a, off=((first%f.P)+f.P)%f.P, firstTap=S.tapT.times.length===4;
+  if(!S.beat){ S.beat={bpm,offset:off,auto:false,bar:first}; }
+  else { const s=segAt(T[0]);
+    if(s.i===0){ S.beat.bpm=bpm; S.beat.offset=off; if(firstTap||S.beat.bar==null) S.beat.bar=first; }
+    else { const c=s.ref, k=Math.round((c.t-first)/f.P); let nt=first+k*f.P; const lo=s.i>1?beatSegs()[s.i-1].t0+1:1, hi=s.t1-1; if(nt<lo) nt+=f.P*Math.ceil((lo-nt)/f.P); if(nt<hi) c.t=nt; c.bpm=bpm; if(firstTap||c.bar==null) c.bar=first; } }
   beatEdited(); setStatus('Tap tempo: '+bpm.toFixed(1)+' BPM from '+n+' taps. Keep tapping to refine it. Your first tap counts as beat 1 (change it with Beat 1 here).');
 }
-function markBeatOne(){ if(!S.beat) return; const P=beatP(), t=S.playing?songTime():S.pos, k=Math.round((t-S.beat.offset)/P); S.beat.bar=S.beat.offset+k*P; S.beat.bpb=beatsPerBar(); beatEdited(); setStatus('Beat 1 set at '+fmtT1(S.beat.bar)+'. Bars of '+beatsPerBar()+' beats run through the song from here.'); }
+function markBeatOne(){ if(!S.beat) return; const t=curT(), s=segAt(t), k=Math.round((t-s.off)/s.P); s.ref.bar=s.off+k*s.P; S.beat.bpb=beatsPerBar(); beatEdited(); setStatus('Beat 1 set at '+fmtT1(s.ref.bar)+'. Bars of '+beatsPerBar()+' beats run from here'+(S.beat.changes&&S.beat.changes.length?' through this tempo section.':' through the song.')); }
 function beatEdited(){ if(!S.beat) return; S.beat.auto=false; saveBeat(); renderBeatInfo(); draw(); }
 function setBpm(bpm){
   if(!S.beat||!(bpm>=30&&bpm<=240)) return;
-  const P=beatP(), now=songTime(), k=Math.round((now-S.beat.offset)/P), anchor=S.beat.offset+k*P, P2=60/bpm; // keep the beat nearest the playhead in place
+  const now=curT(), s=segAt(now);
+  if(s.i>0){ s.ref.bpm=bpm; beatEdited(); return; }   // a later section keeps its first beat where it is
+  const P=s.P, k=Math.round((now-S.beat.offset)/P), anchor=S.beat.offset+k*P, P2=60/bpm; // keep the beat nearest the playhead in place
   S.beat.bpm=bpm; S.beat.offset=((anchor%P2)+P2)%P2; beatEdited();
 }
+function shiftGrid(d){ if(!S.beat) return; const s=segAt(curT());
+  if(s.i===0){ const P=s.P; S.beat.offset=((S.beat.offset+d)%P+P)%P; }
+  else { const a=beatSegs(), lo=a[s.i-1].t0+1, nt=s.ref.t+d; if(nt>lo&&nt<s.t1-1){ s.ref.t=nt; if(s.ref.bar!=null) s.ref.bar+=d; } }
+  beatEdited(); }
+// tempo changes: start a new tempo at the playhead (on the nearest beat), move a section's start, or remove it
+function addTempoChange(){
+  if(!S.beat){ setStatus('Find the beat first (Detect or Tap tempo).',true); return; }
+  const t=gridAt(curT(),1), s=segAt(t), a=beatSegs();
+  if(t<2||t>S.dur-2||a.some(x=>x.i>0&&Math.abs(x.t0-t)<2)){ setStatus('Put the playhead where the new tempo starts (not right at the start, the end or another tempo change).',true); return; }
+  (S.beat.changes=S.beat.changes||[]).push({t,bpm:Math.round(s.ref.bpm*100)/100,bar:null}); S.beat.changes.sort((x,y)=>x.t-y.t);
+  beatEdited(); setStatus('New tempo from '+fmtT1(t)+'. Now set it: play from here and use Tap tempo, or type the BPM. The grid before '+fmtT1(t)+' stays as it is.');
+}
+function nearChange(t){ let b=null; for(const s of beatSegs()) if(s.i&&Math.abs(s.t0-t)<60&&(!b||Math.abs(s.t0-t)<Math.abs(b.t0-t))) b=s; return b; } // the tempo change nearest the playhead (within a minute)
+function moveTempoChange(){ if(!S.beat) return; const now=curT(), s=nearChange(now); if(!s) return;
+  const a=beatSegs(); let nt=s.ref.t+Math.round((now-s.ref.t)/s.P)*s.P; const lo=a[s.i-1].t0+2, hi=s.t1-2;
+  if(nt<=lo||nt>=hi){ setStatus('That is too close to another tempo change.',true); return; }
+  if(s.ref.bar!=null) s.ref.bar+=nt-s.ref.t; s.ref.t=nt; beatEdited(); setStatus(Math.round(s.ref.bpm)+' BPM now starts at '+fmtT1(nt)+'.'); }
+function removeTempoChange(){ if(!S.beat) return; const s=nearChange(curT()); if(!s) return; S.beat.changes=S.beat.changes.filter(c=>c!==s.ref); beatEdited(); setStatus('Tempo change removed. The tempo before it now runs on.'); }
 
 // ===== target line editor =====
 S.editMode=false; S.sel=null; S.undo=[];
@@ -1613,7 +1691,7 @@ function warpSel(orig,a0,b0,a1,b1){
 function edAlign(){
   if(!S.tT||!S.tM) return; if(!S.beat){ setStatus('This song has no beat grid yet. Detect it or use Tap tempo first.',true); return; }
   const T=S.tT, M=S.tM, r=selRange(), i0=r?r.i0:0, i1=r?r.i1:T.length-1; if(i1-i0<2) return;
-  const dt=Math.max(0.002,(T[i1]-T[i0])/(i1-i0)), q=beatP()/4, off=S.beat.offset, snap=t=>off+Math.round((t-off)/q)*q;
+  const dt=Math.max(0.002,(T[i1]-T[i0])/(i1-i0)), snap=t=>gridAt(t,4);
   const ta=r?r.a:-1e9, tb=r?r.b:1e9;
   let voiced=0, whole=0; for(let i=i0;i<=i1;i++) if(!isNaN(M[i])){ voiced++; if(M[i]===Math.round(M[i])) whole++; }
   if(!voiced){ setStatus('There is no line to align here.',true); return; }
@@ -1698,7 +1776,7 @@ async function edRefind(btn){
 }
 function edLoop(){ const r=selRange(); if(!r) return; S.loop.a=Math.round(r.a*10)/10; S.loop.b=Math.round(Math.max(r.b,r.a+0.5)*10)/10; S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); setStatus('Loop set to the selection. Press Play.'); }
 // with Snap on, a tap selects the one beat under the finger (beat line to the next beat line)
-function selectBeatAt(t,m,half){ const P=(half?snapStep():Math.min(beatP(),snapStep()*2))||beatP(), a=S.beat.offset+Math.floor((t-S.beat.offset)/P)*P; S.sel={a:Math.max(0,a),b:a+P,m}; updateSelInfo(); draw(); }
+function selectBeatAt(t,m,half){ const sg=segAt(t), P=(half?snapStep(t):Math.min(sg.P,snapStep(t)*2))||sg.P, a=Math.max(sg.t0,sg.off+Math.floor((t-sg.off)/P+1e-6)*P); S.sel={a:Math.max(0,a),b:Math.min(a+P,sg.t1),m}; updateSelInfo(); draw(); }
 function selectFragmentAt(t){
   if(!S.tT) return;
   let k=-1,bd=1e9; for(let i=0;i<S.tT.length;i++){ if(isNaN(S.tM[i])) continue; const d=Math.abs(S.tT[i]-t); if(d<bd){ bd=d; k=i; } }
@@ -2422,15 +2500,15 @@ function centsDiff(you,target){
 function grade(d){ const a=Math.abs(d); return a<=50?'good':a<=100?'near':'off'; }
 
 // ===== main loop =====
-function tick(){
+function tick(){ beatSegCheck();
   if(!S.playing) return;
   if(!document.hidden) step();
   if(S.playing) requestAnimationFrame(tick);
 }
 // ===== bars: which beat is "1" (beat.bar = time of a first beat, beat.bpb = beats per bar) =====
 function beatsPerBar(){ return S.beat&&[2,3,4,6].includes(S.beat.bpb)?S.beat.bpb:4; }
-function barPos(k){ // position in the bar (0 = beat 1) of grid beat k (beat k is at offset + k·P)
-  const P=beatP(), n=beatsPerBar(), one=S.beat.bar!=null?Math.round((S.beat.bar-S.beat.offset)/P):0; return (((k-one)%n)+n)%n; }
+function barPos(k,s){ // position in the bar (0 = beat 1) of beat k of tempo section s (beat k is at s.off + k·P)
+  s=s||beatSegs()[0]; const n=beatsPerBar(), one=s.ref.bar!=null?Math.round((s.ref.bar-s.off)/s.P):0; return (((k-one)%n)+n)%n; }
 // ===== metronome: clicks on the beat grid, scheduled slightly ahead =====
 // modes: all beats (beat 1 accented) → backbeat (2 and 4) → beat 1 only → off
 const MET_MODES=['off','all','back','one'], MET_LABEL={off:'off',all:'all beats',back:'2 & 4',one:'beat 1'};
@@ -2450,10 +2528,10 @@ function metCancel(){ S.met.nodes.forEach(o=>{ try{ o.stop(); }catch(e){} }); S.
 function metSchedule(now){
   if(!S.met.on||!S.beat||!S.playing||S.review) return;
   if(S.met.epoch!==S.startAt){ metCancel(); S.met.epoch=S.startAt; }
-  const P=60/S.beat.bpm, off=S.beat.offset, end=Math.min(now+0.25*S.rate,loopActive()?S.loop.b-0.01:S.dur);
-  let k=S.met.k; if(k==null) k=Math.ceil((Math.max(now,S.pos0)-off)/P-1e-6);
-  for(;;){ const t=off+k*P; if(t>end) break; const at=S.startAt+(t-S.pos0)/S.rate; const pos=barPos(k); if(at>=S.ctx.currentTime&&metWants(pos)) metClick(at,pos===0&&S.met.mode!=='back'); k++; }
-  S.met.k=k;
+  const end=Math.min(now+0.25*S.rate,loopActive()?S.loop.b-0.01:S.dur), from=S.met.k!=null?S.met.k:Math.max(now,S.pos0)-1e-6;   // S.met.k: time of the last scheduled beat
+  let last=S.met.k;
+  beatsIn(from,end,1,(t,k,s)=>{ if(S.met.k!=null&&t<=S.met.k+1e-4) return; last=t; const at=S.startAt+(t-S.pos0)/S.rate, pos=barPos(k,s); if(at>=S.ctx.currentTime&&metWants(pos)) metClick(at,pos===0&&S.met.mode!=='back'); });
+  S.met.k=last!=null?last:from;
 }
 function setMetMode(m){ S.met.mode=m; S.met.on=m!=='off'; const b=$('#metBtn'); b.setAttribute('aria-pressed',String(S.met.on)); b.classList.toggle('guide-on',S.met.on); b.textContent='Click: '+MET_LABEL[m]; metCancel(); try{localStorage.setItem('pc-met',m)}catch(x){} }
 function setMetOn(on){ setMetMode(on?'all':'off'); }
@@ -2564,6 +2642,8 @@ function drawOverview(t0,t1,cs){
   const secs=songSections().filter(s=>s.sec); og.font='600 9px '+col('--font-body'); og.textBaseline='top'; let lastX=-99;
   for(const sc of secs){ const x=X(sc.t); og.fillStyle=col('--lane-c'); og.fillRect(Math.round(x),0,1,H);
     const ab=sc.label.split(/\s+/).map(w=>/^\d+$/.test(w)?w:w[0]).join('').toUpperCase().slice(0,4); if(x-lastX>22){ og.fillStyle=col('--muted'); og.fillText(ab,x+2,2); lastX=x; } }
+  // tempo changes
+  beatSegs().forEach(s=>{ if(!s.i) return; const x=Math.round(X(s.t0)); og.fillStyle=col('--accent'); for(let y=0;y<H;y+=6) og.fillRect(x,y,2,3); });
   // visible window and playhead
   og.fillStyle=col('--sel'); og.fillRect(X(t0),0,Math.max(2,X(t1)-X(t0)),H);
   og.strokeStyle=col('--accent'); og.lineWidth=1; og.strokeRect(X(t0)+0.5,0.5,Math.max(2,X(t1)-X(t0))-1,H-1);
@@ -2584,10 +2664,14 @@ function draw(){
   }
   // seconds grid
   if(S.beat){
-    const P=beatP(), q=P/4, showHalf=pps*P/2>=12, showQ=S.editMode&&S.snap&&fineSnap(), cb=col('--beat'), ch=col('--halfbeat');
-    for(let k=Math.ceil((t0-S.beat.offset)/q);;k++){ const t=S.beat.offset+k*q; if(t>t1) break; const x=Math.round(xOf(t))+0.5; if(x<=LABELW) continue;
-      if(k%4===0){ const bar=S.beat.bar!=null&&barPos(k/4)===0; g.fillStyle=cb; if(bar){ g.globalAlpha=1; g.fillRect(x-0.5,0,2,h); } else g.fillRect(x,0,1,h); } else if(k%2===0){ if(showHalf){ g.fillStyle=ch; g.fillRect(x,0,1,h); } }
-      else if(showQ){ g.fillStyle=ch; g.globalAlpha=0.55; g.fillRect(x,0,1,h); g.globalAlpha=1; } }
+    const showQ=S.editMode&&S.snap&&fineSnap(), cb=col('--beat'), ch=col('--halfbeat'), bars=hasBars();
+    beatsIn(t0,t1,4,(t,k,s)=>{ const showHalf=pps*s.P/2>=12, x=Math.round(xOf(t))+0.5; if(x<=LABELW) return;
+      if(k%4===0){ const bar=bars&&barPos(k/4,s)===0; g.fillStyle=cb; if(bar){ g.globalAlpha=1; g.fillRect(x-0.5,0,2,h); } else g.fillRect(x,0,1,h); } else if(k%2===0){ if(showHalf){ g.fillStyle=ch; g.fillRect(x,0,1,h); } }
+      else if(showQ){ g.fillStyle=ch; g.globalAlpha=0.55; g.fillRect(x,0,1,h); g.globalAlpha=1; } });
+    // tempo changes: a dashed line with the new tempo
+    beatSegs().forEach(s=>{ if(!s.i||s.t0<t0||s.t0>t1) return; const x=Math.round(xOf(s.t0))+0.5; if(x<=LABELW) return;
+      g.save(); g.strokeStyle=col('--accent'); g.lineWidth=2; g.setLineDash([5,4]); g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); g.restore();
+      g.font='600 11px system-ui,sans-serif'; g.fillStyle=col('--accent'); g.textAlign='left'; g.textBaseline='top'; g.fillText(Math.round(s.ref.bpm)+' BPM',x+4,3); });
   } else {
     g.fillStyle=col('--lane-line');
     for(let s=Math.ceil(t0);s<=t1;s++){ const x=Math.round(xOf(s))+0.5; if(x>LABELW) g.fillRect(x,0,1,h); }
@@ -2865,7 +2949,7 @@ function setToneOn(on){
 }
 $('#backBtn').addEventListener('click',()=>{ setBackMuted(!S.backMuted); setStatus(S.backMuted?'Backing off.':'Backing on.'+(S.backBuf?'':' (No backing track is loaded for this song.)')); });
 $('#metBtn').addEventListener('click',()=>{ const m=MET_MODES[(MET_MODES.indexOf(S.met.mode)+1)%MET_MODES.length]; setMetMode(m);
-  const bpm=S.beat?Math.round(S.beat.bpm*S.rate):0, noBar=S.beat&&S.beat.bar==null?' Mark the first beat of a bar with “Beat 1 here” in the editor so the accents fall right.':'';
+  const bpm=S.beat?Math.round(segAt(curT()).ref.bpm*S.rate):0, noBar=S.beat&&S.beat.bar==null?' Mark the first beat of a bar with “Beat 1 here” in the editor so the accents fall right.':'';
   setStatus(!S.beat&&m!=='off'?'Metronome on. It starts clicking once the beat grid for this song is found.':{off:'Metronome off.',all:'Click on every beat, beat 1 accented ('+bpm+' BPM).'+noBar,back:'Click on the backbeat (2 and 4).'+noBar,one:'Click on beat 1 of each bar only.'+noBar}[m]); });
 $('#volMet').addEventListener('input',e=>{ $('#volMetV').textContent=pct(+e.target.value); applyGains(); try{localStorage.setItem('pc-volmet',e.target.value)}catch(x){} });
 try{ const v=localStorage.getItem('pc-volmet'); if(v){ $('#volMet').value=v; $('#volMetV').textContent=Math.round(+v*100)+'%'; } { const mv=localStorage.getItem('pc-met'); if(mv==='1') setMetMode('all'); else if(MET_MODES.includes(mv)) setMetMode(mv); } }catch(x){}
@@ -2880,15 +2964,18 @@ $('#editBtn').addEventListener('click',()=>setEditMode(!S.editMode));
 $('#edTimeBtn').addEventListener('click',()=>{ if(S.editMode) setEditMode(false); $('#lyrTap').click(); });
 $('#edOne').addEventListener('click',edOneNote);
 $('#bpmIn').addEventListener('change',e=>{ const v=+e.target.value; if(!S.beat&&v>=30&&v<=240){ S.beat={bpm:v,offset:0,auto:false}; beatEdited(); } else setBpm(v); });
-$('#bShiftL').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=((S.beat.offset-0.02)%P+P)%P; beatEdited(); });
-$('#bShiftR').addEventListener('click',()=>{ if(!S.beat) return; const P=beatP(); S.beat.offset=(S.beat.offset+0.02)%P; beatEdited(); });
+$('#bShiftL').addEventListener('click',()=>shiftGrid(-0.02));
+$('#bShiftR').addEventListener('click',()=>shiftGrid(0.02));
+$('#bTempo').addEventListener('click',addTempoChange);
+$('#bTempoMove').addEventListener('click',moveTempoChange);
+$('#bTempoDel').addEventListener('click',removeTempoChange);
 $('#bOne').addEventListener('click',markBeatOne);
 $('#bTap').addEventListener('pointerdown',e=>{ e.preventDefault(); tapTempo(); });
 $('#bTap').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); e.stopPropagation(); tapTempo(); } });
 $('#bTap').addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
 $('#bBpb').addEventListener('change',e=>{ if(!S.beat) return; S.beat.bpb=+e.target.value; beatEdited(); setStatus('Bars of '+S.beat.bpb+' beats.'); });
-$('#bHalf').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm/2); });
-$('#bDouble').addEventListener('click',()=>{ if(S.beat) setBpm(S.beat.bpm*2); });
+$('#bHalf').addEventListener('click',()=>{ if(S.beat) setBpm(segAt(curT()).ref.bpm/2); });
+$('#bDouble').addEventListener('click',()=>{ if(S.beat) setBpm(segAt(curT()).ref.bpm*2); });
 $('#bDetect').addEventListener('click',()=>{ S.beat=null; scheduleBeatDetect(true); });
 function setSnap(on){ S.snap=on; $('#snapOn').checked=on; try{localStorage.setItem('pc-snap',on?'1':'0')}catch(x){} renderLyrics(false); }
 $('#snapOn').addEventListener('change',e=>setSnap(e.target.checked));
@@ -2911,9 +2998,12 @@ $('#edReset').addEventListener('click',e=>edReset(e.currentTarget));
 $('#edPlay').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 // next / previous half-beat line from t (dir 0: nearest); without a beat grid, steps of 0.25 s
 function stepGrid(t,dir,full){
-  const st=(S.beat&&S.snap)?(full?beatP():snapStep()):(full?1:0.25), off=(S.beat&&S.snap)?S.beat.offset:0, k=(t-off)/st;
-  let n=dir>0?Math.floor(k+1e-6)+1:dir<0?Math.ceil(k-1e-6)-1:Math.round(k);
-  return Math.max(0,Math.min(S.dur,off+n*st));
+  const clamp=x=>Math.max(0,Math.min(S.dur,x));
+  if(!(S.beat&&S.snap)){ const st=full?1:0.25, k=t/st; return clamp((dir>0?Math.floor(k+1e-6)+1:dir<0?Math.ceil(k-1e-6)-1:Math.round(k))*st); }
+  const div=full?1:snapDiv(); if(!dir) return clamp(gridAt(t,div));
+  const s=segAt(dir<0?t-1e-4:t), st=s.P/div, k=(t-s.off)/st;   // a tempo change is itself a grid line
+  if(dir>0){ const r=s.off+(Math.floor(k+1e-6)+1)*st; return clamp(r>s.cut?s.t1:r); }
+  let r=s.off+(Math.ceil(k-1e-6)-1)*st; while(r>s.cut) r-=st; return clamp(Math.max(s.t0,r));
 }
 // Alt held: quarter-beat snapping at any zoom
 function setAlt(v){ if(S.altHeld!==v){ S.altHeld=v; if(S.editMode||S.tap) draw(); } }
