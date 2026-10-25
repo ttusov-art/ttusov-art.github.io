@@ -40,6 +40,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size
 .wrap{max-width:1120px;margin:0 auto;padding-block:20px 48px;padding-inline:16px;display:flex;flex-direction:column;gap:14px}
 header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
 h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px);line-height:1.05;margin:0}
+#verMark{font-family:var(--font-mono);font-size:10px;font-weight:500;color:var(--muted);margin-left:3px;vertical-align:super;letter-spacing:0}
 .song{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .small{font-size:13px;color:var(--muted)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
@@ -277,7 +278,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 </div>
 <div class="wrap">
   <header>
-    <h1>Part Coach</h1>
+    <h1>Part Coach<sup id="verMark" title="App version"></sup></h1>
     <div class="song" id="songName">Demo: “Ode to Joy” melody</div>
   </header>
 
@@ -618,7 +619,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 k';
+const APP_VERSION='2026-10-25 l';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2878,7 +2879,7 @@ $('#sepCancel').addEventListener('click',cancelSeparation);
 $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
 initParts().then(renderLib);
 if(matchMedia('(pointer:fine)').matches) $('#laneHint').textContent+=' Keys: Space play/pause, ← → one beat back/forward.';
-$('#appVer').textContent='Part Coach version '+APP_VERSION;
+$('#appVer').textContent='Part Coach version '+APP_VERSION; $('#verMark').textContent=APP_VERSION.slice(-1); $('#verMark').title='Version '+APP_VERSION;
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
 $('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); });
