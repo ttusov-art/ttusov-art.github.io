@@ -552,6 +552,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <div class="field-row"><input id="zoom" type="range" min="2" max="30" step="1" value="8"><span class="val" id="zoomV">8 s</span></div>
       </div>
       <div class="field">
+        <label for="toneSound">Sound of the guide tone</label>
+        <select id="toneSound" class="sel">
+          <option value="tone">Guide tone</option>
+          <option value="piano">Piano (simple)</option>
+          <option value="grand">Grand piano (recorded)</option>
+        </select>
         <label for="keySound">Sound of the keyboard keys</label>
         <select id="keySound" class="sel">
           <option value="tone">Guide tone</option>
@@ -620,7 +626,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 o';
+const APP_VERSION='2026-10-25 p';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -986,15 +992,18 @@ function stop(){
 }
 function startTone(){
   stopTone(); const c=S.ctx;
+  if(S.toneSound&&S.toneSound!=='tone'){ S.tone={piano:true,v:null,m:NaN}; return; }   // piano sounds: one struck note per target note
   const o=c.createOscillator(); o.type='triangle'; o.frequency.value=220;
   const env=c.createGain(); env.gain.value=0;
   const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1800;
   o.connect(lp).connect(env).connect(S.gTone); o.start();
   S.tone={o,env,m:NaN};
 }
-function stopTone(){ if(!S.tone) return; try{S.tone.o.stop()}catch(e){} S.tone.o.disconnect(); S.tone.env.disconnect(); S.tone=null; }
+function stopTone(){ if(!S.tone) return; if(S.tone.piano){ voiceOff(S.tone.v); S.tone=null; return; } try{S.tone.o.stop()}catch(e){} S.tone.o.disconnect(); S.tone.env.disconnect(); S.tone=null; }
 function updateTone(now){
   if(!S.tone) return; const c=S.ctx, tg=targetAt(now), T=S.tone;
+  if(T.piano){ const m=isNaN(tg)?NaN:Math.round(tg); if(m===T.m||(isNaN(m)&&isNaN(T.m))) return;
+    voiceOff(T.v,!isNaN(m)); T.v=isNaN(m)?null:voiceOn(m,S.toneSound,S.gTone,1.3); T.m=m; return; }
   if(isNaN(tg)){ if(!isNaN(T.m)){ T.env.gain.setTargetAtTime(0,c.currentTime,0.02); T.m=NaN; } return; }
   const m=Math.round(tg);
   if(m!==T.m){ T.o.frequency.setTargetAtTime(m2f(m),c.currentTime,isNaN(T.m)?0.001:0.015); if(isNaN(T.m)) T.env.gain.setTargetAtTime(1,c.currentTime,0.01); T.m=m; }
@@ -2643,17 +2652,18 @@ function grandLoad(m){ if(S.grand[m]) return S.grand[m]; const name=GRAND_PC[m%1
   return S.grand[m]; }
 function grandNearest(m){ let best=GRAND_NOTES[0]; for(const n of GRAND_NOTES) if(Math.abs(n-m)<Math.abs(best-m)) best=n; return best; }
 function grandPrefetch(){ const lo=Math.max(21,Math.min(S.view.lo,45)-3), hi=Math.min(108,Math.max(S.view.hi,72)+3); let n=0,ok=0;
-  const list=GRAND_NOTES.filter(m=>m>=lo&&m<=hi); list.forEach(m=>grandLoad(m).then(()=>{ ok++; },()=>{}).finally(()=>{ if(++n===list.length&&S.keySound==='grand') setStatus(ok===list.length?'Grand piano ready.':'Some piano notes could not be downloaded; the simple piano fills in.',ok<list.length); })); }
-function keyNoteOn(m){
-  const c=ensureCtx(); if(c.state==='suspended') c.resume(); keyNoteOff(true);
-  const t=c.currentTime, f=m2f(m), out=c.createGain(); out.gain.value=keyVol(); out.connect(S.limiter);
+  const list=GRAND_NOTES.filter(m=>m>=lo&&m<=hi); list.forEach(m=>grandLoad(m).then(()=>{ ok++; },()=>{}).finally(()=>{ if(++n===list.length&&(S.keySound==='grand'||S.toneSound==='grand')) setStatus(ok===list.length?'Grand piano ready.':'Some piano notes could not be downloaded; the simple piano fills in.',ok<list.length); })); }
+// one sounding note in the chosen sound ('tone', 'piano' or 'grand'), into dest at the given level
+function voiceOn(m,sound,dest,level){
+  const c=ensureCtx(); if(c.state==='suspended') c.resume();
+  const t=c.currentTime, f=m2f(m), out=c.createGain(); out.gain.value=level; out.connect(dest);
   const env=c.createGain(); env.gain.setValueAtTime(0,t); env.connect(out); const oscs=[];
-  const gs=S.keySound==='grand'?grandNearest(m):null, gbuf=gs!=null?S.grand[gs+'b']:null;
+  const gs=sound==='grand'?grandNearest(m):null, gbuf=gs!=null?S.grand[gs+'b']:null;
   if(gs!=null&&!gbuf) grandLoad(gs).catch(()=>{});   // not downloaded yet: the simple piano plays this time
   if(gbuf){
     const src=c.createBufferSource(); src.buffer=gbuf; src.playbackRate.value=Math.pow(2,(m-gs)/12); src.connect(env); src.start(t); oscs.push(src);
-    out.gain.value=keyVol()*2.2; env.gain.setValueAtTime(1,t);
-  } else if(S.keySound==='piano'||S.keySound==='grand'){
+    out.gain.value=level*2.2; env.gain.setValueAtTime(1,t);
+  } else if(sound==='piano'||sound==='grand'){
     // a few partials with a quick attack and a natural fade, brighter at the start
     [[1,1],[2,0.45],[3,0.22],[4,0.12],[5,0.06]].forEach(([h,a])=>{ const o=c.createOscillator(), g=c.createGain(); o.type='sine'; o.frequency.value=f*h*(1+0.0004*h*h); g.gain.value=a; o.connect(g).connect(env); o.start(t); oscs.push(o); });
     env.gain.linearRampToValueAtTime(0.9,t+0.006); env.gain.setTargetAtTime(0.35,t+0.006,0.25); env.gain.setTargetAtTime(0.0001,t+1.2,1.2);
@@ -2661,8 +2671,14 @@ function keyNoteOn(m){
     const o=c.createOscillator(); o.type='triangle'; o.frequency.value=f; const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1800;
     o.connect(lp).connect(env); o.start(t); oscs.push(o); env.gain.setTargetAtTime(0.8,t,0.01);
   }
-  S.key={env,out,oscs,m}; S.kbNote=m; draw();
+  return {env,out,oscs,m};
 }
+function voiceOff(v,quick){
+  if(!v) return; const t=S.ctx.currentTime;
+  v.env.gain.cancelScheduledValues(t); v.env.gain.setValueAtTime(v.env.gain.value,t); v.env.gain.setTargetAtTime(0,t,quick?0.01:0.06);
+  setTimeout(()=>{ v.oscs.forEach(o=>{ try{o.stop()}catch(e){} o.disconnect(); }); v.env.disconnect(); v.out.disconnect(); },quick?100:500);
+}
+function keyNoteOn(m){ keyNoteOff(true); S.key=voiceOn(m,S.keySound,S.limiter,keyVol()); S.kbNote=m; draw(); }
 // while the Target box is held during playback, the sound follows the target line (a temporary guide tone)
 function keyFollow(m){
   const k=S.key, c=S.ctx;
@@ -2672,12 +2688,7 @@ function keyFollow(m){
   if(S.keySound!=='tone'){ keyNoteOn(m); return; }
   const t=c.currentTime; k.oscs[0].frequency.setTargetAtTime(m2f(m),t,k.rest?0.001:0.015); k.env.gain.cancelScheduledValues(t); k.env.gain.setTargetAtTime(0.8,t,0.01); k.rest=false; k.m=m; S.kbNote=m;
 }
-function keyNoteOff(quick){
-  const k=S.key; if(!k) return; S.key=null; S.kbNote=null; const c=S.ctx, t=c.currentTime;
-  k.env.gain.cancelScheduledValues(t); k.env.gain.setValueAtTime(k.env.gain.value,t); k.env.gain.setTargetAtTime(0,t,quick?0.01:0.06);
-  setTimeout(()=>{ k.oscs.forEach(o=>{ try{o.stop()}catch(e){} o.disconnect(); }); k.env.disconnect(); k.out.disconnect(); },quick?100:500);
-  draw();
-}
+function keyNoteOff(quick){ const k=S.key; if(!k) return; S.key=null; S.kbNote=null; voiceOff(k,quick); draw(); }
 function kbStart(){ const v=[...kb.pts.values()], rect=canvas.getBoundingClientRect(); kb.lo0=S.view.lo; kb.hi0=S.view.hi; kb.rh0=(rect.height-8)/(S.view.hi-S.view.lo+1); kb.top=rect.top;
   if(v.length===1) kb.y0=v[0]; else { kb.d0=Math.max(20,Math.abs(v[0]-v[1])); kb.mid0=(v[0]+v[1])/2; kb.c0=kb.hi0+0.5-(kb.mid0-kb.top-4)/kb.rh0; } }
 function setViewRange(lo,hi){ const span=Math.max(8,Math.min(60,hi-lo)); lo=Math.max(21,Math.min(108-span,Math.round(lo))); S.view={lo,hi:lo+span}; S.viewManual=true; draw(); }
@@ -3177,6 +3188,9 @@ S.timMarks='gentle'; try{ const v=localStorage.getItem('pc-timmarks'); if(['gent
 $('#timMarks').addEventListener('change',e=>{ S.timMarks=e.target.value; try{localStorage.setItem('pc-timmarks',S.timMarks)}catch(x){} draw(); });
 S.keySound='tone'; try{ const v=localStorage.getItem('pc-keysound'); if(v==='piano'||v==='grand') S.keySound=v; }catch(e){} $('#keySound').value=S.keySound;
 if(S.keySound==='grand') setTimeout(()=>{ try{ grandPrefetch(); }catch(e){} },1500);
+S.toneSound='tone'; try{ const v=localStorage.getItem('pc-tonesound'); if(v==='piano'||v==='grand') S.toneSound=v; }catch(e){} $('#toneSound').value=S.toneSound;
+if(S.toneSound==='grand'&&S.keySound!=='grand') setTimeout(()=>{ try{ grandPrefetch(); }catch(e){} },1500);
+$('#toneSound').addEventListener('change',e=>{ S.toneSound=e.target.value; try{ localStorage.setItem('pc-tonesound',S.toneSound); }catch(x){} if(S.toneSound==='grand'){ setStatus('Downloading the grand piano…'); grandPrefetch(); } if(S.tone){ stopTone(); startTone(); } });
 $('#keySound').addEventListener('change',e=>{ S.keySound=e.target.value; try{ localStorage.setItem('pc-keysound',S.keySound); }catch(x){} if(S.keySound==='grand'){ setStatus('Downloading the grand piano…'); grandPrefetch(); } });
 // Target box: press to hear the note you should sing now (like a piano key)
 { const tb=$('#rTargetBox'); let held=false;
