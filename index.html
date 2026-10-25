@@ -47,6 +47,9 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .readout{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;padding:0}
 .readout>div{padding:10px 14px;display:flex;flex-direction:column;min-width:0}
 .readout>div+div{border-left:1px solid var(--line)}
+#rTargetBox{cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;border-radius:8px 0 0 8px}
+#rTargetBox:hover{background:var(--lane-alt)}
+#rTargetBox.on{background:var(--accent-soft)}
 .readout b{font-family:var(--font-mono);font-size:clamp(18px,4.2vw,26px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
 .readout span{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
 @media (max-width:560px){.readout{grid-template-columns:repeat(6,minmax(0,1fr))}.readout>div{grid-column:span 2;padding:8px 10px}.readout>div:nth-child(n+4){grid-column:span 3;border-top:1px solid var(--line)}.readout>div:nth-child(4){border-left:0}}
@@ -279,7 +282,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </header>
 
   <section class="panel readout" aria-live="off">
-    <div><span>Target</span><b id="rTarget">–</b></div>
+    <div id="rTargetBox" role="button" tabindex="0" title="Press to hear the target note"><span>Target ♪</span><b id="rTarget">–</b></div>
     <div><span>You</span><b id="rYou">–</b></div>
     <div><span>Off by</span><b id="rCents">–</b></div>
     <div><span>On pitch</span><b id="rScore">–</b></div>
@@ -615,7 +618,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 i';
+const APP_VERSION='2026-10-25 j';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -996,7 +999,10 @@ function updateTone(now){
 }
 function seek(t){ const was=S.playing; if(was) stop(); S.pos=Math.max(0,Math.min(S.dur,t)); if(was) play(); else { updateTime(); draw(); } }
 function resetRun(clearPts){ if(clearPts){ S.pts=[]; S.tim.res=new Map(); } S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; $('#rScore').textContent='–'; $('#rTime').textContent='–'; $('#result').hidden=true; }
-function updateTime(){ $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur); }
+function updateTime(){ $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur); if(!S.playing){ const m=targetNoteNear(songTime()); $('#rTarget').textContent=m==null?'–':noteName(m); } }
+// the target note at t, or the next one coming up (for the Target box)
+function targetNoteNear(t){ if(!S.tT) return null; const v=targetAt(t); if(!isNaN(v)) return Math.round(v);
+  let i=0; while(i<S.tT.length&&S.tT[i]<t) i++; for(;i<S.tT.length;i++) if(!isNaN(S.tM[i])) return Math.round(S.tM[i]); return null; }
 
 // ===== song library (IndexedDB) =====
 const LIB_SR=24000;
@@ -3143,6 +3149,15 @@ S.timMarks='gentle'; try{ const v=localStorage.getItem('pc-timmarks'); if(['gent
 $('#timMarks').addEventListener('change',e=>{ S.timMarks=e.target.value; try{localStorage.setItem('pc-timmarks',S.timMarks)}catch(x){} draw(); });
 S.keySound='tone'; try{ const v=localStorage.getItem('pc-keysound'); if(v==='piano') S.keySound='piano'; }catch(e){} $('#keySound').value=S.keySound;
 $('#keySound').addEventListener('change',e=>{ S.keySound=e.target.value; try{ localStorage.setItem('pc-keysound',S.keySound); }catch(x){} });
+// Target box: press to hear the note you should sing now (like a piano key)
+{ const tb=$('#rTargetBox'); let held=false;
+  const on=e=>{ const t=S.playing?songTime()-(S.delay+ANA_LAG)*S.rate:songTime(); const m=targetNoteNear(t); if(m==null){ setStatus('No target note here.'); return; } held=true; tb.classList.add('on'); keyNoteOn(m); if(e) e.preventDefault(); };
+  const off=()=>{ if(!held) return; held=false; tb.classList.remove('on'); keyNoteOff(); };
+  tb.addEventListener('pointerdown',e=>{ tb.setPointerCapture(e.pointerId); on(e); });
+  ['pointerup','pointercancel'].forEach(ev=>tb.addEventListener(ev,off));
+  tb.addEventListener('contextmenu',e=>e.preventDefault());
+  tb.addEventListener('keydown',e=>{ if((e.key==='Enter')&&!e.repeat){ e.preventDefault(); e.stopPropagation(); on(); } });
+  tb.addEventListener('keyup',e=>{ if(e.key==='Enter'){ e.stopPropagation(); off(); } }); }
 $('#kbAuto').addEventListener('click',()=>{ S.viewManual=false; computeView(); draw(); saveView(); setStatus('Note range set back to automatic.'); });
 $('#ignoreOct').addEventListener('change',e=>{ S.ignoreOct=e.target.checked; });
 try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
