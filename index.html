@@ -679,7 +679,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 ak';
+const APP_VERSION='2026-10-25 al';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3078,7 +3078,7 @@ canvas.addEventListener('pointerdown',e=>{
     if(edge&&b-a>0.05){ drag={stretch:edge,a0:a,b0:b,orig:Float32Array.from(S.tM),x:e.clientX}; canvas.setPointerCapture(e.pointerId); return; } }
   // mouse in the editor: left button plays / pauses (click) and pans (drag) as in practice; right or middle button selects
   if(S.editMode&&!(e.pointerType==='mouse'&&e.button===0)){ if(e.pointerType==='mouse') e.preventDefault(); const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t,sel0:S.sel,mouse:e.pointerType==='mouse'}; S.sel={a:snapT(t),b:snapT(t),m:laneNoteAt(e.clientY)}; canvas.setPointerCapture(e.pointerId); draw(); return; }
-  stopGlide(); drag={x:e.clientX,pos:S.pos,moved:false,busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX),samples:[[performance.now(),e.clientX]]}; canvas.setPointerCapture(e.pointerId);
+  stopGlide(); drag={x:e.clientX,pos:S.pos,moved:false,isMouse:e.pointerType==='mouse',busy:S.playing||!!S.review,long:false,t:laneTimeAt(e.clientX),samples:[[performance.now(),e.clientX]]}; canvas.setPointerCapture(e.pointerId);
   const d=drag; d.timer=setTimeout(()=>{ if(drag===d&&!d.moved){ d.long=true; holdLoopPoint(d.t); } },550); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('mousedown',e=>{ if(e.button===1) e.preventDefault(); });   // no autoscroll on middle click
@@ -3102,7 +3102,7 @@ canvas.addEventListener('pointermove',e=>{ if(drag&&drag.stretch){ const d=drag,
   if(pinch){ if(touchPts.size<2){ pinch=null; try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } if(touchPts.size>0) return; drag=null; draw(); return; }
   if(drag&&drag.pinch){ if(touchPts.size===0) drag=null; return; }
   if(drag&&drag.timer) clearTimeout(drag.timer);
-  if(drag&&!drag.edit&&drag.moved&&!drag.long&&drag.samples&&!S.review){ // fast swipe → glide
+  if(drag&&!drag.edit&&!drag.isMouse&&drag.moved&&!drag.long&&drag.samples&&!S.review){ // fast swipe → glide (touch only; a mouse drag stops where you let go)
     const sm=drag.samples, now=performance.now(), recent=sm.filter(x=>now-x[0]<90); let v=0;
     if(recent.length>=2){ const a=recent[0], b=recent[recent.length-1]; v=(b[1]-a[1])/Math.max(1,b[0]-a[0]); }
     if(Math.abs(v)>0.6){ const pps=(canvas.clientWidth-LABELW)/S.win, res=!!drag.resume; drag=null; startGlide(-v*1000/pps,res); return; } }
