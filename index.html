@@ -637,7 +637,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 z';
+const APP_VERSION='2026-10-25 aa';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1447,21 +1447,21 @@ function fftRadix2(re, im){
   }
 }
 async function onsetEnvelope(x, sr, onProg){
-  const N=512, hop=128, frames=Math.max(0,Math.floor((x.length-N)/hop)), env=new Float32Array(frames);
+  const N=512, hop=128, frames=Math.max(0,Math.floor((x.length-N)/hop)), env=new Float32Array(frames), lowE=new Float32Array(frames);   // lowE: kick drum band (≈30–150 Hz)
   const win=new Float64Array(N); for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
-  const re=new Float64Array(N), im=new Float64Array(N), prev=new Float64Array(N/2), kMax=Math.min(N/2,Math.round(5000/sr*N));
+  const re=new Float64Array(N), im=new Float64Array(N), prev=new Float64Array(N/2), kMax=Math.min(N/2,Math.round(5000/sr*N)), kLo=Math.max(1,Math.round(30/sr*N)), kHi=Math.round(150/sr*N);
   for(let f=0;f<frames;f++){
     const s=f*hop; for(let i=0;i<N;i++){ re[i]=x[s+i]*win[i]; im[i]=0; }
-    fftRadix2(re,im); let flux=0;
-    for(let k=1;k<kMax;k++){ const m=Math.log1p(100*Math.hypot(re[k],im[k])); const d=m-prev[k]; if(d>0) flux+=d; prev[k]=m; }
-    env[f]=flux;
+    fftRadix2(re,im); let flux=0, lf=0;
+    for(let k=1;k<kMax;k++){ const m=Math.log1p(100*Math.hypot(re[k],im[k])); const d=m-prev[k]; if(d>0){ flux+=d; if(k>=kLo&&k<=kHi) lf+=d; } prev[k]=m; }
+    env[f]=flux; lowE[f]=lf;
     if(onProg&&f%3000===0){ onProg(f/frames); await new Promise(r=>setTimeout(r,0)); }
   }
   // remove slow trend (local mean over ~0.5 s) and keep the positive part
-  const fps=sr/hop, w=Math.round(fps*0.25), out=new Float32Array(frames); let acc=0;
-  const cs=new Float64Array(frames+1); for(let i=0;i<frames;i++) cs[i+1]=cs[i]+env[i];
-  for(let i=0;i<frames;i++){ const a=Math.max(0,i-w), b=Math.min(frames,i+w+1); const mean=(cs[b]-cs[a])/(b-a); out[i]=Math.max(0,env[i]-mean); }
-  return {env:out,fps};
+  const fps=sr/hop, w=Math.round(fps*0.25);
+  const detrend=e=>{ const out=new Float32Array(frames), cs=new Float64Array(frames+1); for(let i=0;i<frames;i++) cs[i+1]=cs[i]+e[i];
+    for(let i=0;i<frames;i++){ const a=Math.max(0,i-w), b=Math.min(frames,i+w+1); out[i]=Math.max(0,e[i]-(cs[b]-cs[a])/(b-a)); } return out; };
+  return {env:detrend(env),low:detrend(lowE),fps};
 }
 function combScore(env,fps,P,o){
   let s=0,n=0; for(let t=o;;t+=P){ const x=t*fps; const i=Math.floor(x); if(i+1>=env.length) break; const f=x-i; s+=env[i]*(1-f)+env[i+1]*f; n++; }
@@ -1507,13 +1507,20 @@ function findTempoSections(env,fps){
   }
   return out.length>1?out:null;
 }
+// beat or off-beat? the whole grid can sit half a beat off; if the kick drum clearly hits the half-beat lines, use those
+function kickPhase(low,fps,P,o,t0,t1){
+  const a=Math.max(0,Math.round(t0*fps)), seg=low.subarray(a,Math.min(low.length,Math.round(t1*fps))), ph=x=>((x-a/fps)%P+P)%P;
+  const on=combScore(seg,fps,P,ph(o)), half=combScore(seg,fps,P,ph(o+P/2));
+  return half>on*1.25?o+P/2:o;
+}
 async function detectBeatGrid(x, sr, onProg){
-  const {env,fps}=await onsetEnvelope(x,sr,onProg);
+  const {env,low,fps}=await onsetEnvelope(x,sr,onProg);
   if(env.length<fps*8) return null;
   const confOf=(P,o)=>{ const on=combScore(env,fps,P,((o%P)+P)%P), off=combScore(env,fps,P,(((o+P/2)%P)+P)%P); return off>0?on/off:9; };
   const sec=findTempoSections(env,fps);
-  if(sec){ const s0=sec[0]; return {bpm:60/s0.P, offset:((s0.o%s0.P)+s0.P)%s0.P, conf:confOf(s0.P,s0.o), changes:sec.slice(1).map(s=>({t:s.t,bpm:60/s.P,bar:null}))}; }
-  const g=refineGrid(env,fps,0,env.length/fps,60/acTempo(env,fps,0,env.length));
+  if(sec){ sec.forEach((s,i)=>{ const t1=i+1<sec.length?sec[i+1].t:env.length/fps, t0=i?s.t:0, o=kickPhase(low,fps,s.P,s.o,t0,t1); if(i){ s.t=o; s.o=o; } else s.o=o; });
+    const s0=sec[0]; return {bpm:60/s0.P, offset:((s0.o%s0.P)+s0.P)%s0.P, conf:confOf(s0.P,s0.o), changes:sec.slice(1).map(s=>({t:s.t,bpm:60/s.P,bar:null}))}; }
+  const g=refineGrid(env,fps,0,env.length/fps,60/acTempo(env,fps,0,env.length)); g.o=kickPhase(low,fps,g.P,g.o,0,env.length/fps);
   return {bpm:60/g.P, offset:((g.o%g.P)+g.P)%g.P, conf:confOf(g.P,g.o)};
 }
 
@@ -3105,7 +3112,7 @@ $('#sepCancel').addEventListener('click',cancelSeparation);
 $('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
 initParts().then(renderLib);
 if(matchMedia('(pointer:fine)').matches) $('#laneHint').textContent+=' Keys: Space play/pause, ← → one beat back/forward.';
-$('#appVer').textContent='Part Coach version '+APP_VERSION; $('#verMark').textContent=APP_VERSION.slice(-1); $('#verMark').title='Version '+APP_VERSION;
+$('#appVer').textContent='Part Coach version '+APP_VERSION; $('#verMark').textContent=APP_VERSION.split(' ').pop(); $('#verMark').title='Version '+APP_VERSION;
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
 $('#clearLoop').addEventListener('click',()=>{ S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); });
