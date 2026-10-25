@@ -66,15 +66,18 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .small{font-size:13px;color:var(--muted)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
 
-.readout{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;padding:0}
+.readout{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;padding:0}
 .readout>div{padding:10px 14px;display:flex;flex-direction:column;min-width:0}
 .readout>div+div{border-left:1px solid var(--line)}
 #rTargetBox{cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;border-radius:8px 0 0 8px}
 #rTargetBox:hover{background:var(--lane-alt)}
 #rTargetBox.on{background:var(--accent-soft)}
+#rKeyBox{cursor:pointer;user-select:none;-webkit-user-select:none;border-radius:0 8px 8px 0}
+#rKeyBox:hover{background:var(--lane-alt)}
+#rKeyBox b{color:var(--accent)}
 .readout b{font-family:var(--font-mono);font-size:clamp(18px,4.2vw,26px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
 .readout span{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
-@media (max-width:560px){.readout{grid-template-columns:repeat(6,minmax(0,1fr))}.readout>div{grid-column:span 2;padding:8px 10px}.readout>div:nth-child(n+4){grid-column:span 3;border-top:1px solid var(--line)}.readout>div:nth-child(4){border-left:0}}
+@media (max-width:560px){.readout{grid-template-columns:repeat(3,minmax(0,1fr))}.readout>div{padding:8px 10px}.readout>div:nth-child(n+4){border-top:1px solid var(--line)}.readout>div:nth-child(4){border-left:0}#rTargetBox{border-radius:8px 0 0 0}#rKeyBox{border-radius:0 0 8px 0}}
 .c-good{color:var(--good)}.c-near{color:var(--near)}.c-off{color:var(--off)}
 
 .lane{overflow:hidden;position:relative}
@@ -329,6 +332,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div><span>Off by</span><b id="rCents">–</b></div>
     <div><span>On pitch</span><b id="rScore">–</b></div>
     <div><span>On time</span><b id="rTime">–</b></div>
+    <div id="rKeyBox" role="button" tabindex="0" title="The key of the song: press to see its notes on a piano"><span>Key ♪</span><b id="rKey">–</b></div>
   </section>
 
   <section class="panel lane">
@@ -679,7 +683,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 ap';
+const APP_VERSION='2026-10-25 aq';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1737,7 +1741,9 @@ function scaleSpelling(k){ // pitch class → spelled name, for the 7 notes of t
   return out;
 }
 S.mkey=null; S.mkeyTok=0;
-function renderKeyBtn(msg){ const b=$('#edKey'); if(!b) return; b.textContent='Key: '+(msg||(S.mkey?keyName(S.mkey):'–')); b.disabled=!S.mkey&&!msg; }
+function keyShort(k){ return (k.mode==='major'?KEY_MAJ_NAMES:KEY_MIN_NAMES)[k.tonic]+(k.mode==='minor'?'m':''); }   // F♯ = F♯ major, F♯m = F♯ minor
+function renderKeyBtn(msg){ const rk=$('#rKey'); if(rk){ rk.textContent=S.mkey?keyShort(S.mkey):msg==='finding…'?'…':'–'; $('#rKeyBox').title=S.mkey?'Key: '+keyName(S.mkey)+'. Press to see its notes on a piano.':'The key of the song'; }
+  const b=$('#edKey'); if(!b) return; b.textContent='Key: '+(msg||(S.mkey?keyName(S.mkey):'–')); b.disabled=!S.mkey&&!msg; }
 async function scheduleKeyDetect(force){
   if(S.mkey&&!force){ renderKeyBtn(); return; }
   if(!S.tM&&!S.backBuf) return; const tok=++S.mkeyTok; renderKeyBtn('finding…');
@@ -3212,6 +3218,8 @@ $('#edSmooth').addEventListener('click',edSmooth);
 $('#edAlign').addEventListener('click',edAlign);
 $('#edShL').addEventListener('click',()=>edShiftLine(-1));
 $('#edKey').addEventListener('click',openKeyView);
+$('#rKeyBox').addEventListener('click',openKeyView);
+$('#rKeyBox').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); openKeyView(); } });
 $('#kvClose').addEventListener('click',closeKeyView);
 $('#keyView').addEventListener('click',e=>{ if(e.target.id==='keyView') closeKeyView(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#keyView').hidden){ e.stopPropagation(); closeKeyView(); } },true);
