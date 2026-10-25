@@ -304,6 +304,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <button id="edOne" type="button" class="primary">One note</button>
       <button id="edFill" type="button">Fill</button>
       <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
+      <button id="edAlign" type="button" title="Move every note start and end to the nearest quarter of a beat">Align to grid</button>
       <button id="edUp" type="button" aria-label="Up a semitone">▲ ½</button>
       <button id="edDown" type="button" aria-label="Down a semitone">▼ ½</button>
       <button id="edOctUp" type="button">Octave ▲</button>
@@ -633,7 +634,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 v';
+const APP_VERSION='2026-10-25 w';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1599,6 +1600,26 @@ function smoothNotes(runV,fps){
   const out=new Int16Array(L);
   for(let i=L-1;i>=0;i--){ out[i]=lo+k; if(i>0&&bp[i*K+k]) k=bestFrom[i]; }
   return out;
+}
+// Align to grid: move every note start, change and end of a smoothed line to the nearest quarter of a beat
+function edAlign(){
+  if(!S.tT||!S.tM) return; if(!S.beat){ setStatus('This song has no beat grid yet. Detect it or use Tap tempo first.',true); return; }
+  const T=S.tT, M=S.tM, r=selRange(), i0=r?r.i0:0, i1=r?r.i1:T.length-1; if(i1-i0<2) return;
+  const dt=Math.max(0.002,(T[i1]-T[i0])/(i1-i0)), q=beatP()/4, off=S.beat.offset, snap=t=>off+Math.round((t-off)/q)*q;
+  const ta=r?r.a:-1e9, tb=r?r.b:1e9;
+  let voiced=0, whole=0; for(let i=i0;i<=i1;i++) if(!isNaN(M[i])){ voiced++; if(M[i]===Math.round(M[i])) whole++; }
+  if(!voiced){ setStatus('There is no line to align here.',true); return; }
+  if(whole<voiced*0.9){ setStatus('Smooth the line first: Align to grid works on clean notes.',true); return; }
+  // notes = runs of the same pitch
+  const segs=[]; for(let i=i0;i<=i1;i++){ const m=M[i]; if(isNaN(m)) continue; const L=segs[segs.length-1];
+    if(L&&L.m===m&&L.last===i-1){ L.last=i; L.b=T[i]+dt; } else segs.push({m,a:T[i],b:T[i]+dt,last:i}); }
+  // snap the edges; a note that would shrink to nothing gives its time to its neighbour
+  let fin=[]; for(const g of segs){ let a=Math.max(ta,Math.min(tb,snap(g.a))), b=Math.max(ta,Math.min(tb,snap(g.b))); const P=fin[fin.length-1];
+    if(P&&a<P.b) a=P.b; if(b-a<q*0.5){ if(P&&Math.abs(g.a-P.b)<dt*2) P.b=Math.max(P.b,b); continue; }
+    if(P&&P.m===g.m&&Math.abs(P.b-a)<1e-6){ P.b=b; continue; } fin.push({m:g.m,a,b}); }
+  pushUndo(); const out=Float32Array.from(M); for(let i=i0;i<=i1;i++) out[i]=NaN;
+  let k=0; for(let i=i0;i<=i1;i++){ const t=T[i]; while(k<fin.length-1&&t>=fin[k].b-1e-9) k++; const g=fin[k]; if(g&&t>=g.a-1e-9&&t<g.b-1e-9) out[i]=g.m; }
+  S.tM=out; targetEdited('Aligned '+fin.length+' notes '+(r?'in '+fmtT1(r.a)+'–'+fmtT1(r.b):'in the whole song')+' to the nearest quarter beat. Undo brings the old line back.');
 }
 function edSmooth(){
   if(!S.tT||!S.tM) return;
@@ -2857,6 +2878,7 @@ renderBeatInfo();
 $('#edFill').addEventListener('click',edFill);
 $('#edRefind').addEventListener('click',e=>edRefind(e.currentTarget));
 $('#edSmooth').addEventListener('click',edSmooth);
+$('#edAlign').addEventListener('click',edAlign);
 $('#edUp').addEventListener('click',()=>edShift(1));
 $('#edDown').addEventListener('click',()=>edShift(-1));
 $('#edOctUp').addEventListener('click',()=>edShift(12));
