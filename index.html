@@ -555,9 +555,10 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <label for="keySound">Sound of the keyboard keys</label>
         <select id="keySound" class="sel">
           <option value="tone">Guide tone</option>
-          <option value="piano">Piano</option>
+          <option value="piano">Piano (simple)</option>
+          <option value="grand">Grand piano (recorded)</option>
         </select>
-        <span class="small">Tap a key on the keyboard left of the pitch lane to hear its note, also while the song plays. Its volume follows the guide tone volume.</span>
+        <span class="small">Tap a key on the keyboard left of the pitch lane to hear its note, also while the song plays. Its volume follows the guide tone volume. The recorded grand piano downloads about 1.5 MB the first time (Salamander Grand Piano by Alexander Holm, CC BY 3.0).</span>
       </div>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
       <div class="field">
@@ -619,7 +620,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-25 n';
+const APP_VERSION='2026-10-25 o';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2633,11 +2634,26 @@ let kb=null, kbLastTap=0, kbSaveTimer=null;
 // playable keyboard: one note at a time, sounds while held
 // key volume follows the guide tone slider (at off, the keys still sound quietly)
 function keyVol(){ const v=+$('#volTone').value; return (v>0?v:0.12)*0.45; }
+// recorded grand piano: Salamander samples every minor third (C, D#, F#, A), pitched to the nearest note
+const GRAND_URL='https://tonejs.github.io/audio/salamander/', GRAND_PC={0:'C',3:'Ds',6:'Fs',9:'A'};
+const GRAND_NOTES=(()=>{ const a=[]; for(let m=21;m<=108;m++) if(GRAND_PC[m%12]!==undefined) a.push(m); return a; })();
+S.grand={};
+function grandLoad(m){ if(S.grand[m]) return S.grand[m]; const name=GRAND_PC[m%12]+(Math.floor(m/12)-1)+'.mp3';
+  S.grand[m]=fetch(GRAND_URL+name).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); }).then(b=>ensureCtx().decodeAudioData(b)).then(buf=>(S.grand[m+'b']=buf),e=>{ delete S.grand[m]; throw e; });
+  return S.grand[m]; }
+function grandNearest(m){ let best=GRAND_NOTES[0]; for(const n of GRAND_NOTES) if(Math.abs(n-m)<Math.abs(best-m)) best=n; return best; }
+function grandPrefetch(){ const lo=Math.max(21,Math.min(S.view.lo,45)-3), hi=Math.min(108,Math.max(S.view.hi,72)+3); let n=0,ok=0;
+  const list=GRAND_NOTES.filter(m=>m>=lo&&m<=hi); list.forEach(m=>grandLoad(m).then(()=>{ ok++; },()=>{}).finally(()=>{ if(++n===list.length&&S.keySound==='grand') setStatus(ok===list.length?'Grand piano ready.':'Some piano notes could not be downloaded; the simple piano fills in.',ok<list.length); })); }
 function keyNoteOn(m){
   const c=ensureCtx(); if(c.state==='suspended') c.resume(); keyNoteOff(true);
   const t=c.currentTime, f=m2f(m), out=c.createGain(); out.gain.value=keyVol(); out.connect(S.limiter);
   const env=c.createGain(); env.gain.setValueAtTime(0,t); env.connect(out); const oscs=[];
-  if(S.keySound==='piano'){
+  const gs=S.keySound==='grand'?grandNearest(m):null, gbuf=gs!=null?S.grand[gs+'b']:null;
+  if(gs!=null&&!gbuf) grandLoad(gs).catch(()=>{});   // not downloaded yet: the simple piano plays this time
+  if(gbuf){
+    const src=c.createBufferSource(); src.buffer=gbuf; src.playbackRate.value=Math.pow(2,(m-gs)/12); src.connect(env); src.start(t); oscs.push(src);
+    out.gain.value=keyVol()*2.2; env.gain.setValueAtTime(1,t);
+  } else if(S.keySound==='piano'||S.keySound==='grand'){
     // a few partials with a quick attack and a natural fade, brighter at the start
     [[1,1],[2,0.45],[3,0.22],[4,0.12],[5,0.06]].forEach(([h,a])=>{ const o=c.createOscillator(), g=c.createGain(); o.type='sine'; o.frequency.value=f*h*(1+0.0004*h*h); g.gain.value=a; o.connect(g).connect(env); o.start(t); oscs.push(o); });
     env.gain.linearRampToValueAtTime(0.9,t+0.006); env.gain.setTargetAtTime(0.35,t+0.006,0.25); env.gain.setTargetAtTime(0.0001,t+1.2,1.2);
@@ -2653,7 +2669,7 @@ function keyFollow(m){
   if(m==null){ if(k&&!k.rest){ k.env.gain.cancelScheduledValues(c.currentTime); k.env.gain.setTargetAtTime(0,c.currentTime,0.03); k.rest=true; S.kbNote=null; } return; }
   if(!k){ keyNoteOn(m); return; }
   if(m===k.m&&!k.rest) return;
-  if(S.keySound==='piano'){ keyNoteOn(m); return; }
+  if(S.keySound!=='tone'){ keyNoteOn(m); return; }
   const t=c.currentTime; k.oscs[0].frequency.setTargetAtTime(m2f(m),t,k.rest?0.001:0.015); k.env.gain.cancelScheduledValues(t); k.env.gain.setTargetAtTime(0.8,t,0.01); k.rest=false; k.m=m; S.kbNote=m;
 }
 function keyNoteOff(quick){
@@ -3159,8 +3175,9 @@ canvas.addEventListener('wheel',e=>{ e.preventDefault();
   else setWin(S.win*Math.exp(e.deltaY*0.0015),true); },{passive:false});
 S.timMarks='gentle'; try{ const v=localStorage.getItem('pc-timmarks'); if(['gentle','detailed','off'].includes(v)) S.timMarks=v; }catch(x){} $('#timMarks').value=S.timMarks;
 $('#timMarks').addEventListener('change',e=>{ S.timMarks=e.target.value; try{localStorage.setItem('pc-timmarks',S.timMarks)}catch(x){} draw(); });
-S.keySound='tone'; try{ const v=localStorage.getItem('pc-keysound'); if(v==='piano') S.keySound='piano'; }catch(e){} $('#keySound').value=S.keySound;
-$('#keySound').addEventListener('change',e=>{ S.keySound=e.target.value; try{ localStorage.setItem('pc-keysound',S.keySound); }catch(x){} });
+S.keySound='tone'; try{ const v=localStorage.getItem('pc-keysound'); if(v==='piano'||v==='grand') S.keySound=v; }catch(e){} $('#keySound').value=S.keySound;
+if(S.keySound==='grand') setTimeout(()=>{ try{ grandPrefetch(); }catch(e){} },1500);
+$('#keySound').addEventListener('change',e=>{ S.keySound=e.target.value; try{ localStorage.setItem('pc-keysound',S.keySound); }catch(x){} if(S.keySound==='grand'){ setStatus('Downloading the grand piano…'); grandPrefetch(); } });
 // Target box: press to hear the note you should sing now (like a piano key)
 { const tb=$('#rTargetBox'); let held=false;
   const on=e=>{ if(e) e.preventDefault(); held=true; S.targetHold=true; tb.classList.add('on');
