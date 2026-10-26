@@ -572,7 +572,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div class="lib-head">
       <span class="small">Separated songs and songs you added are kept here on this device, in the part chosen above.</span>
     </div>
-    <div class="row" id="libOrderRow" hidden><button id="libOrder" type="button" title="Change the order of the songs in this part (also used for playback and shared with members)">⇅ Change the order</button></div>
     <div id="songList"></div>
     <div class="sep-row" style="border-top:1px solid var(--line);padding-top:10px">
       <button id="bkSave" type="button">Back up library</button>
@@ -629,8 +628,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <span class="small">The Click button above the pitch lane plays a click on every beat of the song's beat grid.</span>
       </div>
       <div class="field">
-        <label class="check" for="restoreBacksOn"><input id="restoreBacksOn" type="checkbox" checked>Restore deleted backings with updates</label>
-        <span class="small">On: when the moderator's update arrives, backing tracks you deleted come back. Off: backings you deleted stay deleted (saves space on this device).</span>
+        <label class="check" for="restoreBacksOn"><input id="restoreBacksOn" type="checkbox" checked>Restore deleted songs and backings with updates</label>
+        <span class="small">On: when the moderator's update arrives, songs and backing tracks you deleted come back. Off: what you deleted stays deleted (saves space on this device).</span>
       </div>
       <div class="field">
         <label for="delay">Delay compensation</label>
@@ -704,6 +703,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div id="adminTools" hidden>
     <div class="share-box">
+      <b>Organise songs (<span id="admPart"></span>)</b>
+      <span class="small">▲ ▼ change the running order (also used for playback and shared with members). Move or copy a song to another part.</span>
+      <div id="admSongs"></div>
+    </div>
+    <div class="share-box">
       <b>Add a new song</b>
       <span class="small">Choose a song (for example a part MP3). The app separates the voice, finds the pitch line and keeps it in the library, in the part chosen in Song library.</span>
       <div class="row"><span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span></div>
@@ -713,7 +717,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="sep-row">
         <label class="check" for="keepLib"><input id="keepLib" type="checkbox" checked>Keep in library</label>
         <button id="sepCancel" type="button">Cancel</button>
-        <button id="sepSave" type="button" hidden>Save vocals</button>
       </div>
       <span class="small">Keep this page open and the screen on while it works. On a laptop this takes a few minutes; on a phone it can take much longer.</span>
     </div>
@@ -825,7 +828,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 de';
+const APP_VERSION='2026-10-26 df';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1366,6 +1369,10 @@ const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
 function ownerParts(){ try{ return JSON.parse(localStorage.getItem('pc-owner-parts')||'[]'); }catch(e){ return []; } }
 function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
 // backings you deleted on this device: updates bring them back only when "Restore deleted backings" is on
+function delSongs(){ try{ return JSON.parse(localStorage.getItem('pc-del-songs')||'[]'); }catch(e){ return []; } }
+function setDelSongs(l){ try{ localStorage.setItem('pc-del-songs',JSON.stringify(l)); }catch(e){} }
+function forgetSong(s){ if(s&&s.uid&&!isOwnerPart(S.part)){ const l=delSongs(); if(!l.includes(s.uid)){ l.push(s.uid); setDelSongs(l); } } }
+const skipDeleted=(m,man)=>!restoreBacks()&&!!man.part&&!isOwnerPart(man.part)&&delSongs().includes(m.uid);
 function restoreBacks(){ try{ return localStorage.getItem('pc-restore-backs')!=='0'; }catch(e){ return true; } }
 const wasDeleted=(c,b)=>!!c&&(c.delBacks||[]).some(d=>d.name===b.name&&!!d.sep===!!b.sep&&(d.size==null||b.size==null||d.size===b.size));
 // with restoring on, a song is refreshed when the share has a backing this device doesn't (also ones deleted before deletions were remembered); never on the moderator's own device
@@ -1401,7 +1408,7 @@ async function backupLibrary(fixedName,btn0,txt0){
 }
 function neededBytes(z,man,byUid){
   let need=0;
-  for(const m of man.songs){ const cur=byUid[m.uid]; if(cur&&!wantsBacksBack(cur,m)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
+  for(const m of man.songs){ const cur=byUid[m.uid]; if(!cur&&skipDeleted(m,man)) continue; if(cur&&!wantsBacksBack(cur,m)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
     const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) need+=z.size(m.files.pcm);
     for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) need+=z.size(f);
     const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!(!restoreBacks()&&wasDeleted(cur,b))&&!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
@@ -1427,6 +1434,7 @@ async function restoreLibrary(file,out,askBig){
     for(const m of man.songs){
       i++; txt.textContent='Restoring song '+i+' of '+man.songs.length+'…';
       const cur=byUid[m.uid];
+      if(!cur&&shared&&skipDeleted(m,man)) continue;   // you deleted it and restoring is off
       if(cur&&!wantsBacksBack(cur,m)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
         if(shared&&!cur.base){ // shared before this version: remember the shared version now (from the file if you edited it since)
           const same=(cur.updated||cur.created)===(m.updated||m.created), c0=same?toF32(cur.contour):(m.files.contour?new Float32Array(await (await z.get(m.files.contour)).arrayBuffer()):null);
@@ -1446,12 +1454,12 @@ async function restoreLibrary(file,out,askBig){
       if(cur&&cur.delBacks&&!restoreBacks()) rec.delBacks=cur.delBacks;   // keep remembering what you deleted
       if(cur) rec.id=cur.id;
       if(shared&&rec.contour) rec.base={updated:rec.updated,contour:Float32Array.from(rec.contour),lyrics:rec.lyrics.map(l=>({t:l.t,text:l.text}))};   // the shared version: suggestions are made against it
-      await libPutRaw(rec); if(cur){ updated++; updIds.push(cur.id); } else added++;
+      await libPutRaw(rec); if(cur){ updated++; updIds.push(cur.id); } else { added++; const dl=delSongs(); if(dl.includes(m.uid)) setDelSongs(dl.filter(u=>u!==m.uid)); }
     }
     let reordered=false; if(Array.isArray(man.order)&&man.order.length){ // the sharer's running order
       const all=await libList(), part=man.part, mine=sortSongs(all.filter(x=>partOf(x)===part)), byU={}; mine.forEach(x=>{ if(x.uid) byU[x.uid]=x; });
       const ordered=man.order.map(u=>byU[u]).filter(Boolean), rest=mine.filter(x=>!ordered.includes(x));
-      const next=rest.concat(ordered); if(next.some((x,k)=>x.ord!==k)){ reordered=true; await saveSongOrder(next); } }
+      const next=rest.concat(ordered); if(next.some((x,k)=>x.ord!==k)){ reordered=next.some((x,k)=>x!==mine[k]); await saveSongOrder(next); } }   // only a real change of order is reported
     if(man.part&&out){ S.part=man.part; partsSave(); }
     await renderLib();
     if(S.cur&&updIds.includes(S.cur.libId)){ if(S.playing) stop(); const ed=S.editMode; await openLibSong(S.cur.libId,true); if(ed) setEditMode(true); }   // the open song was replaced: show the new version (never save the old one over it)
@@ -1501,30 +1509,31 @@ async function renderLib(){
   const all=await libMeta(); renderParts(all);
   const songs=sortSongs(all.filter(x=>partOf(x)===S.part)).map(s=>({id:s.id,uid:s.uid,name:s.name,created:s.created,dur:s.dur,nb:s.nb!=null?s.nb:backsOf(s).length}));
   const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0;
-  if(songs.length<2) S.libReorder=false; $('#libOrderRow').hidden=songs.length<2; $('#libOrder').textContent=S.libReorder?'✓ Done changing the order':'⇅ Change the order'; $('#libOrder').classList.toggle('primary',!!S.libReorder); $('#libCount').textContent=' · '+S.part+(songs.length?' ('+songs.length+')':'');
+  $('#libCount').textContent=' · '+S.part+(songs.length?' ('+songs.length+')':''); renderAdmSongs(songs);
   for(const [k,s] of songs.entries()){
     const row=document.createElement('div'); row.className='song-row';
-    if(S.libReorder){ // order mode: just the name and ▲ ▼
-      row.innerHTML='<div class="take-info"><b></b></div>'; row.querySelector('b').textContent=s.name;
-      for(const [lab,dir,al] of [['▲',-1,'Move up'],['▼',1,'Move down']]){ const a=document.createElement('button'); a.type='button'; a.className='pm-mv'; a.textContent=lab; a.dataset.mv=s.id+':'+dir; a.setAttribute('aria-label',al+': '+s.name);
-        a.disabled=dir<0?k===0:k===songs.length-1; a.addEventListener('click',()=>moveSong(s.id,dir)); row.appendChild(a); }
-      list.appendChild(row); continue; }
     const d=new Date(s.created);
     row.innerHTML=`<div class="take-info"><b></b><span>${fmtT(s.dur)} · ${s.nb>1?'vocals + '+s.nb+' backings':s.nb?'vocals + backing':'vocals only'} · added ${d.toLocaleDateString()}${s.uid&&sugStateFor(s.uid)?' · '+sugStateFor(s.uid):''}</span></div>`;
     row.querySelector('b').textContent=s.name;
     const mk=(label,fn,cls)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; if(cls) b.className=cls; b.addEventListener('click',()=>fn(b)); row.appendChild(b); return b; };
     mk('Practise',()=>openLibSong(s.id),'primary');
-    mk('Save vocals',b=>saveLibVocals(s.id,b));
+    mk('Delete',b=>{ if(b.dataset.armed){ forgetSong(s); libDel(s.id).then(renderLib); return; } b.dataset.armed='1'; b.textContent='Tap again to delete'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; b.classList.remove('danger'); } },4000); });
+    list.appendChild(row);
+  }
+}
+function renderAdmSongs(songs){ const box=$('#admSongs'); if(!box) return; $('#admPart').textContent=S.part; box.innerHTML='';
+  if(!songs.length){ box.innerHTML='<span class="small">No songs in this part yet.</span>'; return; }
+  for(const [k,s] of songs.entries()){ const row=document.createElement('div'); row.className='song-row';
+    row.innerHTML='<div class="take-info"><b></b></div>'; row.querySelector('b').textContent=s.name;
+    for(const [lab,dir,al] of [['▲',-1,'Move up'],['▼',1,'Move down']]){ const a=document.createElement('button'); a.type='button'; a.className='pm-mv'; a.textContent=lab; a.dataset.mv=s.id+':'+dir; a.setAttribute('aria-label',al+': '+s.name);
+      a.disabled=dir<0?k===0:k===songs.length-1; a.addEventListener('click',()=>moveSong(s.id,dir)); row.appendChild(a); }
     if(S.parts.length>1){ const mv=document.createElement('select'); mv.className='sel move'; mv.setAttribute('aria-label','Move to another part');
       mv.innerHTML='<option value="">Move to…</option>'; S.parts.filter(n=>n!==S.part).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; mv.appendChild(o); });
       mv.addEventListener('change',async()=>{ if(!mv.value) return; const rec=await libGet(s.id); if(rec){ rec.part=mv.value; delete rec.ord; await libPut(rec); } setStatus(s.name+' moved to '+mv.value+'.'); renderLib(); }); row.appendChild(mv);
       const cp=document.createElement('select'); cp.className='sel move'; cp.setAttribute('aria-label','Copy to another part');
       cp.innerHTML='<option value="">Copy to…</option>'; S.parts.filter(n=>n!==S.part).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; cp.appendChild(o); });
       cp.addEventListener('change',async()=>{ const to=cp.value; cp.value=''; if(to) await copySongTo(s.id,to); }); row.appendChild(cp); }
-    mk('Delete',b=>{ if(b.dataset.armed){ libDel(s.id).then(renderLib); return; } b.dataset.armed='1'; b.textContent='Tap again to delete'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; b.classList.remove('danger'); } },4000); });
-    list.appendChild(row);
-  }
-}
+    box.appendChild(row); } }
 // copy a song (audio, pitch line, lyrics, timing, sheet, backings, beat grid) into another part
 async function copySongTo(id,part){
   const src=await libGet(id); if(!src) return;
@@ -1563,32 +1572,7 @@ async function openLibSongInner(id,auto){
     return true;
   }catch(err){ if(!auto) setStatus('Could not open this song: '+((err&&err.message)||'unknown error')+'.',true); return false; }
 }
-async function saveLibVocals(id,btn){
-  const s=await libGet(id); if(!s) return; btn.disabled=true; const old=btn.textContent; btn.textContent='Preparing…';
-  try{ await saveVocalsFile(new Int16Array(s.pcm),s.sr,s.name+' (vocals only)'); }
-  finally{ btn.disabled=false; btn.textContent=old; }
-}
 function loadScript(url){ return new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src=url; sc.onload=res; sc.onerror=()=>rej(new Error('could not load '+url)); document.head.appendChild(sc); }); }
-async function saveVocalsFile(pcm,sr,base){
-  let blob=null, ext='mp3';
-  try{
-    if(!window.lamejs) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js');
-    const enc=new lamejs.Mp3Encoder(1,sr,96), parts=[], step=1152*20;
-    for(let i=0;i<pcm.length;i+=step){ const b=enc.encodeBuffer(pcm.subarray(i,i+step)); if(b.length) parts.push(new Uint8Array(b)); if(i%(step*50)===0) await new Promise(r=>setTimeout(r,0)); }
-    const end=enc.flush(); if(end.length) parts.push(new Uint8Array(end));
-    blob=new Blob(parts,{type:'audio/mpeg'});
-  }catch(err){
-    ext='wav'; const n=pcm.length, buf=new ArrayBuffer(44+n*2), v=new DataView(buf);
-    const w=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
-    w(0,'RIFF'); v.setUint32(4,36+n*2,true); w(8,'WAVE'); w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
-    v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40,n*2,true);
-    new Int16Array(buf,44).set(pcm); blob=new Blob([buf],{type:'audio/wav'});
-  }
-  const name=base.replace(/[\\/:*?"<>|]/g,'')+'.'+ext;
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000);
-  setStatus('Saved '+name+' to your downloads.');
-}
 async function toInt16(buf,sr){
   const len=Math.max(1,Math.ceil(buf.duration*sr)), oc=new OfflineAudioContext(1,len,sr);
   const s=oc.createBufferSource(); s.buffer=buf; s.connect(oc.destination); s.start();
@@ -1630,7 +1614,7 @@ async function getModel(my){
 async function separateSong(file){
   if(S.sep.worker) return;
   stop(); const my=++S.sep.token, name=file.name.replace(/\.(mp3|m4a|wav|ogg|aac|flac)$/i,'').replace(/_/g,' ');
-  $('#leadPanel').open=true; $('#sepBox').hidden=false; $('#sepSave').hidden=true; $('#sepName').textContent=name; $('#engine').hidden=true; $('#sepCancel').hidden=false; $('#sepFile').disabled=true;
+  $('#leadPanel').open=true; $('#sepBox').hidden=false; $('#sepName').textContent=name; $('#engine').hidden=true; $('#sepCancel').hidden=false; $('#sepFile').disabled=true;
   let wake=null, wurl=null;
   try{ if(navigator.wakeLock) wake=await navigator.wakeLock.request('screen'); }catch(e){}
   try{
@@ -1681,7 +1665,7 @@ async function separateSong(file){
         await renderLib();
       }catch(err){ note=' It could not be saved in the library (the browser storage may be full).'; }
     }
-    S.sep.last={voc,name}; $('#sepSave').hidden=false;
+    S.sep.last={voc,name};
     sepUI('Done in '+fmtLeft((performance.now()-t0)/1000)+'.'+note,1); $('#sepCancel').hidden=true;
     setStatus('Ready. The separated vocals are the guide and the rest of the song is the backing. Press Play.');
   }catch(err){
@@ -3851,11 +3835,10 @@ $('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) u
 $('#backSave').addEventListener('click',saveBacking);
 $('#backDel').addEventListener('click',e=>deleteBacking(e.currentTarget));
 $('#restoreBacksOn').checked=restoreBacks();
-$('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted backings come back with the next update (tap Update when it appears).':'Backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
+$('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
-$('#sepSave').addEventListener('click',async e=>{ const L=S.sep.last; if(!L) return; const b=e.target; b.disabled=true; b.textContent='Preparing…'; try{ await saveVocalsFile(await toInt16(L.voc,44100),44100,L.name+' (vocals only)'); }finally{ b.disabled=false; b.textContent='Save vocals'; } });
 initParts().then(renderLib);
 if(matchMedia('(pointer:fine)').matches) $('#laneHint').textContent+=' Keys: Space play/pause, ← → one beat back/forward.';
 $('#appVer').textContent='Part Coach version '+APP_VERSION; $('#verMark').textContent=APP_VERSION.split(' ').pop(); $('#verMark').title='Version '+APP_VERSION;
@@ -3890,7 +3873,7 @@ async function openGuideMenu(){
   m.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 async function moveSong(id,dir){
-  const m=$('#songList'), list=sortSongs((await libList()).filter(x=>partOf(x)===S.part)), i=list.findIndex(x=>x.id===id), j=i+dir;
+  const m=$('#admSongs'), list=sortSongs((await libList()).filter(x=>partOf(x)===S.part)), i=list.findIndex(x=>x.id===id), j=i+dir;
   if(i<0||j<0||j>=list.length) return;
   [list[i],list[j]]=[list[j],list[i]]; await saveSongOrder(list);
   await renderLib();
@@ -3961,7 +3944,7 @@ async function sharedChanges(url){
   const rf=await remoteFile(directUrl(url)); if(!rf) return null;
   const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
   const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
-  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if(wantsBacksBack(c,m)||(memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
+  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c){ if(!skipDeleted(m,man)) added++; } else if(wantsBacksBack(c,m)||(memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
   let reordered=false; if(Array.isArray(man.order)&&man.part){ const mine=sortSongs(local.filter(x=>partOf(x)===man.part)).map(x=>x.uid).filter(u=>man.order.includes(u)), theirs=man.order.filter(u=>mine.includes(u)); reordered=mine.join()!==theirs.join(); }
   if(man.part&&!isOwnerPart(man.part)) await rememberBases(z,man,byUid);
   return {added,updated,reordered,total:man.songs.length,part:man.part||null,bytes:neededBytes(z,man,byUid)};
@@ -4054,7 +4037,6 @@ async function shareLibrary(){
 }
 $('#linkGo').addEventListener('click',addFromLink);
 $('#updBtn').addEventListener('click',runUpdates);
-$('#libOrder').addEventListener('click',()=>{ S.libReorder=!S.libReorder; renderLib(); });
 $('#linksMake').addEventListener('click',makeLinksJson);
 $('#linkIn').addEventListener('keydown',e=>{ if(e.key==='Enter') addFromLink(); });
 $('#linkCancel').addEventListener('click',()=>{ $('#linkBox').hidden=true; });
