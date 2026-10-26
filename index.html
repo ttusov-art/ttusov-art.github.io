@@ -810,7 +810,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 co';
+const APP_VERSION='2026-10-26 cp';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2044,7 +2044,7 @@ async function postSuggestion(rec,live){   // anonymous: no name, no note
   const body={action:'suggest',id:newSugId(),part:partOf(rec),songUid:rec.uid||'',songName:rec.name,baseUpdated:rec.base.updated,notes:d.notes,lyrics:d.lyrics};
   let status='sent'; try{ await sugPost(url,body); }catch(e){ if(/too big|bad|empty|unknown/.test(e.message||'')) throw e; const q=sugQueue(); q.push({url,body}); sugQueueSave(q); status='queued'; }
   const fresh=await libGet(rec.id); if(fresh){ fresh.sentHash=hashOf(d); await libPutRaw(fresh); } rec.sentHash=hashOf(d); if(S.curBase&&S.curBase.id===rec.id) S.curBase.sentHash=hashOf(d);
-  const l=sugList(); l.unshift({id:body.id,uid:rec.uid,song:rec.name,at:Date.now(),status}); sugListSave(l); return status;
+  const l=sugList(); l.unshift({id:body.id,uid:rec.uid,song:rec.name,at:Date.now(),status,sent:{notes:d.notes.map(n=>({i0:n.i0,i1:n.i1,m:n.m})),lh:hashOf(d.lyrics),nl:d.lyrics.length}}); sugListSave(l); return status;
 }
 async function suggestCurrent(){
   if(!S.cur||S.cur.libId==null||S.sugSending) return;
@@ -2063,8 +2063,21 @@ async function flushSugQueue(){ const q=sugQueue(); if(!q.length) return; const 
   for(const it of q){ try{ await sugPost(it.url,it.body); const x=l.find(s=>s.id===it.body.id); if(x) x.status='sent'; }catch(e){ if(!/too big|bad|empty/.test(e.message||'')) left.push(it); } }
   sugQueueSave(left); sugListSave(l); }
 async function pollSugStatus(){ const url=sugUrl(); if(!url) return; await flushSugQueue(); const l=sugList(), open=l.filter(s=>s.status==='sent'); if(!open.length){ paintSuggest(); return; }
-  try{ const j=await sugGet(url,{action:'status',ids:open.map(s=>s.id).join(',')}); let ch=false; open.forEach(s=>{ const st=j.status[s.id]; if(st&&st!=='new'&&st!==s.status){ s.status=st; ch=true; } }); if(ch){ sugListSave(l); renderLib(); } }catch(e){}
+  try{ const j=await sugGet(url,{action:'status',ids:open.map(s=>s.id).join(',')}); let ch=false; const declined=[]; open.forEach(s=>{ const st=j.status[s.id]; if(st&&st!=='new'&&st!==s.status){ s.status=st; ch=true; if(st==='rejected') declined.push(s); } }); if(ch){ sugListSave(l); for(const s of declined) await undoDeclined(s); renderLib(); } }catch(e){}
   paintSuggest(); }
+// the moderator did not use a suggestion: put the member's copy back to the shared version where it still holds what was sent (newer edits stay)
+async function undoDeclined(entry){
+  const sent=entry.sent; if(!sent) return; const rec=(await libList()).find(x=>x.uid===entry.uid); if(!rec||!rec.base) return;
+  const open=S.cur&&S.cur.libId===rec.id&&S.tM, cur=open?Float32Array.from(S.tM):Float32Array.from(toF32(rec.contour)), base=toF32(rec.base.contour);
+  let changed=0;
+  for(const n of sent.notes||[]){ const v=unrle(n.m); for(let k=0;k<v.length;k++){ const i=n.i0+k; if(i>=cur.length) break; const a=cur[i], b=v[k]; if((isNaN(a)&&isNaN(b))||Math.abs(a-b)<0.005){ cur[i]=base[i]; changed++; } } }
+  let lyr=open?S.lyrics.map(l=>({t:l.t,text:l.text})):(rec.lyrics||[]).map(l=>({t:l.t,text:l.text}));
+  if(sent.nl&&hashOf(lyricDiff(rec.base.lyrics||[],lyr))===sent.lh){ lyr=(rec.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); changed++; }   // lyrics still exactly as sent
+  if(!changed) return;
+  rec.contour=cur; rec.lyrics=lyr; const left=songDiff(rec,null); if(!diffCount(left)) delete rec.sentHash; await libPutRaw(rec);
+  if(open){ S.tM=cur; S.lyrics=lyr; $('#lyrText').value=lyr.map(l=>l.text).join('\n'); renderLyrics(false); targetEdited(); await refreshCurBase(); }
+  setStatus('The moderator did not use your suggestion for '+rec.name+', so your copy is back to the shared version.');
+}
 const SUG_WORD={sent:'Suggestion sent',queued:'Suggestion waiting for a connection',accepted:'✓ Suggestion accepted',partly:'✓ Suggestion partly used',rejected:'Suggestion not used'};
 function sugStateFor(uid){ const s=sugList().find(x=>x.uid===uid); return s?SUG_WORD[s.status]||'':''; }
 // editor: "Suggest my edits (n)" for songs from a share link with unsent changes
