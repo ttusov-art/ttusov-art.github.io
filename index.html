@@ -275,6 +275,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-text{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .lyr-sheet{flex:none;flex-direction:column;gap:2px;padding:6px 10px;font-size:11px;color:var(--muted)}
 .lyr-sheet:hover{color:var(--fg)}
+.sheet-fold{flex:none;align-self:stretch;padding:0 4px;margin-left:-6px;min-width:22px;justify-content:center;border:0;background:none;color:var(--muted);font-size:20px;line-height:1}
+.sheet-fold:hover{color:var(--fg);background:var(--lane-alt)}
 /* the lyrics-sheet shortcuts: same teal look as the Target note and Key buttons */
 .acc-btn,.lyr-sheet.acc-btn{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 25%,var(--line));color:var(--accent);border-radius:8px}
 .acc-btn:hover,.lyr-sheet.acc-btn:hover{background:color-mix(in srgb,var(--accent) 22%,var(--accent-soft));color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
@@ -367,7 +369,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </section>
 
   <section class="panel lane">
-    <div class="lyr" id="lyrBar" hidden role="button" tabindex="-1"><div class="lyr-text"><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div><button id="lyrSkip" class="lyr-sheet" type="button" hidden aria-label="Skip this line and keep its time" title="Skip this line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"/><path d="M17 5v14"/></svg><span>Skip</span></button><button id="lyrUndo" class="lyr-sheet" type="button" hidden aria-label="Undo the last tap" title="Undo the last tap"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><span>Undo</span></button><button id="sheetOpen3" class="lyr-sheet acc-btn" type="button" hidden aria-label="Open the lyrics sheet" title="Lyrics sheet"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 12h6M10 15.5h6M10 19h4"/></svg><span>Sheet</span></button></div>
+    <div class="lyr" id="lyrBar" hidden role="button" tabindex="-1"><div class="lyr-text"><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div><button id="lyrSkip" class="lyr-sheet" type="button" hidden aria-label="Skip this line and keep its time" title="Skip this line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"/><path d="M17 5v14"/></svg><span>Skip</span></button><button id="lyrUndo" class="lyr-sheet" type="button" hidden aria-label="Undo the last tap" title="Undo the last tap"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><span>Undo</span></button><button id="sheetOpen3" class="lyr-sheet acc-btn" type="button" hidden aria-label="Open the lyrics sheet" title="Lyrics sheet"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 12h6M10 15.5h6M10 19h4"/></svg><span>Sheet</span></button><button id="sheetFold" class="sheet-fold" type="button" hidden aria-label="Hide the Sheet button" title="Hide the Sheet button (more room for the lyrics)">›</button></div>
     <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
     <canvas id="ovw" aria-label="Whole song overview: tap or drag to jump"></canvas>
     <div class="sug-bar" id="sugBar" hidden>
@@ -751,7 +753,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bl';
+const APP_VERSION='2026-10-26 bm';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2480,7 +2482,10 @@ function sheetColumns(sheet){
 }
 async function pdfColumns(file){ return sheetColumns(await pdfSheet(file)); }
 // ===== lyrics sheet view =====
-function renderSheetBtns(){ const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.length); $('#sheetOpen').disabled=!has; $('#sheetOpen2').hidden=!has; $('#sheetOpen3').hidden=!has; }
+function renderSheetBtns(){ const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.length); $('#sheetOpen').disabled=!has; $('#sheetOpen2').hidden=!has; $('#sheetOpen3').hidden=!has||S.sheetFolded;
+  const f=$('#sheetFold'); f.hidden=!has; f.textContent=S.sheetFolded?'‹':'›'; f.setAttribute('aria-label',S.sheetFolded?'Show the Sheet button':'Hide the Sheet button'); f.title=S.sheetFolded?'Show the Sheet button':'Hide the Sheet button (more room for the lyrics)'; }
+// the Sheet button in the lyrics bar can be folded away, so the lyrics get the whole width (remembered on this device)
+S.sheetFolded=false; try{ S.sheetFolded=localStorage.getItem('pc-sheetfold')==='1'; }catch(e){}
 function sheetHidden(){ try{ return JSON.parse(localStorage.getItem('pc-sheethide')||'[]'); }catch(e){ return []; } }
 // which sheet column holds your timed lyric lines, and the time span of each of its lines
 function sheetMap(sh){
@@ -3604,6 +3609,8 @@ $('#sheetMore').addEventListener('click',()=>setSheetCompact(!$('.sheet-bar').cl
 try{ if(localStorage.getItem('pc-sheetcompact')==='1') setSheetCompact(true); }catch(e){}
 $('#shapesAll').addEventListener('click',()=>setShapesAll($('#shapesAll').getAttribute('aria-pressed')!=='true'));
 $('#sheetOpen3').addEventListener('pointerdown',e=>e.stopPropagation());
+$('#sheetFold').addEventListener('pointerdown',e=>e.stopPropagation());
+$('#sheetFold').addEventListener('click',e=>{ e.stopPropagation(); S.sheetFolded=!S.sheetFolded; try{ localStorage.setItem('pc-sheetfold',S.sheetFolded?'1':'0'); }catch(x){} renderSheetBtns(); });
 $('#lyrUndo').addEventListener('pointerdown',e=>e.stopPropagation());
 $('#lyrSkip').addEventListener('pointerdown',e=>e.stopPropagation());
 $('#lyrSkip').addEventListener('click',e=>{ e.stopPropagation(); tapSkip(); });
