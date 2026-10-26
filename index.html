@@ -783,7 +783,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 ca';
+const APP_VERSION='2026-10-26 cb';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1108,7 +1108,7 @@ function setPMode(m){
 }
 async function playPrevSong(){ return playNextSong(true,-1); }
 async function playNextSong(manual,dir){ dir=dir||1;
-  const part=S.curPart||S.part, list=sortSongs((await libList()).filter(x=>partOf(x)===part));
+  const part=S.curPart||S.part, list=sortSongs((await libMeta()).filter(x=>partOf(x)===part));
   if(!list.length) return;
   const curId=S.cur&&S.cur.libId!=null?S.cur.libId:null, cur=list.findIndex(x=>x.id===curId); let next;
   if(S.pmode==='shuffle'&&dir>0){
@@ -1183,13 +1183,19 @@ async function idbDo(store,mode,fn){ const db=await libDb(); return await new Pr
 const libList=()=>idbDo('songs','readonly',st=>st.getAll()).catch(()=>[]);
 const libGet=id=>idbDo('songs','readonly',st=>st.get(id));
 const newUid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-const libPutRaw=rec=>idbDo('songs','readwrite',st=>st.put(rec));
+// a light copy of the library (names and details, no audio) kept in memory, so menus and lists open at once
+let libMetaCache=null, libMetaP=null, libMetaGen=0;
+const metaOf=x=>({id:x.id,uid:x.uid,name:x.name,part:x.part,dur:x.dur,created:x.created,updated:x.updated,ord:x.ord,nb:backsOf(x).length});
+function libMeta(){ if(libMetaCache) return Promise.resolve(libMetaCache); if(!libMetaP){ const gen=libMetaGen; libMetaP=libList().then(l=>{ const m=l.map(metaOf); if(gen===libMetaGen) libMetaCache=m; libMetaP=null; return m; }); } return libMetaP; }
+function metaChanged(){ libMetaGen++; libMetaCache=null; libMetaP=null; clearTimeout(metaChanged.t); metaChanged.t=setTimeout(()=>libMeta(),400); }   // fallback: re-read quietly
+function metaSaved(rec,id){ if(!libMetaCache||id==null){ metaChanged(); return; } libMetaGen++; const m=metaOf({...rec,id}), i=libMetaCache.findIndex(x=>x.id===id); if(i>=0) libMetaCache[i]=m; else libMetaCache.push(m); }
+const libPutRaw=rec=>idbDo('songs','readwrite',st=>st.put(rec)).then(r=>{ metaSaved(rec,rec.id!=null?rec.id:r); return r; });
 // song order per part: songs you put in order have ord 0,1,2…; songs never ordered (new ones) come first, newest first
 const songKey=x=>x.ord!=null?x.ord:-(x.created||0)/1000;
 const sortSongs=a=>a.sort((x,y)=>songKey(x)-songKey(y)||(y.created||0)-(x.created||0));
 async function saveSongOrder(list){ for(let k=0;k<list.length;k++){ const x=list[k]; if(x.ord!==k){ x.ord=k; await libPutRaw(x); } } }   // raw put: the order is not a change to the song itself
 const libPut=rec=>{ if(!rec.uid) rec.uid=newUid(); rec.updated=Date.now(); return libPutRaw(rec); };
-const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id));
+const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id)).then(r=>{ if(libMetaCache){ libMetaGen++; libMetaCache=libMetaCache.filter(x=>x.id!==id); } else metaChanged(); return r; });
 function backsOf(s){ if(!s) return []; if(Array.isArray(s.backs)) return s.backs; if(s.backBlob) return [{name:s.backName||'Backing',blob:s.backBlob}]; return []; }
 async function libSetBacks(id,backs,sel){ const s=await libGet(id); if(!s) return; s.backs=backs; s.backSel=sel; delete s.backBlob; delete s.backName; await libPut(s); }
 async function libAddBacking(id,name,blob,sep){
@@ -1400,7 +1406,7 @@ S.parts=[]; S.part=null;
 function partsSave(){ try{ localStorage.setItem('pc-parts',JSON.stringify(S.parts)); localStorage.setItem('pc-part',S.part); }catch(e){} }
 const partOf=x=>x.part||S.part||S.parts[0];
 async function initParts(){
-  const songs=await libList(); let parts=null; try{ parts=JSON.parse(localStorage.getItem('pc-parts')||'null'); }catch(e){}
+  const songs=await libMeta(); let parts=null; try{ parts=JSON.parse(localStorage.getItem('pc-parts')||'null'); }catch(e){}
   if(!Array.isArray(parts)){ parts=[]; const untagged=songs.filter(x=>!x.part); if(untagged.length){ for(const x of untagged){ x.part='Tenor'; await libPutRaw(x); } parts.push('Tenor'); } }
   songs.forEach(x=>{ if(x.part&&!parts.includes(x.part)) parts.push(x.part); });
   if(!parts.length) parts.push('My songs');
@@ -1433,8 +1439,8 @@ async function renamePart(){
 function deletePart(){ if(S.parts.length<2) return; S.parts=S.parts.filter(n=>n!==S.part); S.part=S.parts[0]; partsSave(); renderLib(); }
 async function renderLib(){
   showStorage();
-  const all=await libList(); renderParts(all);
-  const songs=sortSongs(all.filter(x=>partOf(x)===S.part)).map(s=>({id:s.id,uid:s.uid,name:s.name,created:s.created,dur:s.dur,nb:backsOf(s).length}));
+  const all=await libMeta(); renderParts(all);
+  const songs=sortSongs(all.filter(x=>partOf(x)===S.part)).map(s=>({id:s.id,uid:s.uid,name:s.name,created:s.created,dur:s.dur,nb:s.nb!=null?s.nb:backsOf(s).length}));
   const list=$('#songList'); list.innerHTML=''; $('#libEmpty').hidden=songs.length>0;
   if(songs.length<2) S.libReorder=false; $('#libOrderRow').hidden=songs.length<2; $('#libOrder').textContent=S.libReorder?'✓ Done changing the order':'⇅ Change the order'; $('#libOrder').classList.toggle('primary',!!S.libReorder); $('#libCount').textContent=' · '+S.part+(songs.length?' ('+songs.length+')':'');
   for(const [k,s] of songs.entries()){
@@ -2049,7 +2055,7 @@ async function sugFetchInbox(manual){
 }
 function paintSugBtn(){ const b=$('#sugBtn'), n=S.inbox.length; b.hidden=!n||!sugKey(); b.textContent='Suggestions ('+n+')'; }
 async function openInbox(){
-  const lib=await libList(), byU={}; lib.forEach(s=>{ if(s.uid) byU[s.uid]=s; });
+  const lib=await libMeta(), byU={}; lib.forEach(s=>{ if(s.uid) byU[s.uid]=s; });
   const items=S.inbox.map(it=>{ const has=!!byU[it.songUid], d=new Date(it.received);
     return '<div class="dlg-item"><div><b>'+esc(it.songName)+'</b> <span class="small">'+esc(it.part)+'</span><br><span class="small">'+d.toLocaleDateString()+' · '+esc(diffText({notes:it.notes,lyrics:it.lyrics}))+'</span>'+
       (has?'':'<br><span class="small">This song is not on this device.</span>')+'</div><div class="row"><button type="button" class="primary" data-rev="'+esc(it.id)+'"'+(has?'':' disabled')+'>Review</button><button type="button" data-rej="'+esc(it.id)+'">Not used</button></div></div>'; }).join('');
@@ -3732,7 +3738,7 @@ $('#micOn').addEventListener('change',async e=>{ try{ localStorage.setItem('pc-m
 paintMic();
 async function openGuideMenu(){
   const m=$('#guideMenu'); m.innerHTML='';
-  let songs=[]; try{ songs=sortSongs((await libList()).filter(x=>partOf(x)===S.part)).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})); }catch(e){}
+  let songs=[]; try{ songs=sortSongs((await libMeta()).filter(x=>partOf(x)===S.part)).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})); }catch(e){}
   if(S.parts.length>1){ const bar=document.createElement('div'); bar.className='pm-parts'; bar.setAttribute('role','group'); bar.setAttribute('aria-label','Part');
     S.parts.forEach(n=>{ const c=document.createElement('button'); c.type='button'; c.textContent=n; if(n===S.part){ c.className='on'; c.setAttribute('aria-pressed','true'); } c.addEventListener('click',e=>{ e.stopPropagation(); setPart(n); openGuideMenu(); }); bar.appendChild(c); }); m.appendChild(bar); }
   const item=(html,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','menuitem'); if(cls) b.className=cls; b.innerHTML=html; b.addEventListener('click',()=>{ closeGuideMenu(); fn(); }); m.appendChild(b); return b; };
@@ -3935,7 +3941,7 @@ async function openSharedLink(url,slug,partName){
   for(let i=0;i<2&&!c;i++){ try{ c=await sharedChanges(url); err=c?null:'partial download not available'; }catch(e){ err=(e&&e.message)||'unknown error'; } if(!c&&i===0) await new Promise(r=>setTimeout(r,1200)); }
   if(!c){
     // quick check failed: still tell people who already have songs of this part that this is an update
-    const mine=partName?(await libList()).filter(x=>x.part===partName).length:0;
+    const mine=partName?(await libMeta()).filter(x=>x.part===partName).length:0;
     if(mine){ $('#linkIntro').textContent='You already have '+mine+' song'+(mine>1?'s':'')+' in '+partName+'. Tap Update to get any new songs and changes.'; $('#linkGo').textContent='Update'; setShared(url,partName,slug||null); }
     else $('#linkIntro').textContent=(partName?partName+': songs shared with you.':'A song library was shared with you.')+' Tap Add songs to download them into your library on this device.';
     $('#linkText').textContent='(The quick check did not work: '+err+'.)';
