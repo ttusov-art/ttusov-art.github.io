@@ -311,6 +311,10 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-now{font-family:var(--font-display);font-weight:700;font-size:clamp(18px,3.6vw,24px);line-height:1.25;min-height:1.25em;overflow-wrap:anywhere;color:var(--fg)}
 .lyr-now.waiting{color:var(--muted)}
 .lyr-prev{opacity:.75}
+/* while timing, every line stays on one row (long lines shrink, then end in …), so the bar keeps its height and the buttons below the graph stay put */
+.lyr.tap .lyr-now,.lyr.tap .lyr-next{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.lyr.tap .lyr-now{height:calc(clamp(18px,3.6vw,24px)*1.3);line-height:calc(clamp(18px,3.6vw,24px)*1.3);min-height:0}
+.lyr.tap .lyr-next{height:20px;line-height:20px;min-height:0}
 .lyr-next{font-size:14px;color:var(--muted);min-height:1.4em;overflow-wrap:anywhere}
 .lyr.tap{background:var(--accent-soft);border-bottom-color:var(--accent);user-select:none;-webkit-user-select:none}
 .lyr.tap .lyr-now{color:var(--accent)}
@@ -815,7 +819,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 da';
+const APP_VERSION='2026-10-26 db';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2839,6 +2843,9 @@ function tapUndo(){
   $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; tapBtns(); $('#lyrUndo').disabled=!S.tap.hist.length; setStatus(rec.moved?'Move undone.':'Undone. Place here again for: '+S.lyrics[rec.i].text);
   S.lyrBarKey=null; lyrChanged();
 }
+function fitTapLine(){ const el=$('#lyrNow'); el.style.fontSize=''; if(!S.tap) return;
+  let fs=parseFloat(getComputedStyle(el).fontSize); while(el.scrollWidth>el.clientWidth+1&&fs>14){ fs-=1; el.style.fontSize=fs+'px'; } }
+window.addEventListener('resize',()=>{ if(S.tap) fitTapLine(); });
 function updateLyricBar(now){
   const bar=$('#lyrBar'), show=S.lyrShow&&S.lyrics.length>0;
   if(!show&&!S.tap){ bar.hidden=true; return; }
@@ -2854,7 +2861,7 @@ function updateLyricBar(now){
     if(!cur&&nxt) key+='-'+Math.max(0,Math.ceil(nxt.t-now));
   }
   if(key===S.lyrBarKey) return; S.lyrBarKey=key;
-  const pv=$('#lyrPrev'); pv.hidden=!S.tap; pv.textContent=S.tap?prevTxt:''; $('#lyrNow').textContent=nowTxt; $('#lyrNext').textContent=nextTxt; $('#lyrNow').classList.toggle('waiting',waiting);
+  const pv=$('#lyrPrev'); pv.hidden=!S.tap; pv.textContent=S.tap?prevTxt:''; $('#lyrNow').textContent=nowTxt; $('#lyrNext').textContent=nextTxt; fitTapLine(); $('#lyrNow').classList.toggle('waiting',waiting);
   const li=S.tap?S.tap.i:lyricIndexAt(now+0.05);
   document.querySelectorAll('.lyr-row').forEach(r=>r.classList.toggle('cur',+r.dataset.i===li));
 }
