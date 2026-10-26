@@ -86,7 +86,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .readout>div+div{border-left:1px solid var(--line)}
 #rTargetBox{cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;border-radius:8px 0 0 8px}
 /* the two pressable boxes: the value sits in a pill with an icon, so it reads as a button */
-.readout b.rd-pill{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;max-width:100%;padding:2px 10px 2px 11px;margin-top:2px;border:1.5px solid var(--accent);border-radius:8px;background:var(--accent-soft);color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.08);transition:background .12s,color .12s}
+.readout b.rd-pill{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;max-width:100%;padding:2px 10px 2px 11px;margin-top:2px;border:1px solid color-mix(in srgb,var(--accent) 25%,var(--line));border-radius:8px;background:var(--accent-soft);color:var(--accent);transition:background .12s,color .12s}
 .rd-pill::after{content:'';flex:none;width:.7em;height:.7em;background:currentColor;-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat}
 .rd-hear{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 9v6h4l5 4V5L7 9H3z'/%3E%3Cpath d='M15.5 8.5a5 5 0 0 1 0 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M18.5 5.5a9 9 0 0 1 0 13' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E")}
 .rd-keys{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2 4h20v16H2z M4 6v12h3v-5H6V6z M9 6v7H8v5h4v-5h-1V6z M13 6v7h-1v5h4v-5h-1V6z M17 6v7h-1v5h4V6z' fill-rule='evenodd'/%3E%3C/svg%3E")}
@@ -276,8 +276,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-sheet{flex:none;flex-direction:column;gap:2px;padding:6px 10px;font-size:11px;color:var(--muted)}
 .lyr-sheet:hover{color:var(--fg)}
 /* the lyrics-sheet shortcuts: same teal look as the Target note and Key buttons */
-.acc-btn,.lyr-sheet.acc-btn{background:var(--accent-soft);border:1.5px solid var(--accent);color:var(--accent);border-radius:8px}
-.acc-btn:hover,.lyr-sheet.acc-btn:hover{background:color-mix(in srgb,var(--accent) 22%,var(--accent-soft));color:var(--accent);border-color:var(--accent)}
+.acc-btn,.lyr-sheet.acc-btn{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 25%,var(--line));color:var(--accent);border-radius:8px}
+.acc-btn:hover,.lyr-sheet.acc-btn:hover{background:color-mix(in srgb,var(--accent) 22%,var(--accent-soft));color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
 .acc-btn:active{background:var(--accent);color:var(--accent-ink)}
 .lyr-now{font-family:var(--font-display);font-weight:700;font-size:clamp(18px,3.6vw,24px);line-height:1.25;min-height:1.25em;overflow-wrap:anywhere;color:var(--fg)}
 .lyr-now.waiting{color:var(--muted)}
@@ -751,7 +751,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bk';
+const APP_VERSION='2026-10-26 bl';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
