@@ -555,7 +555,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </details>
 
   <details class="panel fold" id="leadPanel">
-    <summary>For the choir leader</summary>
+    <summary>Admin</summary>
     <div class="fold-body">
       <span class="small">Sharing songs with your choir and checking members' suggestions. Choir members don't need anything here.</span>
     <div class="share-box">
@@ -728,7 +728,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 ay';
+const APP_VERSION='2026-10-26 az';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
