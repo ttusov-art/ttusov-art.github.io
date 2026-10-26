@@ -810,7 +810,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 cp';
+const APP_VERSION='2026-10-26 cq';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2046,8 +2046,13 @@ async function postSuggestion(rec,live){   // anonymous: no name, no note
   const fresh=await libGet(rec.id); if(fresh){ fresh.sentHash=hashOf(d); await libPutRaw(fresh); } rec.sentHash=hashOf(d); if(S.curBase&&S.curBase.id===rec.id) S.curBase.sentHash=hashOf(d);
   const l=sugList(); l.unshift({id:body.id,uid:rec.uid,song:rec.name,at:Date.now(),status,sent:{notes:d.notes.map(n=>({i0:n.i0,i1:n.i1,m:n.m})),lh:hashOf(d.lyrics),nl:d.lyrics.length}}); sugListSave(l); return status;
 }
-async function suggestCurrent(){
+async function suggestCurrent(confirmed){
   if(!S.cur||S.cur.libId==null||S.sugSending) return;
+  if(confirmed!==true){ // a mistaken tap should not send anything: ask first
+    const cb=S.curBase, d=cb&&S.tM?songDiff(cb,liveOf()):null; if(!d||!diffCount(d)){ setStatus('There are no edits to suggest in this song.'); return; }
+    const r=await dlg({title:'Send your edits?',html:'<p class="kv-sub">You made '+esc(diffText(d))+' in '+esc(cb.name||'this song')+'. Are you happy with these changes? Once sent, a suggestion goes to the moderator and can\'t be taken back.</p>',
+      buttons:[{label:'Send to the moderator',value:'send',primary:true},{label:'Not yet',value:null}]});
+    if(r.value!=='send') return; }
   // respond on the tap: Google takes a second or two to answer
   ['#edSuggest','#lyrSuggest'].forEach(x=>$(x).hidden=true); ['#sugState','#lyrSugState'].forEach(x=>$(x).textContent='Sending…'); S.sugSending=true;
   try{ await suggestNow(); } finally{ S.sugSending=false; paintSuggest(); renderLib(); }
@@ -3573,9 +3578,9 @@ $('#editBtn').addEventListener('click',()=>{ if(S.editMode) closeEditor(false); 
 async function closeEditor(fromPencil){
   const cb=S.curBase, d=cb&&S.tM?songDiff(cb,liveOf()):null;
   if(d&&diffCount(d)&&hashOf(d)!==cb.sentHash){
-    const r=await dlg({title:'Your edits are not sent yet',html:'<p class="kv-sub">You changed '+esc(diffText(d))+' in this song. Send them to the moderator, or cancel them, before closing the editor.</p>',
+    const r=await dlg({title:'Your edits are not sent yet',html:'<p class="kv-sub">You made '+esc(diffText(d))+' in this song. Send them to the moderator, or cancel them, before closing the editor.</p>',
       buttons:[{label:'Suggest my edits',value:'send',primary:true},{label:'Cancel my edits',value:'cancel'},{label:'Back to editing',value:null}]});
-    if(r.value==='send'){ await suggestCurrent(); const d2=songDiff(S.curBase,liveOf()); if(diffCount(d2)&&hashOf(d2)!==S.curBase.sentHash) return; }   // not sent (no inbox?): stay in the editor
+    if(r.value==='send'){ await suggestCurrent(true); const d2=songDiff(S.curBase,liveOf()); if(diffCount(d2)&&hashOf(d2)!==S.curBase.sentHash) return; }   // not sent (no inbox?): stay in the editor
     else if(r.value==='cancel'){ S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); pushUndo();
       const base=toF32(cb.base.contour), out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out;
       S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged(); targetEdited('Your edits were cancelled: the song is back as the moderator shared it.'); }
@@ -3615,8 +3620,8 @@ $('#edSmooth').addEventListener('click',edSmooth);
 $('#edAlign').addEventListener('click',edAlign);
 $('#edShL').addEventListener('click',()=>edShiftLine(-1));
 $('#edKey').addEventListener('click',openKeyView);
-$('#edSuggest').addEventListener('click',suggestCurrent);
-$('#lyrSuggest').addEventListener('click',suggestCurrent);
+$('#edSuggest').addEventListener('click',()=>suggestCurrent(false));
+$('#lyrSuggest').addEventListener('click',()=>suggestCurrent(false));
 // pitch editor: back to the pitch line as shared (notes only; lyrics have their own Cancel in the Lyrics editor); Undo brings your version back
 $('#edDiscard').addEventListener('click',e=>{ const b=e.currentTarget, cb=S.curBase; if(!cb||!S.tM) return;
   if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to cancel your note edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Cancel note edits'; b.classList.remove('danger'); } },4000); return; }
