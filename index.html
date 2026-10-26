@@ -115,7 +115,9 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .edit-bar button{padding:6px 10px;font-size:14px}
 .beat-row{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:6px;border-top:1px solid var(--line)}
 .beat-row input[type=number]{font:inherit;width:5.2em;padding:5px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
-.edit-info{flex:1 1 100%;font-size:13px;color:var(--fg);font-variant-numeric:tabular-nums}
+.ed-info-row{flex:1 1 100%;display:flex;align-items:baseline;gap:10px}
+.ed-info-row .link-btn{margin-left:auto;flex:none;font-size:13px}
+.edit-info{flex:1 1 auto;min-width:0;font-size:13px;color:var(--fg);font-variant-numeric:tabular-nums}
 .edit-info b{font-family:var(--font-mono)}
 .edit-sep{width:1px;height:24px;background:var(--line);margin:0 2px}
 .snd{gap:6px;flex:1 1 100%}
@@ -312,9 +314,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-now.waiting{color:var(--muted)}
 .lyr-prev{opacity:.75}
 /* while timing, every line stays on one row (long lines shrink, then end in …), so the bar keeps its height and the buttons below the graph stay put */
-.lyr.tap .lyr-now,.lyr.tap .lyr-next{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
-.lyr.tap .lyr-now{height:calc(clamp(18px,3.6vw,24px)*1.3);line-height:calc(clamp(18px,3.6vw,24px)*1.3);min-height:0}
-.lyr.tap .lyr-next{height:20px;line-height:20px;min-height:0}
+.lyr.tap .lyr-now,.lyr.tap .lyr-next,.lyr.oneline .lyr-now,.lyr.oneline .lyr-next{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.lyr.tap .lyr-now,.lyr.oneline .lyr-now{height:calc(clamp(18px,3.6vw,24px)*1.3);line-height:calc(clamp(18px,3.6vw,24px)*1.3);min-height:0}
+.lyr.tap .lyr-next,.lyr.oneline .lyr-next{height:20px;line-height:20px;min-height:0}
 .lyr-next{font-size:14px;color:var(--muted);min-height:1.4em;overflow-wrap:anywhere}
 .lyr.tap{background:var(--accent-soft);border-bottom-color:var(--accent);user-select:none;-webkit-user-select:none}
 .lyr.tap .lyr-now{color:var(--accent)}
@@ -426,7 +428,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div class="edit-bar lyr-tapbtns" id="lyrTapBtns" hidden><button id="lyrBack" class="lyr-sheet" type="button" aria-label="Back to the previous line and keep its time" title="Back to the previous line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5l-8 7 8 7z"/><path d="M7 5v14"/></svg><span>Back</span></button><button id="lyrSkip" class="lyr-sheet" type="button" aria-label="Skip this line and keep its time" title="Skip this line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"/><path d="M17 5v14"/></svg><span>Skip</span></button><button id="lyrUndo" class="lyr-sheet" type="button" aria-label="Undo the last lyric timing change" title="Undo the last timing change (Back and Skip are not undone)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><span>Undo</span></button><button id="lyrPlace" class="lyr-sheet lyr-place" type="button" aria-label="Place this line here" title="Place this line at the playhead (Space)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 9.5L12 14l4.5-4.5"/><path d="M4 19h16"/></svg><span>Place here</span></button></div>
     <div class="edit-bar" id="editBar" hidden>
-      <span class="edit-info" id="selInfo">Long-press the lane to select a beat; keep holding and drag to select more.</span>
       <button id="edPlay" type="button" hidden style="display:none">▶ Play</button>
       <button id="edOne" type="button">One note</button>
       <button id="edFill" type="button">Fill</button>
@@ -443,6 +444,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <button id="edClearSel" type="button" disabled>Clear selection</button>
       <button id="edSuggest" type="button" class="primary" hidden title="Send your edits of this song to the moderator">Suggest my edits</button><button id="edDiscard" type="button" hidden title="Remove your note changes and go back to the pitch line as shared">Cancel note edits</button><button id="edLyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel lyric edits</button><span class="small" id="sugState"></span>
       <input id="snapOn" type="checkbox" checked hidden aria-hidden="true">
+      <div class="ed-info-row"><span class="edit-info" id="selInfo">Long-press the lane to select a beat; keep holding and drag to select more.</span><button id="edInfoBtn" type="button" class="link-btn" aria-expanded="true" aria-controls="selInfo">Hide info</button></div>
     </div>
     <div class="lane-foot">
       <div class="row snd" role="group" aria-label="Sound on or off">
@@ -819,7 +821,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 db';
+const APP_VERSION='2026-10-26 dc';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2390,7 +2392,7 @@ function selectFragmentAt(t){
 function setEditMode(on){
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
   $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
-  if(!on) S.sel=null; updateSelInfo(); draw();
+  if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
 
@@ -2843,9 +2845,9 @@ function tapUndo(){
   $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; tapBtns(); $('#lyrUndo').disabled=!S.tap.hist.length; setStatus(rec.moved?'Move undone.':'Undone. Place here again for: '+S.lyrics[rec.i].text);
   S.lyrBarKey=null; lyrChanged();
 }
-function fitTapLine(){ const el=$('#lyrNow'); el.style.fontSize=''; if(!S.tap) return;
+function fitTapLine(){ const el=$('#lyrNow'); el.style.fontSize=''; $('#lyrBar').classList.toggle('oneline',!!S.editMode&&!S.tap); if(!S.tap&&!S.editMode) return;
   let fs=parseFloat(getComputedStyle(el).fontSize); while(el.scrollWidth>el.clientWidth+1&&fs>14){ fs-=1; el.style.fontSize=fs+'px'; } }
-window.addEventListener('resize',()=>{ if(S.tap) fitTapLine(); });
+window.addEventListener('resize',()=>{ if(S.tap||S.editMode) fitTapLine(); });
 function updateLyricBar(now){
   const bar=$('#lyrBar'), show=S.lyrShow&&S.lyrics.length>0;
   if(!show&&!S.tap){ bar.hidden=true; return; }
@@ -3821,6 +3823,9 @@ try{ if(localStorage.getItem('pc-lyr')==='0'){ S.lyrShow=false; $('#lyrShow').ch
 try{ const o=localStorage.getItem('pc-lyr-open'); if(o==='1') $('#lyrPanel').open=true; }catch(x){}
 $('#lyrPanel').addEventListener('toggle',e=>{ try{localStorage.setItem('pc-lyr-open',e.target.open?'1':'0')}catch(x){} });
 renderLyrics(true);
+{ const ib=$('#edInfoBtn'), set=on=>{ $('#selInfo').hidden=!on; ib.textContent=on?'Hide info':'Show info'; ib.setAttribute('aria-expanded',String(on)); };
+  let on=true; try{ on=localStorage.getItem('pc-edinfo')!=='0'; }catch(e){} set(on);
+  ib.addEventListener('click',()=>{ const v=$('#selInfo').hidden; set(v); try{ localStorage.setItem('pc-edinfo',v?'1':'0'); }catch(e){} }); }
 { const hb=$('#hintBtn'), set=on=>{ $('#laneHint').hidden=!on; hb.textContent=on?'Hide info':'Expand for info'; hb.setAttribute('aria-expanded',String(on)); };
   try{ set(localStorage.getItem('pc-hint-open')==='1'); }catch(e){ set(false); }
   hb.addEventListener('click',()=>{ const on=$('#laneHint').hidden; set(on); try{ localStorage.setItem('pc-hint-open',on?'1':'0'); }catch(e){} }); }
