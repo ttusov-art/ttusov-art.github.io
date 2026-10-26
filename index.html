@@ -422,8 +422,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="edit-sep"></span>
       <button id="edOne" type="button">One note</button>
       <button id="edFill" type="button">Fill</button>
-      <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
-      <button id="edSuggest" type="button" class="primary" hidden title="Send your edits of this song to the choir leader">Suggest my edits</button><button id="edDiscard" type="button" hidden title="Remove your note changes and go back to the pitch line as shared">Cancel my edits</button><span class="small" id="sugState"></span>
+      <button id="edSuggest" type="button" class="primary" hidden title="Send your edits of this song to the choir leader">Suggest my edits</button><button id="edDiscard" type="button" hidden title="Remove your note changes and go back to the pitch line as shared">Cancel note edits</button><button id="edLyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel lyric edits</button><span class="small" id="sugState"></span>
       <button id="edKey" type="button" hidden style="display:none" disabled>Key: –</button>
       <button id="edShL" type="button" title="Move the line (or the selection) a quarter beat earlier" aria-label="Move the line a quarter beat earlier">Line ◀</button>
       <button id="edShR" type="button" title="Move the line (or the selection) a quarter beat later" aria-label="Move the line a quarter beat later">Line ▶</button>
@@ -435,6 +434,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <button id="edLoop" type="button" hidden style="display:none">Loop this</button>
       <span class="edit-sep"></span>
       <button id="edUndo" type="button">Undo</button>
+      <button id="edClearSel" type="button" disabled>Clear selection</button>
       <input id="snapOn" type="checkbox" checked hidden aria-hidden="true">
     </div>
     <div class="lane-foot">
@@ -697,6 +697,14 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <summary>Admin</summary>
     <div class="fold-body">
       <span class="small">Sharing songs with your choir and checking members' suggestions. Choir members don't need anything here.</span>
+    <div class="share-box" id="adminLock">
+      <b>For the choir leader</b>
+      <span class="small">Enter your review key to show the admin tools on this device.</span>
+      <div class="row" id="lockUrlRow" hidden><input id="lockUrl" type="url" inputmode="url" autocomplete="off" placeholder="Inbox address: https://script.google.com/macros/s/…/exec" aria-label="Address of the suggestions inbox"></div>
+      <div class="row"><input id="sugKeyIn" type="password" autocomplete="off" placeholder="Review key" aria-label="Review key"><button id="adminUnlock" type="button" class="primary">Unlock</button></div>
+      <span class="small" id="lockText"></span>
+    </div>
+    <div id="adminTools" hidden>
     <div class="share-box">
       <b>Share with your choir</b>
       <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
@@ -721,6 +729,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="row">
         <button id="edReset" type="button">Reset to original</button>
         <button id="edRefind" type="button" title="Read the vocals again with this part's voice range">Find pitch line again</button>
+          <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
           <button id="edAlign" type="button" title="Move every note start and end to the nearest quarter of a beat (first moving the line if it is consistently early or late)">Align to grid</button>
       </div>
         <div class="beat-row" id="beatRow">
@@ -756,8 +765,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="small">Choir members can send fixes for wrong notes and lyric timing straight from the app; you check them here before they go into an update. Set up the Google inbox once (see the setup steps), paste its web app address below, then tap Make links.json again and upload it so members' apps find the inbox.</span>
       <div class="row"><input id="sugUrlIn" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" aria-label="Address of the suggestions inbox"></div>
       <span class="small">Your review key unlocks the inbox on this device only. Members never need it.</span>
-      <div class="row"><input id="sugKeyIn" type="password" autocomplete="off" placeholder="Review key" aria-label="Review key"><button id="sugCheck" type="button">Check inbox</button></div>
+      <div class="row"><button id="sugCheck" type="button">Check inbox</button><button id="adminLockBtn" type="button" class="link-btn">Lock admin on this device</button></div>
       <span class="small" id="sugText"></span>
+    </div>
     </div>
     </div>
   </details>
@@ -802,7 +812,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 ci';
+const APP_VERSION='2026-10-26 cj';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2066,10 +2076,10 @@ let paintSugTimer=null;
 function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout(()=>{  const b=$('#edSuggest'), st=$('#sugState'); if(!b) return;
   if(S.sugSending) return;   // keep "Sending…" until the inbox answers
   const cb=S.curBase, both=(fn)=>[[b,st],[$('#lyrSuggest'),$('#lyrSugState')]].forEach(([bb,ss])=>fn(bb,ss));
-  if(!cb||!S.tM){ both((bb,ss)=>{ bb.hidden=true; ss.textContent=''; }); $('#lyrDiscard').hidden=true; $('#edDiscard').hidden=true; return; }
+  if(!cb||!S.tM){ both((bb,ss)=>{ bb.hidden=true; ss.textContent=''; }); $('#lyrDiscard').hidden=true; $('#edLyrDiscard').hidden=true; $('#edDiscard').hidden=true; return; }
   const d=songDiff(cb,liveOf()), n=diffCount(d), unsent=n>0&&hashOf(d)!==cb.sentHash;
   both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; ss.textContent=unsent?'':sugStateFor(cb.uid); });
-  $('#lyrDiscard').hidden=!d.lyrics.length; $('#edDiscard').hidden=!d.notes.length; },150); }
+  $('#lyrDiscard').hidden=!d.lyrics.length; $('#edLyrDiscard').hidden=!d.lyrics.length; $('#edDiscard').hidden=!d.notes.length; },150); }
 // an update is about to replace songs that have edits not sent yet: ask
 async function askUnsent(recs){
   const names=recs.map(r=>r.name);
@@ -2082,11 +2092,11 @@ async function askUnsent(recs){
 S.inbox=[]; S.sug=null;
 async function sugFetchInbox(manual){
   const url=sugUrl(), key=sugKey(), t=$('#sugText');
-  if(!url||!key){ S.inbox=[]; paintSugBtn(); if(manual) t.textContent=!url?'Paste the inbox address first.':'Type your review key first.'; return; }
+  if(!url||!key){ S.inbox=[]; paintSugBtn(); if(manual) t.textContent=!url?'Paste the inbox address first.':'Unlock Admin with your review key first.'; return; }
   if(manual) t.textContent='Checking the inbox…';
   try{ const j=await sugGet(url,{action:'list',key}); S.inbox=(j.list||[]).sort((a,b)=>a.received-b.received); paintSugBtn(); if(manual){ t.textContent=S.inbox.length?S.inbox.length+' suggestion'+(S.inbox.length>1?'s':'')+' waiting. Tap Suggestions next to Play.':'The inbox works. No suggestions waiting.';
       if(S.inbox.length) setTimeout(()=>$('#sugBtn').scrollIntoView({block:'center',behavior:'smooth'}),400); } }
-  catch(e){ if(manual) t.textContent='Could not read the inbox: '+e.message+'.'; }
+  catch(e){ if(/wrong review key/.test(e.message||'')){ try{ localStorage.removeItem('pc-sugkey'); }catch(x){} S.inbox=[]; paintSugBtn(); paintAdmin(); } if(manual) t.textContent='Could not read the inbox: '+e.message+'.'; }
 }
 function paintSugBtn(){ const b=$('#sugBtn'), n=S.inbox.length; b.hidden=!n||!sugKey(); b.textContent='Suggestions ('+n+')'; }
 async function openInbox(){
@@ -2160,7 +2170,7 @@ function drawSug(g,xOf,yOf,w,h,col){ const s=S.sug; if(!s) return; const SC='#8b
 S.editMode=false; S.sel=null; S.undo=[];
 function selRange(){ if(!S.sel||!S.tT) return null; const a=Math.min(S.sel.a,S.sel.b), b=Math.max(S.sel.a,S.sel.b); let i0=-1,i1=-1; for(let i=0;i<S.tT.length;i++){ const t=S.tT[i]; if(t>=a&&t<=b){ if(i0<0) i0=i; i1=i; } } return i0<0?null:{a,b,i0,i1}; }
 function voicedIn(r){ const v=[]; for(let i=r.i0;i<=r.i1;i++) if(!isNaN(S.tM[i])) v.push(S.tM[i]); return v; }
-function updateSelInfo(){
+function updateSelInfo(){ { const c=document.getElementById('edClearSel'); if(c) c.disabled=!S.sel; }
   const el=$('#selInfo'); if(!el) return;
   const r=selRange();
   ['edOne','edFill','edUp','edDown','edOctUp','edOctDown','edDel','edLoop'].forEach(id=>$('#'+id).disabled=!r);
@@ -3550,7 +3560,8 @@ try{ if(localStorage.getItem('pc-guide-muted')==='1') setGuideMuted(true); }catc
 $('#editBtn').addEventListener('click',()=>setEditMode(!S.editMode));
 // the pencil next to Voice / Backing / Tone / Click shows or hides the editor buttons
 function setEdFold(on){ $('#edFold').hidden=!on; $('#edToggle').setAttribute('aria-expanded',String(on)); }
-$('#edToggle').addEventListener('click',()=>setEdFold($('#edFold').hidden));
+$('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; setEdFold(open); if(!open&&S.editMode) setEditMode(false); });   // closing the pencil also ends editing
+$('#edClearSel').addEventListener('click',()=>{ S.sel=null; updateSelInfo(); draw(); });
 $('#edTimeBtn').addEventListener('click',()=>{ if(S.editMode) setEditMode(false); $('#lyrTap').click(); });
 $('#edOne').addEventListener('click',edOneNote);
 $('#bpmIn').addEventListener('change',e=>{ const v=+e.target.value; if(!S.beat&&v>=30&&v<=240){ S.beat={bpm:v,offset:0,auto:false}; beatEdited(); } else setBpm(v); });
@@ -3583,17 +3594,19 @@ $('#edSuggest').addEventListener('click',suggestCurrent);
 $('#lyrSuggest').addEventListener('click',suggestCurrent);
 // pitch editor: back to the pitch line as shared (notes only; lyrics have their own Cancel in the Lyrics editor); Undo brings your version back
 $('#edDiscard').addEventListener('click',e=>{ const b=e.currentTarget, cb=S.curBase; if(!cb||!S.tM) return;
-  if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to cancel your note edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Cancel my edits'; b.classList.remove('danger'); } },4000); return; }
-  delete b.dataset.armed; b.textContent='Cancel my edits'; b.classList.remove('danger');
+  if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to cancel your note edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Cancel note edits'; b.classList.remove('danger'); } },4000); return; }
+  delete b.dataset.armed; b.textContent='Cancel note edits'; b.classList.remove('danger');
   const base=toF32(cb.base.contour); pushUndo(); const out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out; S.sel=null;
   targetEdited('Your note edits were removed: the pitch line is back as your choir leader shared it. Undo brings your version back.'); });
 // back to the lyrics as shared (text and timing); asks for a second tap; Undo in the editor brings your version back
-$('#lyrDiscard').addEventListener('click',e=>{ const b=e.currentTarget, cb=S.curBase; if(!cb) return;
-  if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to cancel your edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Cancel my edits'; b.classList.remove('danger'); } },4000); return; }
-  delete b.dataset.armed; b.textContent='Cancel my edits'; b.classList.remove('danger');
+function discardLyrics(e){ const b=e.currentTarget, cb=S.curBase; if(!cb) return;
+  if(!b.dataset.armed){ b.dataset.armed='1'; const lbl=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.textContent='Tap again to cancel your lyric edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=lbl; b.classList.remove('danger'); } },4000); return; }
+  delete b.dataset.armed; b.textContent=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.classList.remove('danger');
   S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); if(S.undo.length>30) S.undo.shift();
   S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged();
-  setStatus('Your lyric edits were removed: the lyrics are back as your choir leader shared them.'); });
+  setStatus('Your lyric edits were removed: the lyrics are back as your choir leader shared them.'); }
+$('#lyrDiscard').addEventListener('click',discardLyrics);
+$('#edLyrDiscard').addEventListener('click',discardLyrics);
 $('#dlgClose').addEventListener('click',()=>$('#dlgView')._done&&$('#dlgView')._done(null));
 $('#dlgView').addEventListener('click',e=>{ if(e.target.id==='dlgView'&&$('#dlgView')._done) $('#dlgView')._done(null); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#dlgView').hidden){ e.stopPropagation(); $('#dlgView')._done(null); } },true);
@@ -3612,10 +3625,20 @@ $('#sgRej').addEventListener('click',()=>{ S.sug.changes[S.sug.k].state='rej'; s
 $('#sgAll').addEventListener('click',()=>{ S.sug.changes.forEach(c=>{ if(!c.state) sugAccept(c); }); renderSugBar(); draw(); });
 $('#sgDone').addEventListener('click',sugFinish);
 $('#sgStop').addEventListener('click',sugCancel);
-$('#sugUrlIn').value=sugUrl(); $('#sugKeyIn').value=sugKey();
+$('#sugUrlIn').value=sugUrl();
+// Admin opens only with the right review key (checked with the inbox once, then remembered on this device)
+function paintAdmin(){ const ok=!!sugKey(); $('#adminLock').hidden=ok; $('#adminTools').hidden=!ok; $('#lockUrlRow').hidden=!!sugUrl(); }
+async function unlockAdmin(){ const key=$('#sugKeyIn').value, lu=$('#lockUrl').value.trim(), t=$('#lockText');
+  if(lu){ try{ localStorage.setItem('pc-sugurl',lu); }catch(x){} $('#sugUrlIn').value=lu; }
+  const url=sugUrl(); if(!url){ t.textContent='Paste the inbox address first.'; return; } if(!key){ t.textContent='Type your review key.'; return; }
+  t.textContent='Checking…'; try{ await sugGet(url,{action:'list',key}); try{ localStorage.setItem('pc-sugkey',key); }catch(x){} $('#sugKeyIn').value=''; t.textContent=''; paintAdmin(); sugFetchInbox(false); setStatus('Admin unlocked on this device.'); }
+  catch(e){ t.textContent=/wrong review key/.test(e.message||'')?'That review key is not right.':'Could not check the key: '+e.message+'.'; } }
+$('#adminUnlock').addEventListener('click',unlockAdmin);
+$('#sugKeyIn').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); unlockAdmin(); } });
+$('#adminLockBtn').addEventListener('click',()=>{ try{ localStorage.removeItem('pc-sugkey'); }catch(x){} S.inbox=[]; paintSugBtn(); paintAdmin(); setStatus('Admin locked on this device.'); });
+paintAdmin();
 $('#sugUrlIn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-sugurl',e.target.value.trim()); }catch(x){} });
-$('#sugKeyIn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-sugkey',e.target.value); }catch(x){} paintSugBtn(); });
-$('#sugCheck').addEventListener('click',()=>{ try{ localStorage.setItem('pc-sugurl',$('#sugUrlIn').value.trim()); localStorage.setItem('pc-sugkey',$('#sugKeyIn').value); }catch(x){} sugFetchInbox(true); });
+$('#sugCheck').addEventListener('click',()=>{ try{ localStorage.setItem('pc-sugurl',$('#sugUrlIn').value.trim()); }catch(x){} sugFetchInbox(true); });
 window.addEventListener('online',()=>pollSugStatus());
 setTimeout(()=>{ (getShared().length&&!sugKey()?fetchLinks():Promise.resolve()).then(()=>{ pollSugStatus(); sugFetchInbox(false); }); },2500);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-(S.sugCheckAt||0)>5*60e3&&!S.playing){ S.sugCheckAt=Date.now(); pollSugStatus(); sugFetchInbox(false); } });
