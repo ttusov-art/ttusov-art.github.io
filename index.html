@@ -717,8 +717,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div class="share-box">
       <b>Add a new song</b>
-      <span class="small">Choose a song (for example a part MP3). The app separates the voice, finds the pitch line and keeps it in the library, in the part chosen in Song library.</span>
-      <div class="row"><span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span></div>
+      <span class="small">Choose a song (for example a part MP3). The app separates the voice, finds the pitch line and keeps it in the library, in the part chosen in Song library. If you already have the vocals on their own (or a .ntpsession file), use Add vocals from this device.</span>
+      <div class="row"><span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span><button id="admAddVocals" type="button" title="A vocals-only audio file or a .ntpsession file">Add vocals from this device</button></div>
     <div class="sep-box" id="sepBox" hidden>
       <div class="sep-row"><b id="sepName"></b><span class="engine" id="engine" hidden></span></div>
       <div class="sep-row"><div class="bar"><i id="sepFill"></i></div><span class="small" id="sepText"></span></div>
@@ -836,7 +836,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 dg';
+const APP_VERSION='2026-10-26 dh';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3844,6 +3844,7 @@ $('#backSave').addEventListener('click',saveBacking);
 $('#backDel').addEventListener('click',e=>deleteBacking(e.currentTarget));
 $('#restoreBacksOn').checked=restoreBacks();
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
+$('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
@@ -3871,10 +3872,9 @@ async function openGuideMenu(){
   if(S.parts.length>1){ const bar=document.createElement('div'); bar.className='pm-parts'; bar.setAttribute('role','group'); bar.setAttribute('aria-label','Part');
     S.parts.forEach(n=>{ const c=document.createElement('button'); c.type='button'; c.textContent=n; if(n===S.part){ c.className='on'; c.setAttribute('aria-pressed','true'); } c.addEventListener('click',e=>{ e.stopPropagation(); setPart(n); openGuideMenu(); }); bar.appendChild(c); }); m.appendChild(bar); }
   const item=(html,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','menuitem'); if(cls) b.className=cls; b.innerHTML=html; b.addEventListener('click',()=>{ closeGuideMenu(); fn(); }); m.appendChild(b); return b; };
-  if(!songs.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent=S.parts.length>1?'No songs in '+S.part+' yet.':'Your library is empty. Songs you separate or add are listed here.'; m.appendChild(e); }
+  if(!songs.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent=S.parts.length>1?'No songs in '+S.part+' yet.':'Your library is empty. Add songs from a shared link from your moderator.'; m.appendChild(e); }
   for(const x of songs){ const b=item('<span class="pm-name"></span><span class="pm-meta">'+fmtT(x.dur)+'</span>',S.cur&&S.cur.libId===x.id?'cur':'',()=>openLibSong(x.id)); b.querySelector('.pm-name').textContent=x.name; }
-  item('<span class="pm-name">+ Add vocals from this device…</span>','pm-add',()=>$('#guideFile').click());
-  item('<span class="pm-name">+ Add songs from a shared link…</span>','pm-add pm-add2',()=>showLinkBox(''));
+  item('<span class="pm-name">+ Add songs from a shared link…</span>','pm-add',()=>showLinkBox(''));
   if(getShared().length) item('<span class="pm-name">↻ Check shared songs for updates</span>','pm-add pm-add2',()=>checkShared(true));
   m.hidden=false; $('#guidePick').setAttribute('aria-expanded','true');
   const c=m.querySelector('button.cur')||m.querySelector('[role=menuitem]'); if(c) c.focus({preventScroll:true});
