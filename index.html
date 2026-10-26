@@ -570,21 +570,15 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="row">
         <button id="lyrApply" type="button" class="primary">Use these lines</button>
         <button id="lyrSuggest" type="button" class="primary" hidden title="Send your edits of this song to the choir leader">Suggest my edits</button><button id="lyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel my edits</button><span class="small" id="lyrSugState"></span>
-        <button id="lyrAuto" type="button">Place lines automatically</button>
         <button id="lyrTap" type="button">Tap to time</button>
-        <button id="lyrClear" type="button">Remove lyrics</button>
         <button id="sheetOpen" type="button" disabled>View lyrics sheet</button>
-        <span class="btn">Import from PDF<input id="lyrPdf" type="file" accept="application/pdf,.pdf" aria-label="Import lyrics from a PDF with one column per part"></span>
       </div>
       <div class="row" id="lyrPdfRow" hidden>
         <label class="small" for="lyrPdfCol">Column from the PDF</label>
         <select id="lyrPdfCol" class="sel" style="flex:1 1 160px;min-width:0"></select>
       </div>
       <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
-      <div class="row" id="lyrSnapRow" hidden>
-        <label class="check" for="lyrSnapOn"><input id="lyrSnapOn" type="checkbox" checked>Snap lines to beats</label>
-        <button id="lyrSnapAll" type="button">Snap all lines now</button>
-      </div>
+      <input id="lyrSnapOn" type="checkbox" checked hidden aria-hidden="true">
       <div class="lyr-list" id="lyrList" hidden></div>
       <span class="small" id="lyrHint"></span>
     </div>
@@ -706,6 +700,16 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="small"><b>Short links:</b> with a file called links.json next to index.html on GitHub, each part gets a short link like <span class="share-url" id="shortEx"></span>. Tap Make links.json and upload it to your GitHub repo, again only when you add a part or a Dropbox link changes.</span>
       <div class="row"><button id="linksMake" type="button">Make links.json</button></div>
     </div>
+    <div class="share-box" id="lyrTools">
+      <b>Lyrics tools (for the open song)</b>
+      <span class="small">Lines always snap to the beat grid. After importing a PDF, pick the column in the Lyrics editor.</span>
+      <div class="row">
+        <span class="btn">Import from PDF<input id="lyrPdf" type="file" accept="application/pdf,.pdf" aria-label="Import lyrics from a PDF with one column per part"></span>
+        <button id="lyrAuto" type="button">Place lines automatically</button>
+        <button id="lyrSnapAll" type="button">Snap all lines now</button>
+        <button id="lyrClear" type="button">Remove lyrics</button>
+      </div>
+    </div>
     <div class="share-box" id="sugSetup">
       <b>Suggestions from the choir</b>
       <span class="small">Choir members can send fixes for wrong notes and lyric timing straight from the app; you check them here before they go into an update. Set up the Google inbox once (see the setup steps), paste its web app address below, then tap Make links.json again and upload it so members' apps find the inbox.</span>
@@ -757,7 +761,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bp';
+const APP_VERSION='2026-10-26 bq';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1722,7 +1726,7 @@ function saveBeat(){ if(S.cur.libId==null) return; clearTimeout(beatSaveTimer); 
 function tempoSummary(){ const a=beatSegs(); if(a.length<2) return ''; return a.map((s,i)=>(i?'from '+fmtT(s.t0)+' ':'')+(Math.round(s.ref.bpm*10)/10)+' BPM').join(', '); }
 S.segShown=-1; S.ncShown=-1;
 function renderBeatInfo(msg){
-  if(typeof renderLyrSnap==='function'&&document.getElementById('lyrSnapRow')) renderLyrics(false);
+  if(typeof renderLyrSnap==='function'&&document.getElementById('lyrList')) renderLyrics(false);
   const inp=$('#bpmIn'), has=!!S.beat, s=has?segAt(curT()):null; S.segShown=s?s.i:-1;
   ['bShiftL','bShiftR','bHalf','bDouble','bOne','bBpb','bTempo'].forEach(id=>$('#'+id).disabled=!has); $('#bBpb').value=String(beatsPerBar());
   const nc=has?nearChange(curT()):null; S.ncShown=nc?nc.i:-1; $('#bTempoMove').hidden=$('#bTempoDel').hidden=!nc;
@@ -2362,13 +2366,13 @@ function renderLyrics(fillText){
   $('#lyrAuto').disabled=!has; $('#lyrTap').disabled=!has; $('#edTimeBtn').disabled=!has; $('#edTimeBtn').title=has?'Tap the start of each lyric line while the song plays':'Add lyrics first (Lyrics section)'; $('#lyrClear').disabled=!has;
   renderLyrSnap(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
-function lyrSnapping(){ return !!(S.beat&&S.snap); }
+function lyrSnapping(){ return !!S.beat; }   // lyric lines always snap to the beat grid
 function lyrStep(){ return lyrSnapping()?beatP()/2:0.2; }
-function lyrT(t){ if(lyrSnapping()){ t=snapT(t); if(t<0) t+=snapStep(); } return Math.max(0,Math.round(t*100)/100); }
+function lyrT(t){ if(lyrSnapping()){ const d=snapDiv(); t=gridAt(t,d); if(t<0) t+=beatP(t)/d; } return Math.max(0,Math.round(t*100)/100); }
 function nudgeLine(i,dir){ const L=S.lyrics[i]; if(L.t==null) return; L.t=lyrT(L.t+dir*lyrStep()); lyrChanged(); }
 function snapAllLines(){ if(!lyrSnapping()) return; S.lyrics.forEach(L=>{ if(L.t!=null) L.t=lyrT(L.t); }); lyrChanged(); setStatus('All timed lines moved to the nearest beat or half beat.'); }
 function renderLyrSnap(){
-  const row=$('#lyrSnapRow'); row.hidden=!S.beat||!S.lyrics.length; $('#lyrSnapOn').checked=!!S.snap; $('#lyrSnapAll').disabled=!S.snap;
+  $('#lyrSnapAll').disabled=!S.beat||!S.lyrics.length;
   const st=S.beat?(beatP()/2).toFixed(2)+' s (half a beat)':'0.2 s';
   $('#lyrHint').textContent='After placing the lines, play the song and check them. Use − and + to move a line by '+(lyrSnapping()?st:'0.2 s')+', or Now to set it to the playhead.'+(lyrSnapping()?' New times land on the nearest beat or half beat.':'');
 }
@@ -3611,7 +3615,7 @@ document.addEventListener('keydown',e=>{
   if(done){ e.preventDefault(); e.stopPropagation(); if(tg==='BUTTON') document.activeElement.blur(); }
 },true);
 updateSelInfo();
-$('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>e.target.value=''); });
+$('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>{ e.target.value=''; $('#lyrPanel').open=true; setTimeout(()=>$('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}),100); }); });
 $('#lyrPdfCol').addEventListener('change',fillFromPdf);
 $('#sheetOpen').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
 $('#sheetOpen2').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
