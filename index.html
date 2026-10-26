@@ -422,7 +422,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="edit-sep"></span>
       <button id="edOne" type="button">One note</button>
       <button id="edFill" type="button">Fill</button>
-      <button id="edSuggest" type="button" class="primary" hidden title="Send your edits of this song to the choir leader">Suggest my edits</button><button id="edDiscard" type="button" hidden title="Remove your note changes and go back to the pitch line as shared">Cancel note edits</button><button id="edLyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel lyric edits</button><span class="small" id="sugState"></span>
+      <button id="edSuggest" type="button" class="primary" hidden title="Send your edits of this song to the moderator">Suggest my edits</button><button id="edDiscard" type="button" hidden title="Remove your note changes and go back to the pitch line as shared">Cancel note edits</button><button id="edLyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel lyric edits</button><span class="small" id="sugState"></span>
       <button id="edKey" type="button" hidden style="display:none" disabled>Key: –</button>
       <button id="edShL" type="button" title="Move the line (or the selection) a quarter beat earlier" aria-label="Move the line a quarter beat earlier">Line ◀</button>
       <button id="edShR" type="button" title="Move the line (or the selection) a quarter beat later" aria-label="Move the line a quarter beat later">Line ▶</button>
@@ -580,7 +580,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <textarea id="lyrText" placeholder="First line of the song&#10;Second line&#10;…"></textarea>
       <div class="row">
         <button id="lyrApply" type="button" class="primary">Use these lines</button>
-        <button id="lyrSuggest" type="button" class="primary" hidden title="Send your edits of this song to the choir leader">Suggest my edits</button><button id="lyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel my edits</button><span class="small" id="lyrSugState"></span>
+        <button id="lyrSuggest" type="button" class="primary" hidden title="Send your edits of this song to the moderator">Suggest my edits</button><button id="lyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel my edits</button><span class="small" id="lyrSugState"></span>
         <button id="lyrTap" type="button">Tap to time</button>
         <button id="sheetOpen" type="button" disabled>View lyrics sheet</button>
       </div>
@@ -632,7 +632,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="field">
         <label class="check" for="restoreBacksOn"><input id="restoreBacksOn" type="checkbox" checked>Restore deleted backings with updates</label>
-        <span class="small">On: when your choir leader's update arrives, backing tracks you deleted come back. Off: backings you deleted stay deleted (saves space on this device).</span>
+        <span class="small">On: when the moderator's update arrives, backing tracks you deleted come back. Off: backings you deleted stay deleted (saves space on this device).</span>
       </div>
       <div class="field">
         <label for="delay">Delay compensation</label>
@@ -698,7 +698,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div class="fold-body">
       <span class="small">Sharing songs with your choir and checking members' suggestions. Choir members don't need anything here.</span>
     <div class="share-box" id="adminLock">
-      <b>For the choir leader</b>
+      <b>For the moderator</b>
       <span class="small">Enter your review key to show the admin tools on this device.</span>
       <div class="row" id="lockUrlRow" hidden><input id="lockUrl" type="url" inputmode="url" autocomplete="off" placeholder="Inbox address: https://script.google.com/macros/s/…/exec" aria-label="Address of the suggestions inbox"></div>
       <div class="row"><input id="sugKeyIn" type="password" autocomplete="off" placeholder="Review key" aria-label="Review key"><button id="adminUnlock" type="button" class="primary">Unlock</button></div>
@@ -812,7 +812,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 cj';
+const APP_VERSION='2026-10-26 ck';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1341,13 +1341,13 @@ async function openZip(file){
   return {names:Object.keys(map), size(name){ const en=map[name]; return en?en.csize:0; }, async get(name){ const en=map[name]; if(!en) return null; if(file.prefetch) await file.prefetch(en.lo,en.lo+30+en.nl+en.xl+en.csize+512); const lh=new DataView(await file.slice(en.lo,en.lo+30).arrayBuffer()); const ds=en.lo+30+lh.getUint16(26,true)+lh.getUint16(28,true); const b=file.slice(ds,ds+en.csize); return en.method===0?b:new Blob([await inflateRaw(new Uint8Array(await b.arrayBuffer()))]); }};
 }
 const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
-// the choir leader's device (it makes the share files, or has the review key) is the source: its songs are never treated as members' copies
+// the moderator's device (it makes the share files, or has the review key) is the source: its songs are never treated as members' copies
 function ownerParts(){ try{ return JSON.parse(localStorage.getItem('pc-owner-parts')||'[]'); }catch(e){ return []; } }
 function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
 // backings you deleted on this device: updates bring them back only when "Restore deleted backings" is on
 function restoreBacks(){ try{ return localStorage.getItem('pc-restore-backs')!=='0'; }catch(e){ return true; } }
 const wasDeleted=(c,b)=>!!c&&(c.delBacks||[]).some(d=>d.name===b.name&&!!d.sep===!!b.sep&&(d.size==null||b.size==null||d.size===b.size));
-// with restoring on, a song is refreshed when the share has a backing this device doesn't (also ones deleted before deletions were remembered); never on the leader's own device
+// with restoring on, a song is refreshed when the share has a backing this device doesn't (also ones deleted before deletions were remembered); never on the moderator's own device
 const sameBack=(o,b)=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||!o.blob||o.blob.size===b.size);
 const wantsBacksBack=(c,m)=>!!c&&restoreBacks()&&!isOwnerPart(partOf(c))&&((c.delBacks||[]).length>0||!!m&&(m.backs||[]).some(b=>!backsOf(c).some(o=>sameBack(o,b))));
 const memberBase=(c,part)=>c&&c.base&&part&&!isOwnerPart(part)?c.base:null;
@@ -2021,7 +2021,7 @@ function hashOf(o){ const s=JSON.stringify(o); let h=2166136261; for(let i=0;i<s
 function hasUnsent(rec,live){ const d=songDiff(rec,live); return diffCount(d)>0&&hashOf(d)!==rec.sentHash; }
 function liveOf(){ return S.tM?{contour:Float32Array.from(S.tM),tt:S.tT,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}:null; }
 const newSugId=()=>Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>'abcdefghijkmnpqrstuvwxyz23456789'[b%32]).join('');
-// where the inbox is: links.json "_suggest" (remembered), or typed in Settings by the choir leader
+// where the inbox is: links.json "_suggest" (remembered), or typed in Settings by the moderator
 function sugUrl(){ try{ return (localStorage.getItem('pc-sugurl')||'').trim(); }catch(e){ return ''; } }
 function sugKey(){ try{ return localStorage.getItem('pc-sugkey')||''; }catch(e){ return ''; } }
 function sugList(){ try{ return JSON.parse(localStorage.getItem('pc-sugs')||'[]'); }catch(e){ return []; } }
@@ -2057,8 +2057,8 @@ async function suggestCurrent(){
 async function suggestNow(){
   const rec=await libGet(S.cur.libId); if(!rec||!rec.base){ setStatus('Only songs from your choir\'s share link can be suggested.',true); return; }
   const live=liveOf(), d=songDiff(rec,live); if(!diffCount(d)){ setStatus('There are no edits to suggest in this song.'); return; }
-  if(!sugUrl()){ setStatus('Suggestions are not set up for your choir yet. Ask your choir leader.',true); return; }
-  try{ const st=await postSuggestion(rec,live); setStatus(st==='queued'?'No connection right now: your suggestion is saved and goes out automatically when you are online.':'Thank you! Your edits ('+diffText(d)+') were sent to the choir leader.'); }
+  if(!sugUrl()){ setStatus('Suggestions are not set up for your choir yet. Ask the moderator.',true); return; }
+  try{ const st=await postSuggestion(rec,live); setStatus(st==='queued'?'No connection right now: your suggestion is saved and goes out automatically when you are online.':'Thank you! Your edits ('+diffText(d)+') were sent to the moderator.'); }
   catch(e){ setStatus('Could not send the suggestion: '+e.message+'.',true); }
 }
 async function flushSugQueue(){ const q=sugQueue(); if(!q.length) return; const left=[], l=sugList();
@@ -2083,7 +2083,7 @@ function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout((
 // an update is about to replace songs that have edits not sent yet: ask
 async function askUnsent(recs){
   const names=recs.map(r=>r.name);
-  const r=await dlg({title:'You have edits not sent yet',html:'<p class="kv-sub">The update replaces '+esc(names.join(', '))+'. Your edits there have not been sent to the choir leader yet.</p>',
+  const r=await dlg({title:'You have edits not sent yet',html:'<p class="kv-sub">The update replaces '+esc(names.join(', '))+'. Your edits there have not been sent to the moderator yet.</p>',
     buttons:[{label:'Send them, then update',value:'send',primary:true},{label:'Discard my edits',value:'discard'},{label:'Later',value:'later'}]});
   return r.value||'later';
 }
@@ -3597,14 +3597,14 @@ $('#edDiscard').addEventListener('click',e=>{ const b=e.currentTarget, cb=S.curB
   if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to cancel your note edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Cancel note edits'; b.classList.remove('danger'); } },4000); return; }
   delete b.dataset.armed; b.textContent='Cancel note edits'; b.classList.remove('danger');
   const base=toF32(cb.base.contour); pushUndo(); const out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out; S.sel=null;
-  targetEdited('Your note edits were removed: the pitch line is back as your choir leader shared it. Undo brings your version back.'); });
+  targetEdited('Your note edits were removed: the pitch line is back as the moderator shared it. Undo brings your version back.'); });
 // back to the lyrics as shared (text and timing); asks for a second tap; Undo in the editor brings your version back
 function discardLyrics(e){ const b=e.currentTarget, cb=S.curBase; if(!cb) return;
   if(!b.dataset.armed){ b.dataset.armed='1'; const lbl=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.textContent='Tap again to cancel your lyric edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=lbl; b.classList.remove('danger'); } },4000); return; }
   delete b.dataset.armed; b.textContent=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.classList.remove('danger');
   S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); if(S.undo.length>30) S.undo.shift();
   S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged();
-  setStatus('Your lyric edits were removed: the lyrics are back as your choir leader shared them.'); }
+  setStatus('Your lyric edits were removed: the lyrics are back as the moderator shared them.'); }
 $('#lyrDiscard').addEventListener('click',discardLyrics);
 $('#edLyrDiscard').addEventListener('click',discardLyrics);
 $('#dlgClose').addEventListener('click',()=>$('#dlgView')._done&&$('#dlgView')._done(null));
