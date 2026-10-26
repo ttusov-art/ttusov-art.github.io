@@ -101,6 +101,10 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 
 .lane{overflow:hidden;position:relative}
 .lane-wrap{position:relative}
+/* phones: a strip along the right edge of the lane where a thumb scrolls the page instead of moving the song */
+.scroll-strip{display:none}
+@media (pointer:coarse){.scroll-strip{display:block;position:absolute;top:0;right:0;bottom:0;width:30px;z-index:3;touch-action:pan-y;background:color-mix(in srgb,var(--bg) 78%,transparent);border-left:1px solid var(--line)}
+.scroll-strip::before{content:'';position:absolute;left:50%;top:50%;width:4px;height:44px;transform:translate(-50%,-50%);border-radius:2px;background:repeating-linear-gradient(to bottom,var(--muted) 0 2px,transparent 2px 7px);opacity:.55}}
 .kb-arrow{position:absolute;left:3px;width:38px;height:26px;padding:0;justify-content:center;border-radius:6px;background:var(--surface);opacity:.92;touch-action:manipulation}
 #kbUp{top:3px}
 #kbDown{bottom:4px}
@@ -370,7 +374,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 
   <section class="panel lane">
     <div class="lyr" id="lyrBar" hidden role="button" tabindex="-1"><div class="lyr-text"><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div><button id="lyrSkip" class="lyr-sheet" type="button" hidden aria-label="Skip this line and keep its time" title="Skip this line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"/><path d="M17 5v14"/></svg><span>Skip</span></button><button id="lyrUndo" class="lyr-sheet" type="button" hidden aria-label="Undo the last tap" title="Undo the last tap"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><span>Undo</span></button><button id="sheetOpen3" class="lyr-sheet acc-btn" type="button" hidden aria-label="Open the lyrics sheet" title="Lyrics sheet"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 12h6M10 15.5h6M10 19h4"/></svg><span>Sheet</span></button><button id="sheetFold" class="sheet-fold" type="button" hidden aria-label="Hide the Sheet button" title="Hide the Sheet button (more room for the lyrics)">›</button></div>
-    <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
+    <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><div class="scroll-strip" aria-hidden="true" title="Swipe here to scroll the page"></div><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
     <canvas id="ovw" aria-label="Whole song overview: tap or drag to jump"></canvas>
     <div class="sug-bar" id="sugBar" hidden>
       <span class="small" id="sgInfo"></span>
@@ -753,7 +757,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bm';
+const APP_VERSION='2026-10-26 bn';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
