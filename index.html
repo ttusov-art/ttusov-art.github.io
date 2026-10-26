@@ -420,10 +420,10 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="sgNext" type="button" aria-label="Next change">▶</button>
         <button id="sgListen" type="button">▶ Listen</button>
         <button id="sgAcc" type="button" class="primary">Accept</button>
-        <button id="sgRej" type="button">Not this one</button>
+        <button id="sgRej" type="button">Decline</button>
         <button id="sgAll" type="button">Accept all the rest</button>
         <button id="sgDone" type="button">Finish</button>
-        <button id="sgStop" type="button">Stop reviewing</button>
+        <button id="sgStop" type="button">Cancel</button>
       </div>
     </div>
     <div class="edit-bar lyr-tapbtns" id="lyrTapBtns" hidden><button id="lyrBack" class="lyr-sheet" type="button" aria-label="Back to the previous line and keep its time" title="Back to the previous line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5l-8 7 8 7z"/><path d="M7 5v14"/></svg><span>Back</span></button><button id="lyrSkip" class="lyr-sheet" type="button" aria-label="Skip this line and keep its time" title="Skip this line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"/><path d="M17 5v14"/></svg><span>Skip</span></button><button id="lyrUndo" class="lyr-sheet" type="button" aria-label="Undo the last lyric timing change" title="Undo the last timing change (Back and Skip are not undone)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><span>Undo</span></button><button id="lyrPlace" class="lyr-sheet lyr-place" type="button" aria-label="Place this line here" title="Place this line at the playhead (Space)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 9.5L12 14l4.5-4.5"/><path d="M4 19h16"/></svg><span>Place here</span></button></div>
@@ -831,7 +831,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 dj';
+const APP_VERSION='2026-10-26 dk';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2129,11 +2129,11 @@ async function openInbox(){
   const lib=await libMeta(), byU={}; lib.forEach(s=>{ if(s.uid) byU[s.uid]=s; });
   const items=S.inbox.map(it=>{ const has=!!byU[it.songUid], d=new Date(it.received);
     return '<div class="dlg-item"><div><b>'+esc(it.songName)+'</b> <span class="small">'+esc(it.part)+'</span><br><span class="small">'+d.toLocaleDateString()+' · '+esc(diffText({notes:it.notes,lyrics:it.lyrics}))+'</span>'+
-      (has?'':'<br><span class="small">This song is not on this device.</span>')+'</div><div class="row"><button type="button" class="primary" data-rev="'+esc(it.id)+'"'+(has?'':' disabled')+'>Review</button><button type="button" data-rej="'+esc(it.id)+'">Not used</button></div></div>'; }).join('');
+      (has?'':'<br><span class="small">This song is not on this device.</span>')+'</div><div class="row"><button type="button" class="primary" data-rev="'+esc(it.id)+'"'+(has?'':' disabled')+'>Review</button><button type="button" data-rej="'+esc(it.id)+'">Decline</button></div></div>'; }).join('');
   const r=await dlg({title:'Suggestions from the choir',html:items||'<p class="kv-sub">No suggestions waiting.</p>',buttons:[{label:'Close',value:null}],
     onOpen:(b,done)=>{ b.querySelectorAll('[data-rev]').forEach(x=>x.addEventListener('click',()=>done('rev:'+x.dataset.rev))); b.querySelectorAll('[data-rej]').forEach(x=>x.addEventListener('click',()=>done('rej:'+x.dataset.rej))); }});
   const v=r.value||''; const id=v.slice(4), it=S.inbox.find(x=>x.id===id); if(!it) return;
-  if(v.startsWith('rej:')){ await sugSetStatus(it,'rejected'); setStatus('Suggestion for '+it.songName+' marked as not used.'); openInbox(); }
+  if(v.startsWith('rej:')){ await sugSetStatus(it,'rejected'); setStatus('Suggestion for '+it.songName+' declined.'); openInbox(); }
   else startReview(it,byU[it.songUid].id);
 }
 async function sugSetStatus(it,status){ try{ await sugPost(sugUrl(),{action:'review',key:sugKey(),id:it.id,status}); S.inbox=S.inbox.filter(x=>x!==it); paintSugBtn(); return true; }
@@ -2143,7 +2143,7 @@ async function startReview(it,libId){
   const ok=await openLibSong(libId); if(!ok) return;
   const ch=it.notes.map(n=>({type:'notes',...n,vals:unrle(n.m),olds:unrle(n.old)})).concat(it.lyrics.map(l=>({type:'lyric',...l,t0:l.t})));
   ch.forEach(c=>{ if(c.type==='lyric'&&!c.k) c.k='time'; }); ch.sort((a,b)=>sugT(a,1e9)-sugT(b,1e9));
-  S.sug={it,changes:ch,k:0}; if(!S.editMode) setEditMode(true); $('#sugBar').hidden=false; sugGo(0);
+  S.sug={it,changes:ch,k:0,snap:{tM:Float32Array.from(S.tM),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text})),undo:S.undo.length}}; if(!S.editMode) setEditMode(true); $('#sugBar').hidden=false; sugGo(0);
 }
 function sugT(c,dflt){ if(c.type==='notes') return c.t0; const v=[c.t,c.old].filter(x=>x!=null); return v.length?Math.min(...v):dflt; }   // where a change sits in the song
 function sugStart(c){ if(c.type==='notes'){ const j=S.tT.length&&Math.abs((S.tT[c.i0]||0)-c.t0)<0.05?c.i0:idxAt(c.t0); return j; } return -1; }
@@ -2163,7 +2163,7 @@ function sugWhat(c){ if(c.type==='notes') return 'Notes '+fmtT1(c.t0)+'–'+fmtT
   return 'Lyric “'+c.text+'”: '+at(c.old)+' → '+at(c.t); }
 function renderSugBar(){ const s=S.sug; if(!s) return; const c=s.changes[s.k], done=s.changes.filter(x=>x.state).length;
   const what=sugWhat(c);
-  const st=c.state==='acc'?' · accepted':c.state==='rej'?' · not used':'', warn=!c.state&&sugConflict(c)?(c.type==='lyric'&&c.k!=='time'?(c.k==='add'?' · this line is already in your lyrics':' · this line has changed in your lyrics since; it can\'t be found'):' · you changed this part since; accepting replaces your version'):'';
+  const st=c.state==='acc'?' · accepted':c.state==='rej'?' · declined':'', warn=!c.state&&sugConflict(c)?(c.type==='lyric'&&c.k!=='time'?(c.k==='add'?' · this line is already in your lyrics':' · this line has changed in your lyrics since; it can\'t be found'):' · you changed this part since; accepting replaces your version'):'';
   $('#sgInfo').textContent='Suggestion from '+new Date(s.it.received).toLocaleDateString()+' · change '+(s.k+1)+' of '+s.changes.length+': '+what+st+warn+' · '+done+' decided';
   $('#sgPrev').disabled=s.k===0; $('#sgNext').disabled=s.k===s.changes.length-1; $('#sgAcc').disabled=$('#sgRej').disabled=!!c.state; }
 function sugAccept(c){
@@ -2174,12 +2174,26 @@ function sugAccept(c){
       if(c.k==='del') S.lyrics.splice(S.lyrics.indexOf(L),1); else { if(c.k==='text') L.text=c.text; if(c.t!==undefined&&(c.k==='time'||c.t!==c.old)) L.t=c.t; } }
     S.undo.push({lyrAll:snap}); if(S.undo.length>30) S.undo.shift(); c.state='acc'; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); } }
 function sugNextOpen(){ const s=S.sug, i=s.changes.findIndex((x,i)=>i>s.k&&!x.state), j=i>=0?i:s.changes.findIndex(x=>!x.state); if(j>=0) sugGo(j); else { renderSugBar(); draw(); } }
-async function sugFinish(){ const s=S.sug; if(!s) return; const acc=s.changes.filter(c=>c.state==='acc').length, open=s.changes.filter(c=>!c.state).length;
-  if(open){ const r=await dlg({title:'Finish this suggestion?',html:'<p class="kv-sub">'+open+' change'+(open>1?'s are':' is')+' not decided yet. They count as not used.</p>',buttons:[{label:'Finish',value:'f',primary:true},{label:'Keep reviewing',value:null}]}); if(r.value!=='f') return; }
+async function sugFinish(){ const s=S.sug; if(!s) return; if(S.playing) stop();
+  const acc=s.changes.filter(c=>c.state==='acc').length, rej=s.changes.filter(c=>c.state==='rej').length, open=s.changes.length-acc-rej;
+  const lab=c=>c.state==='acc'?'<b style="color:var(--accent)">Accepted</b>':c.state==='rej'?'<b>Declined</b>':'<b style="color:var(--muted)">Not decided (counts as declined)</b>';
+  const list=s.changes.map(c=>'<div class="dlg-item"><span>'+esc(sugWhat(c))+'</span>'+lab(c)+'</div>').join('');
+  const r=await dlg({title:'Review summary',html:'<p class="kv-sub">'+acc+' accepted, '+rej+' declined'+(open?', '+open+' not decided':'')+'. Confirm to save the accepted changes in this song on this device'+(acc?' (make the share file afterwards so the choir gets them)':'')+'.</p><div style="max-height:45vh;overflow:auto;margin-top:8px">'+list+'</div>',
+    buttons:[{label:'Confirm and save',value:'ok',primary:true},{label:'Keep reviewing',value:null}]});
+  if(r.value!=='ok') return;
   const status=acc===0?'rejected':acc===s.changes.length?'accepted':'partly';
-  if(await sugSetStatus(s.it,status)){ S.sug=null; $('#sugBar').hidden=true; draw();
-    setStatus(acc?'Done: '+acc+' of '+s.changes.length+' suggested changes accepted. Make the share file again so everyone gets them.':'Done: the suggestion was not used.'); if(S.inbox.length) setTimeout(openInbox,300); } }
-function sugCancel(){ S.sug=null; $('#sugBar').hidden=true; draw(); setStatus('Review stopped. The suggestion stays in the inbox; changes you accepted stay in the song (Undo takes them back).'); }
+  if(await sugSetStatus(s.it,status)){ S.sug=null; $('#sugBar').hidden=true;
+    if(acc&&S.cur.libId!=null){ await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); }
+    draw(); setStatus(acc?'Saved: '+acc+' of '+s.changes.length+' suggested changes accepted. Make the share file again so everyone gets them.':'Done: the suggestion was declined.'); if(S.inbox.length) setTimeout(openInbox,300); } }
+async function sugCancel(){ const s=S.sug; if(!s) return; if(S.playing) stop();
+  const acc=s.changes.filter(c=>c.state==='acc').length;
+  const r=await dlg({title:'Cancel this review?',html:'<p class="kv-sub">'+(acc?'The '+acc+' change'+(acc>1?'s':'')+' you accepted '+(acc>1?'are':'is')+' taken back and nothing is saved. ':'Nothing is saved. ')+'The suggestion stays in the inbox, so you can review it later.</p>',
+    buttons:[{label:'Cancel review',value:'c'},{label:'Keep reviewing',value:null,primary:true}]});
+  if(r.value!=='c') return;
+  S.tM=Float32Array.from(s.snap.tM); S.lyrics=s.snap.lyrics.map(l=>({t:l.t,text:l.text})); S.undo.length=Math.min(S.undo.length,s.snap.undo);
+  S.sug=null; $('#sugBar').hidden=true; S.ovwImg=null; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
+  $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); renderLyrics(true); S.lyrBarKey=null; updateSelInfo(); draw();
+  setStatus('Review cancelled. Nothing was changed; the suggestion stays in the inbox.'); }
 // lane overlay: the suggested notes in violet, lyric times as violet marks
 function drawSug(g,xOf,yOf,w,h,col){ const s=S.sug; if(!s) return; const SC='#8b5cf6';
   s.changes.forEach((c,k)=>{ if(c.state) return; const cur=k===s.k;
@@ -2213,7 +2227,7 @@ function targetEdited(msg){ S.ovwImg=null; paintSuggest();
   S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
   computeViewKeep(); updateSelInfo(); draw();
   if(msg) setStatus(msg);
-  if(S.cur.libId!=null){ clearTimeout(edSaveTimer); const id=S.cur.libId; edSaveTimer=setTimeout(()=>{ libUpdate(id,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig)}).catch(()=>{}); },500); }
+  if(S.cur.libId!=null&&!S.sug){ clearTimeout(edSaveTimer); const id=S.cur.libId; edSaveTimer=setTimeout(()=>{ libUpdate(id,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig)}).catch(()=>{}); },500); }
 }
 function computeViewKeep(){ if(S.viewManual) return; const {lo,hi}=S.view; computeView(); S.view.lo=Math.min(S.view.lo,lo); S.view.hi=Math.max(S.view.hi,hi); }
 // note used by Fill: the selection's own note if it has one, otherwise the row where the drag started
@@ -2452,7 +2466,7 @@ function timingSummary(){
 function lyrSorted(){ return S.lyrics; }
 let lyrSaveTimer=null;
 function saveLyrics(){
-  if(S.cur.libId==null) return;
+  if(S.cur.libId==null||S.sug) return;   // while reviewing a suggestion, nothing is saved until Finish is confirmed
   clearTimeout(lyrSaveTimer);
   lyrSaveTimer=setTimeout(()=>{ libUpdate(S.cur.libId,{lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); },400);
 }
