@@ -400,7 +400,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </section>
 
   <section class="panel lane">
-    <div class="lyr" id="lyrBar" hidden role="button" tabindex="-1"><div class="lyr-text"><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div><button id="lyrSkip" class="lyr-sheet" type="button" hidden aria-label="Skip this line and keep its time" title="Skip this line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"/><path d="M17 5v14"/></svg><span>Skip</span></button><button id="lyrUndo" class="lyr-sheet" type="button" hidden aria-label="Undo the last tap" title="Undo the last tap"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><span>Undo</span></button><button id="sheetOpen3" class="lyr-sheet acc-btn" type="button" hidden aria-label="Open the lyrics sheet" title="Lyrics sheet"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 12h6M10 15.5h6M10 19h4"/></svg><span>Sheet</span></button><button id="sheetFold" class="sheet-fold" type="button" hidden aria-label="Hide the Sheet button" title="Hide the Sheet button (more room for the lyrics)">›</button></div>
+    <div class="lyr" id="lyrBar" hidden role="button" tabindex="-1"><div class="lyr-text"><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div><button id="lyrBack" class="lyr-sheet" type="button" hidden aria-label="Back to the previous line" title="Back to the previous line (press again to remove its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5l-8 7 8 7z"/><path d="M7 5v14"/></svg><span>Back</span></button><button id="lyrSkip" class="lyr-sheet" type="button" hidden aria-label="Skip this line and keep its time" title="Skip this line (keep its time)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7z"/><path d="M17 5v14"/></svg><span>Skip</span></button><button id="lyrUndo" class="lyr-sheet" type="button" hidden aria-label="Undo the last tap" title="Undo the last tap"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><span>Undo</span></button><button id="sheetOpen3" class="lyr-sheet acc-btn" type="button" hidden aria-label="Open the lyrics sheet" title="Lyrics sheet"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 12h6M10 15.5h6M10 19h4"/></svg><span>Sheet</span></button><button id="sheetFold" class="sheet-fold" type="button" hidden aria-label="Hide the Sheet button" title="Hide the Sheet button (more room for the lyrics)">›</button></div>
     <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><div class="scroll-strip" aria-hidden="true" title="Swipe here to scroll the page"></div><div class="lane-loading" id="laneLoading" hidden role="status" aria-live="polite"></div><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
     <canvas id="ovw" aria-label="Whole song overview: tap or drag to jump"></canvas>
     <div class="sug-bar" id="sugBar" hidden>
@@ -810,7 +810,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 cr';
+const APP_VERSION='2026-10-26 cs';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2781,13 +2781,13 @@ function startTap(){
   let i=S.lyrics.findIndex(l=>l.t==null); if(i<0) i=0;
   const prev=i>0?S.lyrics[i-1].t:null, from=prev!=null?Math.max(0,prev-1):Math.max(0,(S.lyrics[i].t!=null?S.lyrics[i].t:0)-4);
   S.loop.on=false; $('#loopOn').checked=false; updateLoopUI();
-  S.tap={i,hist:[]}; $('#lyrBar').classList.add('tap'); $('#lyrUndo').hidden=false; $('#lyrUndo').disabled=true; $('#lyrSkip').hidden=false; $('#lyrSkip').disabled=false; $('#lyrBar').hidden=false; $('#lyrTap').textContent='Stop timing'; $('#edTimeBtn').textContent='Stop timing'; $('#edTimeBtn').setAttribute('aria-pressed','true');
+  S.tap={i,hist:[]}; $('#lyrBar').classList.add('tap'); $('#lyrUndo').hidden=false; $('#lyrUndo').disabled=true; $('#lyrSkip').hidden=false; $('#lyrSkip').disabled=false; $('#lyrBack').hidden=false; tapBtns(); $('#lyrBar').hidden=false; $('#lyrTap').textContent='Stop timing'; $('#edTimeBtn').textContent='Stop timing'; $('#edTimeBtn').setAttribute('aria-pressed','true');
   S.lyrBarKey=null; updateLyricBar(from);
   setStatus('Tap the lyrics bar (or press Space) at the start of each line. You can also pause, drag the playhead to the exact spot and tap. Drag a line’s label at the bottom of the lane to nudge it. Undo takes back the last step.');
   seek(from); if(!S.playing) play();
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function stopTap(){ if(!S.tap) return; S.tap=null; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
+function stopTap(){ if(!S.tap) return; S.tap=null; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrBack').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
 function tapNow(){
   if(!S.tap||S.review||S.tap.i>=S.lyrics.length) return;
   // playing: allow for reaction time; paused: the playhead was placed by hand, use it as it is
@@ -2795,7 +2795,7 @@ function tapNow(){
   const i=S.tap.i, rec={i,t:S.lyrics[i].t,cleared:[]};
   S.lyrics[i].t=t; S.tap.i++;
   for(let j=S.tap.i;j<S.lyrics.length;j++){ if(S.lyrics[j].t!=null&&S.lyrics[j].t<t){ rec.cleared.push([j,S.lyrics[j].t]); S.lyrics[j].t=null; } }
-  S.tap.hist.push(rec); $('#lyrUndo').disabled=false; $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length;
+  S.tap.hist.push(rec); $('#lyrUndo').disabled=false; $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; tapBtns();
   if(S.tap.i>=S.lyrics.length) setStatus('All lines timed. Tap Undo to redo the last one, or Stop timing when you are happy.');
   else if(!S.playing) setStatus('Line '+(i+1)+' set at '+fmtT1(t)+'. Move the playhead to the next line and tap again.');
   S.lyrBarKey=null; lyrChanged();
@@ -2807,12 +2807,28 @@ function tapSkip(){
   if(!nx) setStatus('All lines done. Tap Undo to go back, or Stop timing when you are happy.');
   else { setStatus('Skipped “'+S.lyrics[i].text+'”'+(S.lyrics[i].t!=null?' (kept at '+fmtT1(S.lyrics[i].t)+')':'')+'. Next: '+nx.text);
     if(!S.playing&&nx.t!=null) seek(nx.t); }   // paused: show where the next line sits now
-  $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; S.lyrBarKey=null; lyrChanged();
+  $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; tapBtns(); S.lyrBarKey=null; lyrChanged();
+}
+function tapBtns(){ if(!S.tap) return; const h=S.tap.hist[S.tap.hist.length-1]; $('#lyrBack').disabled=!(S.tap.i>0||(h&&h.nav&&S.lyrics[0]&&S.lyrics[0].t!=null)); }
+// Back: 1st press goes to the previous line and keeps its time (tap again to re-time it);
+// each further press in a row removes that line's time and steps back one more line
+function tapBack(){
+  if(!S.tap) return;
+  const h=S.tap.hist[S.tap.hist.length-1], again=h&&h.nav&&h.i===S.tap.i;
+  let p;
+  if(again){ const c=S.tap.i, L=S.lyrics[c]; if(L.t==null&&c===0) return;
+    S.tap.hist.push({i:c,t:L.t,cleared:[],moved:true,back:c,nav:true,removed:true}); L.t=null; p=Math.max(0,c-1);
+    S.tap.hist[S.tap.hist.length-1].i=p; S.tap.hist[S.tap.hist.length-1].ri=c; }
+  else { p=S.tap.i-1; if(p<0) return; S.tap.hist.push({i:p,t:S.lyrics[p].t,cleared:[],moved:true,back:S.tap.i,nav:true}); }
+  S.tap.i=p; const L=S.lyrics[p];
+  if(L.t!=null) seek(S.playing?Math.max(0,L.t-2):L.t);
+  setStatus((again?'Time removed. ':'')+'Back to “'+L.text+'”'+(L.t!=null?' (kept at '+fmtT1(L.t)+'). Tap to re-time it, Skip to keep it, or Back again to remove its time.':'. Tap when it starts.'));
+  $('#lyrUndo').disabled=false; $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; tapBtns(); S.lyrBarKey=null; lyrChanged();
 }
 function tapUndo(){
   if(!S.tap||!S.tap.hist.length) return;
-  const rec=S.tap.hist.pop(); S.lyrics[rec.i].t=rec.t; rec.cleared.forEach(([j,t])=>{ S.lyrics[j].t=t; }); S.tap.i=rec.moved?rec.back:rec.i;
-  $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; $('#lyrUndo').disabled=!S.tap.hist.length; setStatus(rec.skip?'Back to: '+S.lyrics[rec.i].text:rec.moved?'Move undone.':'Undone. Tap again for: '+S.lyrics[rec.i].text);
+  const rec=S.tap.hist.pop(); S.lyrics[rec.ri!=null?rec.ri:rec.i].t=rec.t; rec.cleared.forEach(([j,t])=>{ S.lyrics[j].t=t; }); S.tap.i=rec.moved?rec.back:rec.i;
+  $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; tapBtns(); $('#lyrUndo').disabled=!S.tap.hist.length; setStatus(rec.skip?'Back to: '+S.lyrics[rec.i].text:rec.nav?'Undone. Now at: '+(S.lyrics[S.tap.i]?S.lyrics[S.tap.i].text:'the end'):rec.moved?'Move undone.':'Undone. Tap again for: '+S.lyrics[rec.i].text);
   S.lyrBarKey=null; lyrChanged();
 }
 function updateLyricBar(now){
@@ -3767,6 +3783,8 @@ $('#sheetFold').addEventListener('pointerdown',e=>e.stopPropagation());
 $('#sheetFold').addEventListener('click',e=>{ e.stopPropagation(); S.sheetFolded=!S.sheetFolded; try{ localStorage.setItem('pc-sheetfold',S.sheetFolded?'1':'0'); }catch(x){} renderSheetBtns(); });
 $('#lyrUndo').addEventListener('pointerdown',e=>e.stopPropagation());
 $('#lyrSkip').addEventListener('pointerdown',e=>e.stopPropagation());
+$('#lyrBack').addEventListener('pointerdown',e=>e.stopPropagation());
+$('#lyrBack').addEventListener('click',e=>{ e.stopPropagation(); tapBack(); });
 $('#lyrSkip').addEventListener('click',e=>{ e.stopPropagation(); tapSkip(); });
 $('#lyrUndo').addEventListener('click',e=>{ e.stopPropagation(); tapUndo(); });
 $('#sheetOpen3').addEventListener('click',e=>{ e.stopPropagation(); const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; });
@@ -3782,7 +3800,7 @@ $('#lyrTap').addEventListener('click',()=>S.tap?closeEditor(false):startTap()); 
 $('#lyrClear').addEventListener('click',e=>{ const b=e.currentTarget; if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to remove'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Remove lyrics'; },4000); return; } delete b.dataset.armed; b.textContent='Remove lyrics'; stopTap(); S.lyrics=[]; renderLyrics(true); saveLyrics(); draw(); setStatus('Lyrics removed.'); });
 $('#lyrShow').addEventListener('change',e=>{ S.lyrShow=e.target.checked; try{localStorage.setItem('pc-lyr',S.lyrShow?'1':'0')}catch(x){} S.lyrBarKey=null; draw(); });
 $('#lyrBar').addEventListener('pointerdown',e=>{ if(S.tap){ e.preventDefault(); tapNow(); } });
-document.addEventListener('keydown',e=>{ if(S.tap&&e.key==='ArrowRight'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); tapSkip(); return; } if(S.tap&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); tapUndo(); return; } if(S.tap&&e.code==='Space'&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); tapNow(); } });
+document.addEventListener('keydown',e=>{ if(S.tap&&e.key==='ArrowRight'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); tapSkip(); return; } if(S.tap&&e.key==='ArrowLeft'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); tapBack(); return; } if(S.tap&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); tapUndo(); return; } if(S.tap&&e.code==='Space'&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); tapNow(); } });
 try{ if(localStorage.getItem('pc-lyr')==='0'){ S.lyrShow=false; $('#lyrShow').checked=false; } }catch(x){}
 try{ const o=localStorage.getItem('pc-lyr-open'); if(o==='1') $('#lyrPanel').open=true; }catch(x){}
 $('#lyrPanel').addEventListener('toggle',e=>{ try{localStorage.setItem('pc-lyr-open',e.target.open?'1':'0')}catch(x){} });
