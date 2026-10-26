@@ -593,12 +593,13 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </details>
 
   <details class="panel lyr-edit" id="lyrPanel">
-    <summary>Lyrics</summary>
+    <summary>Lyrics editor</summary>
     <div class="lyr-body">
       <span class="small">Paste or type the lyrics with one line per sung phrase. Blank lines are ignored.</span>
       <textarea id="lyrText" placeholder="First line of the song&#10;Second line&#10;…"></textarea>
       <div class="row">
         <button id="lyrApply" type="button" class="primary">Use these lines</button>
+        <button id="lyrSuggest" type="button" class="primary" hidden title="Send your edits of this song to the choir leader">Suggest my edits</button><span class="small" id="lyrSugState"></span>
         <button id="lyrAuto" type="button">Place lines automatically</button>
         <button id="lyrTap" type="button">Tap to time</button>
         <button id="lyrClear" type="button">Remove lyrics</button>
@@ -735,7 +736,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bb';
+const APP_VERSION='2026-10-26 bc';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1887,8 +1888,23 @@ function lineDiff(base,cur,tt){
     out.push({i0:i,i1:last,t0:+tt[i].toFixed(3),t1:+tt[last].toFixed(3),old:rle(base.subarray(i,last+1)),m:rle(cur.subarray(i,last+1))}); i=last+1; }
   return out;
 }
-function lyricDiff(base,cur){ const out=[]; if(!base||!cur||base.length!==cur.length) return out;
-  cur.forEach((l,i)=>{ if(base[i].text===l.text&&base[i].t!==l.t) out.push({i,text:l.text,old:base[i].t,t:l.t}); }); return out; }
+// line alignment of two lists of lyric texts: same lines (longest common run), changed lines in between paired by position, the rest added / removed
+function alignLines(A,B){
+  const n=A.length, m=B.length, L=Array.from({length:n+1},()=>new Uint16Array(m+1));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) L[i][j]=A[i]===B[j]?L[i+1][j+1]+1:Math.max(L[i+1][j],L[i][j+1]);
+  const ops=[]; let i=0,j=0, ga=[], gb=[];
+  const flush=()=>{ const k=Math.min(ga.length,gb.length); for(let x=0;x<k;x++) ops.push({op:'chg',i:ga[x],j:gb[x]}); ga.slice(k).forEach(a=>ops.push({op:'del',i:a})); gb.slice(k).forEach(b=>ops.push({op:'add',j:b})); ga=[]; gb=[]; };
+  while(i<n||j<m){ if(i<n&&j<m&&A[i]===B[j]){ flush(); ops.push({op:'same',i,j}); i++; j++; } else if(j<m&&(i>=n||L[i][j+1]>=L[i+1][j])) gb.push(j++); else ga.push(i++); }
+  flush(); return ops;
+}
+// lyric changes against the shared version: k = time (same line, new start), text (line reworded), add (new line), del (line removed)
+function lyricDiff(base,cur){ const out=[]; if(!base||!cur) return out;
+  for(const o of alignLines(base.map(l=>l.text),cur.map(l=>l.text))){
+    if(o.op==='same'){ if(base[o.i].t!==cur[o.j].t) out.push({k:'time',i:o.j,bi:o.i,text:cur[o.j].text,old:base[o.i].t,t:cur[o.j].t}); }
+    else if(o.op==='chg') out.push({k:'text',i:o.j,bi:o.i,oldText:base[o.i].text,text:cur[o.j].text,old:base[o.i].t,t:cur[o.j].t});
+    else if(o.op==='del') out.push({k:'del',bi:o.i,oldText:base[o.i].text,old:base[o.i].t});
+    else out.push({k:'add',i:o.j,text:cur[o.j].text,t:cur[o.j].t,after:o.j>0?cur[o.j-1].text:null}); }
+  return out; }
 // changes of a song against its shared version (live = the open song's current line and lyrics)
 function songDiff(rec,live){ if(!rec||!rec.base) return {notes:[],lyrics:[]};
   const cur=live?live.contour:toF32(rec.contour), base=toF32(rec.base.contour), tt=live&&live.tt?live.tt:recTimes(rec,cur.length);
@@ -1915,7 +1931,7 @@ function dlg({title,html,buttons,onOpen}){ return new Promise(res=>{
   (buttons||[]).forEach(b=>{ const e=document.createElement('button'); e.type='button'; e.textContent=b.label; if(b.primary) e.className='primary'; e.addEventListener('click',()=>done(b.value)); row.appendChild(e); });
   v.hidden=false; if(onOpen) onOpen(body,done); else { const f=row.querySelector('button.primary')||row.querySelector('button'); if(f) f.focus({preventScroll:true}); } }); }
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function diffText(d){ const p=[]; if(d.notes.length) p.push(d.notes.length+' change'+(d.notes.length>1?'s':'')+' to the notes'); if(d.lyrics.length) p.push(d.lyrics.length+' lyric time'+(d.lyrics.length>1?'s':'')); return p.join(' and '); }
+function diffText(d){ const p=[]; if(d.notes.length) p.push(d.notes.length+' change'+(d.notes.length>1?'s':'')+' to the notes'); if(d.lyrics.length) p.push(d.lyrics.length+' lyric change'+(d.lyrics.length>1?'s':'')); return p.join(' and '); }
 // send one song's edits (queued when offline); returns 'sent', 'queued' or a reason it was not sent
 async function postSuggestion(rec,live){   // anonymous: no name, no note
   const d=songDiff(rec,live); if(!diffCount(d)) return 'none';
@@ -1928,7 +1944,7 @@ async function postSuggestion(rec,live){   // anonymous: no name, no note
 async function suggestCurrent(){
   if(!S.cur||S.cur.libId==null||S.sugSending) return;
   // respond on the tap: Google takes a second or two to answer
-  const b=$('#edSuggest'), stEl=$('#sugState'); b.hidden=true; stEl.textContent='Sending…'; S.sugSending=true;
+  ['#edSuggest','#lyrSuggest'].forEach(x=>$(x).hidden=true); ['#sugState','#lyrSugState'].forEach(x=>$(x).textContent='Sending…'); S.sugSending=true;
   try{ await suggestNow(); } finally{ S.sugSending=false; paintSuggest(); renderLib(); }
 }
 async function suggestNow(){
@@ -1952,9 +1968,10 @@ async function refreshCurBase(){ S.curBase=null; if(S.cur&&S.cur.libId!=null){ c
 let paintSugTimer=null;
 function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout(()=>{  const b=$('#edSuggest'), st=$('#sugState'); if(!b) return;
   if(S.sugSending) return;   // keep "Sending…" until the inbox answers
-  const cb=S.curBase; if(!cb||!S.tM){ b.hidden=true; st.textContent=''; return; }
+  const cb=S.curBase, both=(fn)=>[[b,st],[$('#lyrSuggest'),$('#lyrSugState')]].forEach(([bb,ss])=>fn(bb,ss));
+  if(!cb||!S.tM){ both((bb,ss)=>{ bb.hidden=true; ss.textContent=''; }); return; }
   const d=songDiff(cb,liveOf()), n=diffCount(d), unsent=n>0&&hashOf(d)!==cb.sentHash;
-  b.hidden=!unsent; b.textContent='Suggest my edits ('+n+')'; st.textContent=unsent?'':sugStateFor(cb.uid); },150); }
+  both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; ss.textContent=unsent?'':sugStateFor(cb.uid); }); },150); }
 // an update is about to replace songs that have edits not sent yet: ask
 async function askUnsent(recs){
   const names=recs.map(r=>r.name);
@@ -1991,24 +2008,37 @@ function idxAt(t){ const T=S.tT; let lo=0,hi=T.length-1; while(hi-lo>1){ const m
 async function startReview(it,libId){
   const ok=await openLibSong(libId); if(!ok) return;
   const ch=it.notes.map(n=>({type:'notes',...n,vals:unrle(n.m),olds:unrle(n.old)})).concat(it.lyrics.map(l=>({type:'lyric',...l,t0:l.t})));
-  ch.sort((a,b)=>(a.type==='notes'?a.t0:Math.min(a.t,a.old==null?a.t:a.old))-(b.type==='notes'?b.t0:Math.min(b.t,b.old==null?b.t:b.old)));
+  ch.forEach(c=>{ if(c.type==='lyric'&&!c.k) c.k='time'; }); ch.sort((a,b)=>sugT(a,1e9)-sugT(b,1e9));
   S.sug={it,changes:ch,k:0}; if(!S.editMode) setEditMode(true); $('#sugBar').hidden=false; sugGo(0);
 }
+function sugT(c,dflt){ if(c.type==='notes') return c.t0; const v=[c.t,c.old].filter(x=>x!=null); return v.length?Math.min(...v):dflt; }   // where a change sits in the song
 function sugStart(c){ if(c.type==='notes'){ const j=S.tT.length&&Math.abs((S.tT[c.i0]||0)-c.t0)<0.05?c.i0:idxAt(c.t0); return j; } return -1; }
 function sugConflict(c){
   if(c.type==='notes'){ const j=sugStart(c); for(let k=0;k<c.olds.length;k++){ const a=S.tM[j+k], b=c.olds[k]; if(!((isNaN(a)&&isNaN(b))||Math.abs(a-b)<0.005)) return true; } return false; }
-  const L=sugLyric(c); return !!L&&L.t!==c.old; }
-function sugLyric(c){ if(S.lyrics[c.i]&&S.lyrics[c.i].text===c.text) return S.lyrics[c.i]; let best=null; S.lyrics.forEach(l=>{ if(l.text===c.text&&(!best||Math.abs(l.t-c.old)<Math.abs(best.t-c.old))) best=l; }); return best; }
-function sugGo(k){ const s=S.sug; if(!s) return; s.k=Math.max(0,Math.min(s.changes.length-1,k)); const c=s.changes[s.k], t=c.type==='notes'?c.t0:Math.min(c.t,c.old==null?c.t:c.old);
-  if(S.playing) stop(); S.pos=Math.max(0,t-S.win*0.15); updateTime(); renderSugBar(); draw(); }
+  if(c.k==='add') return S.lyrics.some(l=>l.text===c.text);
+  const L=sugLyric(c); if(!L) return true; return c.k==='time'&&L.t!==c.old; }
+// the line a change is about, as it is in your lyrics now (same text; nearest time or position)
+function findLyr(text,t,hint){ let best=null,bd=1e9; S.lyrics.forEach((l,i)=>{ if(l.text!==text) return; const d=t!=null&&l.t!=null?Math.abs(l.t-t):Math.abs(i-(hint||0))*10+100; if(d<bd){ bd=d; best=l; } }); return best; }
+function sugLyric(c){ return c.k==='time'?findLyr(c.text,c.old,c.bi):c.k==='add'?null:findLyr(c.oldText,c.old,c.bi); }
+function sugGo(k){ const s=S.sug; if(!s) return; s.k=Math.max(0,Math.min(s.changes.length-1,k)); const c=s.changes[s.k], t=sugT(c,null);
+  if(S.playing) stop(); if(t!=null){ S.pos=Math.max(0,t-S.win*0.15); updateTime(); } renderSugBar(); draw(); }
+function sugWhat(c){ if(c.type==='notes') return 'Notes '+fmtT1(c.t0)+'–'+fmtT1(c.t1); const at=x=>x==null?'untimed':fmtT1(x);
+  if(c.k==='text') return 'Lyric text: “'+c.oldText+'” → “'+c.text+'”'+(c.t!==c.old?' (start '+at(c.old)+' → '+at(c.t)+')':'');
+  if(c.k==='add') return 'New lyric line: “'+c.text+'”'+(c.after?' after “'+c.after+'”':' at the start')+(c.t!=null?' at '+fmtT1(c.t):'');
+  if(c.k==='del') return 'Remove lyric line: “'+c.oldText+'”';
+  return 'Lyric “'+c.text+'”: '+at(c.old)+' → '+at(c.t); }
 function renderSugBar(){ const s=S.sug; if(!s) return; const c=s.changes[s.k], done=s.changes.filter(x=>x.state).length;
-  const what=c.type==='notes'?'Notes '+fmtT1(c.t0)+'–'+fmtT1(c.t1):'Lyric “'+c.text+'”: '+(c.old==null?'untimed':fmtT1(c.old))+' → '+fmtT1(c.t);
-  const st=c.state==='acc'?' · accepted':c.state==='rej'?' · not used':'', warn=!c.state&&sugConflict(c)?' · you changed this part since; accepting replaces your version':'';
+  const what=sugWhat(c);
+  const st=c.state==='acc'?' · accepted':c.state==='rej'?' · not used':'', warn=!c.state&&sugConflict(c)?(c.type==='lyric'&&c.k!=='time'?(c.k==='add'?' · this line is already in your lyrics':' · this line has changed in your lyrics since; it can\'t be found'):' · you changed this part since; accepting replaces your version'):'';
   $('#sgInfo').textContent='Suggestion from '+new Date(s.it.received).toLocaleDateString()+' · change '+(s.k+1)+' of '+s.changes.length+': '+what+st+warn+' · '+done+' decided';
   $('#sgPrev').disabled=s.k===0; $('#sgNext').disabled=s.k===s.changes.length-1; $('#sgAcc').disabled=$('#sgRej').disabled=!!c.state; }
 function sugAccept(c){
   if(c.type==='notes'){ const j=sugStart(c); pushUndo(); for(let k=0;k<c.vals.length&&j+k<S.tM.length;k++) S.tM[j+k]=c.vals[k]; c.state='acc'; targetEdited(); }
-  else { const L=sugLyric(c); if(!L){ setStatus('That lyric line is not in this song any more.',true); c.state='rej'; return; } S.undo.push({lyr:S.lyrics.indexOf(L),t:L.t}); L.t=c.t; c.state='acc'; lyrChanged(); } }
+  else { const snap=S.lyrics.map(l=>({t:l.t,text:l.text}));
+    if(c.k==='add'){ let at=0; if(c.after!=null){ const A=findLyr(c.after,null,c.i-1); at=A?S.lyrics.indexOf(A)+1:(c.t!=null?S.lyrics.filter(l=>l.t!=null&&l.t<c.t).length:S.lyrics.length); } S.lyrics.splice(at,0,{text:c.text,t:c.t==null?null:c.t}); }
+    else { const L=sugLyric(c); if(!L){ setStatus('That lyric line is not in your lyrics any more, so this change was skipped.',true); c.state='rej'; return; }
+      if(c.k==='del') S.lyrics.splice(S.lyrics.indexOf(L),1); else { if(c.k==='text') L.text=c.text; if(c.t!==undefined&&(c.k==='time'||c.t!==c.old)) L.t=c.t; } }
+    S.undo.push({lyrAll:snap}); if(S.undo.length>30) S.undo.shift(); c.state='acc'; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); } }
 function sugNextOpen(){ const s=S.sug, i=s.changes.findIndex((x,i)=>i>s.k&&!x.state), j=i>=0?i:s.changes.findIndex(x=>!x.state); if(j>=0) sugGo(j); else { renderSugBar(); draw(); } }
 async function sugFinish(){ const s=S.sug; if(!s) return; const acc=s.changes.filter(c=>c.state==='acc').length, open=s.changes.filter(c=>!c.state).length;
   if(open){ const r=await dlg({title:'Finish this suggestion?',html:'<p class="kv-sub">'+open+' change'+(open>1?'s are':' is')+' not decided yet. They count as not used.</p>',buttons:[{label:'Finish',value:'f',primary:true},{label:'Keep reviewing',value:null}]}); if(r.value!=='f') return; }
@@ -2024,8 +2054,9 @@ function drawSug(g,xOf,yOf,w,h,col){ const s=S.sug; if(!s) return; const SC='#8b
       const j0=sugStart(c); g.strokeStyle=SC; g.lineWidth=cur?4:3; g.lineCap='round'; g.beginPath(); let pen=false;
       for(let k2=0;k2<c.vals.length;k2++){ const v=c.vals[k2], t=S.tT[j0+k2]; if(isNaN(v)||t==null){ pen=false; continue; } const x=xOf(t), y=yOf(v); if(x<LABELW){ pen=false; continue; } if(!pen){ g.moveTo(x,y); pen=true; } else g.lineTo(x,y); }
       g.stroke(); g.lineCap='butt'; }
-    else { const x=xOf(c.t); if(x<LABELW||x>w) return; g.globalAlpha=cur?1:0.55; g.fillStyle=SC; g.fillRect(Math.round(x)-1,h-46,3,46);
-      g.font='600 12px '+col('--font-body'); g.textAlign='left'; g.textBaseline='bottom'; g.fillText('↦ '+c.text,x+5,h-30); g.globalAlpha=1; } }); }
+    else { const t=c.k==='del'?c.old:c.t!=null?c.t:c.old; if(t==null) return; const x=xOf(t); if(x<LABELW||x>w) return; g.globalAlpha=cur?1:0.55; g.fillStyle=SC; g.fillRect(Math.round(x)-1,h-46,3,46);
+      const lab=c.k==='text'?'✎ '+c.text:c.k==='add'?'+ '+c.text:c.k==='del'?'− '+c.oldText:'↦ '+c.text;
+      g.font='600 12px '+col('--font-body'); g.textAlign='left'; g.textBaseline='bottom'; g.fillText(lab,x+5,h-30); g.globalAlpha=1; } }); }
 
 // ===== target line editor =====
 S.editMode=false; S.sel=null; S.undo=[];
@@ -2180,7 +2211,7 @@ function edShift(d){
   targetEdited();
 }
 function edRemove(){ const r=selRange(); if(!r) return; pushUndo(); for(let i=r.i0;i<=r.i1;i++) S.tM[i]=NaN; targetEdited('Removed the target in the selection.'); }
-function edUndo(){ if(!S.undo.length) return; const u=S.undo.pop(); if(u&&u.lyr!=null){ if(S.lyrics[u.lyr]) S.lyrics[u.lyr].t=u.t; lyrChanged(); updateSelInfo(); setStatus('Lyric move undone.'); return; } S.tM=u; targetEdited('Undone.'); }
+function edUndo(){ if(!S.undo.length) return; const u=S.undo.pop(); if(u&&u.lyrAll){ S.lyrics=u.lyrAll; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); updateSelInfo(); setStatus('Lyric change undone.'); return; } if(u&&u.lyr!=null){ if(S.lyrics[u.lyr]) S.lyrics[u.lyr].t=u.t; lyrChanged(); updateSelInfo(); setStatus('Lyric move undone.'); return; } S.tM=u; targetEdited('Undone.'); }
 function resetLabel(){ return selRange()?'Reset selection':'Reset to original'; }
 function edReset(btn){
   const r=selRange();
@@ -2567,9 +2598,10 @@ async function importLyricsPdf(file){
 function fillFromPdf(){ const c=S.pdfCols&&S.pdfCols[+$('#lyrPdfCol').value]; if(c) $('#lyrText').value=c.lines.join('\n'); }
 function applyLyricText(){
   const lines=$('#lyrText').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-  const old=S.lyrics;
-  S.lyrics=lines.map((text,i)=>({text,t:old[i]&&old.length===lines.length?old[i].t:null}));
-  if(S.lyrics.length&&S.lyrics.every(l=>l.t==null)&&S.tT){ autoPlace(true); return; }
+  const old=S.lyrics, hadTimes=old.some(l=>l.t!=null);
+  S.lyrics=lines.map(text=>({text,t:null}));
+  for(const o of alignLines(old.map(l=>l.text),lines)) if(o.op==='same'||o.op==='chg') S.lyrics[o.j].t=old[o.i].t;   // unchanged and reworded lines keep their timing
+  if(S.lyrics.length&&!hadTimes&&S.lyrics.every(l=>l.t==null)&&S.tT){ autoPlace(true); return; }
   lyrChanged(); setStatus(S.lyrics.length?S.lyrics.length+' lyric lines ready.':'Lyrics removed.');
 }
 // sung phrases from the target pitch line
@@ -3445,13 +3477,14 @@ $('#edAlign').addEventListener('click',edAlign);
 $('#edShL').addEventListener('click',()=>edShiftLine(-1));
 $('#edKey').addEventListener('click',openKeyView);
 $('#edSuggest').addEventListener('click',suggestCurrent);
+$('#lyrSuggest').addEventListener('click',suggestCurrent);
 $('#dlgClose').addEventListener('click',()=>$('#dlgView')._done&&$('#dlgView')._done(null));
 $('#dlgView').addEventListener('click',e=>{ if(e.target.id==='dlgView'&&$('#dlgView')._done) $('#dlgView')._done(null); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#dlgView').hidden){ e.stopPropagation(); $('#dlgView')._done(null); } },true);
 $('#sugBtn').addEventListener('click',openInbox);
 $('#sgPrev').addEventListener('click',()=>sugGo(S.sug.k-1));
 $('#sgNext').addEventListener('click',()=>sugGo(S.sug.k+1));
-$('#sgListen').addEventListener('click',()=>{ const c=S.sug.changes[S.sug.k], t=c.type==='notes'?c.t0:Math.min(c.t,c.old==null?c.t:c.old); seek(Math.max(0,t-1.5)); if(!S.playing) play(); });
+$('#sgListen').addEventListener('click',()=>{ const c=S.sug.changes[S.sug.k], t=sugT(c,S.pos); seek(Math.max(0,t-1.5)); if(!S.playing) play(); });
 $('#sgAcc').addEventListener('click',()=>{ sugAccept(S.sug.changes[S.sug.k]); sugNextOpen(); });
 $('#sgRej').addEventListener('click',()=>{ S.sug.changes[S.sug.k].state='rej'; sugNextOpen(); });
 $('#sgAll').addEventListener('click',()=>{ S.sug.changes.forEach(c=>{ if(!c.state) sugAccept(c); }); renderSugBar(); draw(); });
