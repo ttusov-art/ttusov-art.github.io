@@ -721,7 +721,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 aw';
+const APP_VERSION='2026-10-26 ax';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1233,6 +1233,10 @@ async function openZip(file){
   return {names:Object.keys(map), size(name){ const en=map[name]; return en?en.csize:0; }, async get(name){ const en=map[name]; if(!en) return null; if(file.prefetch) await file.prefetch(en.lo,en.lo+30+en.nl+en.xl+en.csize+512); const lh=new DataView(await file.slice(en.lo,en.lo+30).arrayBuffer()); const ds=en.lo+30+lh.getUint16(26,true)+lh.getUint16(28,true); const b=file.slice(ds,ds+en.csize); return en.method===0?b:new Blob([await inflateRaw(new Uint8Array(await b.arrayBuffer()))]); }};
 }
 const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
+// the choir leader's device (it makes the share files, or has the review key) is the source: its songs are never treated as members' copies
+function ownerParts(){ try{ return JSON.parse(localStorage.getItem('pc-owner-parts')||'[]'); }catch(e){ return []; } }
+function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
+const memberBase=(c,part)=>c&&c.base&&part&&!isOwnerPart(part)?c.base:null;
 async function backupLibrary(fixedName,btn0,txt0){
   const btn=btn0||$('#bkSave'), txt=txt0||$('#bkText'); btn.disabled=true;
   try{
@@ -1250,6 +1254,8 @@ async function backupLibrary(fixedName,btn0,txt0){
       man.songs.push(m);
     }
     if(sharePart) man.order=sortSongs(songs.slice()).map(x=>x.uid);   // the running order (uids were filled in above)
+    if(sharePart){ try{ const o=ownerParts(); if(!o.includes(sharePart)){ o.push(sharePart); localStorage.setItem('pc-owner-parts',JSON.stringify(o)); } }catch(e){}
+      for(const x of songs) if(x.base||x.sentHash){ delete x.base; delete x.sentHash; await libPutRaw(x); } }   // you make the share file: these songs are yours
     entries.unshift({name:'part-coach-backup.json',data:new TextEncoder().encode(JSON.stringify(man))});
     const zip=await zipBlob(entries,p=>{ txt.textContent='Preparing the backup… '+Math.round(p*100)+'%'; });
     const d=new Date(), name=fixedName||'Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
@@ -1260,7 +1266,7 @@ async function backupLibrary(fixedName,btn0,txt0){
 }
 function neededBytes(z,man,byUid){
   let need=0;
-  for(const m of man.songs){ const cur=byUid[m.uid]; if(cur&&(cur.base&&man.part?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
+  for(const m of man.songs){ const cur=byUid[m.uid]; if(cur&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
     const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) need+=z.size(m.files.pcm);
     for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) need+=z.size(f);
     const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
@@ -1272,7 +1278,7 @@ async function restoreLibrary(file,out,askBig){
     const z=await openZip(file), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
     const man=JSON.parse(await mb.text()); if(man.app!=='part-coach') throw new Error('this is not a Part Coach backup file');
     const existing=await libList(), byUid={}; existing.forEach(s=>{ if(s.uid) byUid[s.uid]=s; });
-    const shared=!!out&&!!man.part, verOf=c=>c?(c.base&&shared?c.base.updated:(c.updated||c.created)):0;
+    const shared=!!out&&!!man.part&&!isOwnerPart(man.part), verOf=c=>c?(c.base&&shared?c.base.updated:(c.updated||c.created)):0;
     if(shared){ // songs with edits not sent yet that this update would replace: ask first
       const conf=man.songs.map(m=>byUid[m.uid]).filter((c,k)=>c&&c.base&&(man.songs[k].updated||man.songs[k].created)>c.base.updated&&hasUnsent(c,S.cur&&S.cur.libId===c.id?liveOf():null));
       if(conf.length){ const ch=await askUnsent(conf);
@@ -1928,7 +1934,7 @@ const SUG_WORD={sent:'Suggestion sent',queued:'Suggestion waiting for a connecti
 function sugStateFor(uid){ const s=sugList().find(x=>x.uid===uid); return s?SUG_WORD[s.status]||'':''; }
 // editor: "Suggest my edits (n)" for songs from a share link with unsent changes
 S.curBase=null;
-async function refreshCurBase(){ S.curBase=null; if(S.cur&&S.cur.libId!=null){ const r=await libGet(S.cur.libId); if(r&&r.base) S.curBase={id:r.id,uid:r.uid,base:r.base,sentHash:r.sentHash,hop:r.hop,t0:r.t0,tt:r.tt,name:r.name}; } paintSuggest(); }
+async function refreshCurBase(){ S.curBase=null; if(S.cur&&S.cur.libId!=null){ const r=await libGet(S.cur.libId); if(r&&memberBase(r,partOf(r))) S.curBase={id:r.id,uid:r.uid,base:r.base,sentHash:r.sentHash,hop:r.hop,t0:r.t0,tt:r.tt,name:r.name}; } paintSuggest(); }
 let paintSugTimer=null;
 function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout(()=>{  const b=$('#edSuggest'), st=$('#sugState'); if(!b) return;
   if(S.sugSending) return;   // keep "Sending…" until the inbox answers
@@ -3673,9 +3679,9 @@ async function sharedChanges(url){
   const rf=await remoteFile(directUrl(url)); if(!rf) return null;
   const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
   const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
-  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if((c.base&&man.part?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
+  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if((memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
   let reordered=false; if(Array.isArray(man.order)&&man.part){ const mine=sortSongs(local.filter(x=>partOf(x)===man.part)).map(x=>x.uid).filter(u=>man.order.includes(u)), theirs=man.order.filter(u=>mine.includes(u)); reordered=mine.join()!==theirs.join(); }
-  if(man.part) await rememberBases(z,man,byUid);
+  if(man.part&&!isOwnerPart(man.part)) await rememberBases(z,man,byUid);
   return {added,updated,reordered,total:man.songs.length,part:man.part||null,bytes:neededBytes(z,man,byUid)};
 }
 // songs shared before suggestions existed: remember their shared version now, so members' edits can be suggested
