@@ -549,6 +549,15 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="btn">Restore from backup<input id="bkFile" type="file" aria-label="Choose a Part Coach backup file"></span>
       <span class="small" id="bkText"></span>
     </div>
+    <span class="small" id="storeText"></span>
+    <span class="small" id="libEmpty">Choose a song (for example your part MP3). The app separates the voice, finds the pitch line and keeps the vocals here for next time.</span>
+    </div>
+  </details>
+
+  <details class="panel fold" id="leadPanel">
+    <summary>For the choir leader</summary>
+    <div class="fold-body">
+      <span class="small">Sharing songs with your choir and checking members' suggestions. Choir members don't need anything here.</span>
     <div class="share-box">
       <b>Share with your choir</b>
       <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
@@ -575,8 +584,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="row"><input id="sugKeyIn" type="password" autocomplete="off" placeholder="Review key" aria-label="Review key"><button id="sugCheck" type="button">Check inbox</button></div>
       <span class="small" id="sugText"></span>
     </div>
-    <span class="small" id="storeText"></span>
-    <span class="small" id="libEmpty">Choose a song (for example your part MP3). The app separates the voice, finds the pitch line and keeps the vocals here for next time.</span>
     </div>
   </details>
 
@@ -721,7 +728,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 ax';
+const APP_VERSION='2026-10-26 ay';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3558,7 +3565,7 @@ try{ if(localStorage.getItem('pc-lyr')==='0'){ S.lyrShow=false; $('#lyrShow').ch
 try{ const o=localStorage.getItem('pc-lyr-open'); if(o==='1') $('#lyrPanel').open=true; }catch(x){}
 $('#lyrPanel').addEventListener('toggle',e=>{ try{localStorage.setItem('pc-lyr-open',e.target.open?'1':'0')}catch(x){} });
 renderLyrics(true);
-for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes']]){
+for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes'],['leadPanel','pc-open-lead']]){
   const el=document.getElementById(id);
   try{ const v=localStorage.getItem(key); if(v==='0') el.open=false; if(v==='1') el.open=true; }catch(x){}
   el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
