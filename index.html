@@ -124,6 +124,9 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .sync .val{min-width:5ch;text-align:center}
 .sync button{padding:5px 10px}
 .snd button{padding:7px 9px;font-size:14px}
+.snd-btns{display:flex;flex-wrap:nowrap;gap:6px;min-width:0;max-width:100%}   /* Voice, Backing, Tone, Click always on one row */
+.snd-btns button{flex:0 1 auto;min-width:0;white-space:nowrap;justify-content:center}
+@media (max-width:400px){.snd-btns{gap:5px}.snd-btns button{padding:7px 7px;font-size:13.5px}}
 .icon-btn{padding:8px 12px;line-height:0}
 .play-btn{padding:8px 20px}
 .tempo-grp{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
@@ -443,10 +446,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div class="lane-foot">
       <div class="row snd" role="group" aria-label="Sound on or off">
-        <button id="guideBtn" type="button" aria-pressed="true" class="guide-on" title="Guide voice">Voice: on</button>
-        <button id="backBtn" type="button" aria-pressed="true" class="guide-on">Backing: on</button>
-        <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone: off</button>
-        <button id="metBtn" type="button" aria-pressed="false" title="Metronome click on every beat">Click: off</button>
+        <span class="snd-btns">
+        <button id="guideBtn" type="button" aria-pressed="true" class="guide-on" title="Guide voice">Voice</button>
+        <button id="backBtn" type="button" aria-pressed="true" class="guide-on">Backing</button>
+        <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone</button>
+        <button id="metBtn" type="button" aria-pressed="false" title="Metronome click on every beat">Click</button>
+        </span>
         <span class="sync" role="group" aria-label="Picture delay"><span class="small">Picture</span><button id="pdDown" type="button" aria-label="Show the picture earlier">−</button><span class="val" id="pdV">0 ms</span><button id="pdUp" type="button" aria-label="Show the picture later">+</button></span>
       </div>
       <span class="row"><details class="ed-fold" id="edFold"><summary>Editor</summary><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></details><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span></span>
@@ -778,7 +783,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bz';
+const APP_VERSION='2026-10-26 ca';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3061,7 +3066,7 @@ function metSchedule(now){
   beatsIn(from,end,1,(t,k,s)=>{ if(S.met.k!=null&&t<=S.met.k+1e-4) return; last=t; const at=S.startAt+(t-S.pos0)/S.rate, pos=barPos(k,s); if(at>=S.ctx.currentTime&&metWants(pos)) metClick(at,pos===0&&S.met.mode!=='back'); });
   S.met.k=last!=null?last:from;
 }
-function setMetMode(m){ S.met.mode=m; S.met.on=m!=='off'; const b=$('#metBtn'); b.setAttribute('aria-pressed',String(S.met.on)); b.classList.toggle('guide-on',S.met.on); b.textContent='Click: '+MET_LABEL[m]; metCancel(); try{localStorage.setItem('pc-met',m)}catch(x){} }
+function setMetMode(m){ S.met.mode=m; S.met.on=m!=='off'; const b=$('#metBtn'); b.setAttribute('aria-pressed',String(S.met.on)); b.classList.toggle('guide-on',S.met.on); b.textContent='Click'+({back:' 2·4',one:' 1'}[m]||''); b.title='Click: '+MET_LABEL[m]+' (tap for the next choice)'; metCancel(); try{localStorage.setItem('pc-met',m)}catch(x){} }
 function setMetOn(on){ setMetMode(on?'all':'off'); }
 function step(){
   if(!S.playing) return;
@@ -3479,9 +3484,9 @@ async function addCurrentToLib(btn){
   }catch(err){ setStatus('Could not add it to the library: '+((err&&err.message)||'storage may be full')+'.',true); }
   finally{ btn.disabled=false; btn.textContent=old; }
 }
-function setGuideMuted(m){ S.guideMuted=m; const b=$('#guideBtn'); b.setAttribute('aria-pressed',String(!m)); b.classList.toggle('guide-on',!m); b.textContent='Voice: '+(m?'off':'on'); applyGains(); try{localStorage.setItem('pc-guide-muted',m?'1':'0')}catch(x){} }
+function setGuideMuted(m){ S.guideMuted=m; const b=$('#guideBtn'); b.setAttribute('aria-pressed',String(!m)); b.classList.toggle('guide-on',!m); b.textContent='Voice'; b.title='Guide voice: '+(m?'off':'on')+' (tap to turn '+(m?'on':'off')+')'; applyGains(); try{localStorage.setItem('pc-guide-muted',m?'1':'0')}catch(x){} }
 $('#guideBtn').addEventListener('click',()=>{ setGuideMuted(!S.guideMuted); setStatus(S.guideMuted?'Guide voice off. Sing the part on your own.':'Guide voice on.'); });
-function paintToggle(id,label,on){ const b=$('#'+id); b.setAttribute('aria-pressed',String(on)); b.classList.toggle('guide-on',on); b.textContent=label+': '+(on?'on':'off'); }
+function paintToggle(id,label,on){ const b=$('#'+id); b.setAttribute('aria-pressed',String(on)); b.classList.toggle('guide-on',on); b.textContent=label; b.title=label+': '+(on?'on':'off')+' (tap to turn '+(on?'off':'on')+')'; }
 function setBackMuted(m){ S.backMuted=m; paintToggle('backBtn','Backing',!m); applyGains(); try{localStorage.setItem('pc-back-muted',m?'1':'0')}catch(x){} }
 function toneIsOn(){ return !S.toneMuted&&+$('#volTone').value>0; }
 function setToneOn(on){
