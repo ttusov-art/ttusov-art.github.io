@@ -560,14 +560,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div class="part-row">
       <label class="lbl" for="partSel">Part</label>
       <select id="partSel" class="sel"></select>
-      <button id="partNew" type="button">New part</button>
-      <button id="partRen" type="button">Rename</button>
-      <button id="partDel" type="button">Delete part</button>
-      <label class="lbl" for="partRange">Voice range</label>
-      <select id="partRange" class="sel">
-        <option value="low">Low voice (bass, baritone, tenor)</option>
-        <option value="high">High voice (alto, soprano)</option>
-      </select>
     </div>
     <div class="lib-head">
       <span class="small">Separated songs and songs you added are kept here on this device, in the part chosen above.</span>
@@ -708,6 +700,22 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div id="admSongs"></div>
     </div>
     <div class="share-box">
+      <b>Parts</b>
+      <span class="small">Add, rename or delete parts (a part can be deleted when it has no songs). The voice range sets where the app looks for notes in <b class="adm-part-name"></b> (separating songs and the microphone) on this device.</span>
+      <div class="part-row" style="border:0;padding:0;margin:0">
+      <button id="partNew" type="button">New part</button>
+      <button id="partRen" type="button">Rename</button>
+      <button id="partDel" type="button">Delete part</button>
+      </div>
+      <div class="part-row" style="border:0;padding:0;margin:0">
+      <label class="lbl" for="partRange">Voice range</label>
+      <select id="partRange" class="sel">
+        <option value="low">Low voice (bass, baritone, tenor)</option>
+        <option value="high">High voice (alto, soprano)</option>
+      </select>
+      </div>
+    </div>
+    <div class="share-box">
       <b>Add a new song</b>
       <span class="small">Choose a song (for example a part MP3). The app separates the voice, finds the pitch line and keeps it in the library, in the part chosen in Song library.</span>
       <div class="row"><span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span></div>
@@ -828,7 +836,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 df';
+const APP_VERSION='2026-10-26 dg';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1521,7 +1529,7 @@ async function renderLib(){
     list.appendChild(row);
   }
 }
-function renderAdmSongs(songs){ const box=$('#admSongs'); if(!box) return; $('#admPart').textContent=S.part; box.innerHTML='';
+function renderAdmSongs(songs){ const box=$('#admSongs'); if(!box) return; $('#admPart').textContent=S.part; document.querySelectorAll('.adm-part-name').forEach(e=>e.textContent=S.part); box.innerHTML='';
   if(!songs.length){ box.innerHTML='<span class="small">No songs in this part yet.</span>'; return; }
   for(const [k,s] of songs.entries()){ const row=document.createElement('div'); row.className='song-row';
     row.innerHTML='<div class="take-info"><b></b></div>'; row.querySelector('b').textContent=s.name;
