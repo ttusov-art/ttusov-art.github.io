@@ -559,39 +559,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
   </details>
 
-  <details class="panel fold" id="leadPanel">
-    <summary>Admin</summary>
-    <div class="fold-body">
-      <span class="small">Sharing songs with your choir and checking members' suggestions. Choir members don't need anything here.</span>
-    <div class="share-box">
-      <b>Share with your choir</b>
-      <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
-      <span class="small">1. Tap Make share file. 2. Upload “<span id="shareFile"></span>” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered the songs of this part.</span>
-      <span class="small">You can change the file name below; the app remembers it for each part.</span>
-      <span class="small"><b>Updating later:</b> tap Make share file again and upload it to the same Dropbox folder with exactly the same name, so it replaces the old file and the link stays the same. Choir members' apps then download only the new songs and changed edits, not the audio they already have.</span>
-      <div class="row">
-        <input id="shareName" type="text" autocomplete="off" spellcheck="false" aria-label="File name for the share file">
-        <button id="shareMake" type="button">Make share file</button>
-      </div>
-      <div class="row">
-        <input id="shareIn" type="url" inputmode="url" autocomplete="off" placeholder="Dropbox link to your backup" aria-label="Dropbox link to your backup">
-        <button id="shareGo" type="button">Share link</button>
-      </div>
-      <span class="small" id="shareText"></span>
-      <span class="small"><b>Short links:</b> with a file called links.json next to index.html on GitHub, each part gets a short link like <span class="share-url" id="shortEx"></span>. Tap Make links.json and upload it to your GitHub repo, again only when you add a part or a Dropbox link changes.</span>
-      <div class="row"><button id="linksMake" type="button">Make links.json</button></div>
-    </div>
-    <div class="share-box" id="sugSetup">
-      <b>Suggestions from the choir</b>
-      <span class="small">Choir members can send fixes for wrong notes and lyric timing straight from the app; you check them here before they go into an update. Set up the Google inbox once (see the setup steps), paste its web app address below, then tap Make links.json again and upload it so members' apps find the inbox.</span>
-      <div class="row"><input id="sugUrlIn" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" aria-label="Address of the suggestions inbox"></div>
-      <span class="small">Your review key unlocks the inbox on this device only. Members never need it.</span>
-      <div class="row"><input id="sugKeyIn" type="password" autocomplete="off" placeholder="Review key" aria-label="Review key"><button id="sugCheck" type="button">Check inbox</button></div>
-      <span class="small" id="sugText"></span>
-    </div>
-    </div>
-  </details>
-
   <details class="panel lyr-edit" id="lyrPanel">
     <summary>Lyrics editor</summary>
     <div class="lyr-body">
@@ -695,6 +662,39 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
     </details>
   </section>
+
+  <details class="panel fold" id="leadPanel">
+    <summary>Admin</summary>
+    <div class="fold-body">
+      <span class="small">Sharing songs with your choir and checking members' suggestions. Choir members don't need anything here.</span>
+    <div class="share-box">
+      <b>Share with your choir</b>
+      <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
+      <span class="small">1. Tap Make share file. 2. Upload “<span id="shareFile"></span>” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered the songs of this part.</span>
+      <span class="small">You can change the file name below; the app remembers it for each part.</span>
+      <span class="small"><b>Updating later:</b> tap Make share file again and upload it to the same Dropbox folder with exactly the same name, so it replaces the old file and the link stays the same. Choir members' apps then download only the new songs and changed edits, not the audio they already have.</span>
+      <div class="row">
+        <input id="shareName" type="text" autocomplete="off" spellcheck="false" aria-label="File name for the share file">
+        <button id="shareMake" type="button">Make share file</button>
+      </div>
+      <div class="row">
+        <input id="shareIn" type="url" inputmode="url" autocomplete="off" placeholder="Dropbox link to your backup" aria-label="Dropbox link to your backup">
+        <button id="shareGo" type="button">Share link</button>
+      </div>
+      <span class="small" id="shareText"></span>
+      <span class="small"><b>Short links:</b> with a file called links.json next to index.html on GitHub, each part gets a short link like <span class="share-url" id="shortEx"></span>. Tap Make links.json and upload it to your GitHub repo, again only when you add a part or a Dropbox link changes.</span>
+      <div class="row"><button id="linksMake" type="button">Make links.json</button></div>
+    </div>
+    <div class="share-box" id="sugSetup">
+      <b>Suggestions from the choir</b>
+      <span class="small">Choir members can send fixes for wrong notes and lyric timing straight from the app; you check them here before they go into an update. Set up the Google inbox once (see the setup steps), paste its web app address below, then tap Make links.json again and upload it so members' apps find the inbox.</span>
+      <div class="row"><input id="sugUrlIn" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" aria-label="Address of the suggestions inbox"></div>
+      <span class="small">Your review key unlocks the inbox on this device only. Members never need it.</span>
+      <div class="row"><input id="sugKeyIn" type="password" autocomplete="off" placeholder="Review key" aria-label="Review key"><button id="sugCheck" type="button">Check inbox</button></div>
+      <span class="small" id="sugText"></span>
+    </div>
+    </div>
+  </details>
 </div>
 
 <script>
@@ -736,7 +736,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 be';
+const APP_VERSION='2026-10-26 bf';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
