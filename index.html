@@ -510,7 +510,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="lbl">Backing track (optional)</span>
       <div class="row">
         <span class="btn">Load backing<input id="backFile" type="file" aria-label="Load a backing track"></span>
-        <button id="backClear" type="button" hidden>Remove</button>
+        <button id="backClear" type="button" hidden style="display:none">Remove</button>
       </div>
       <span class="file-name" id="backName">None loaded.</span>
       <div class="row" id="backPick" hidden>
@@ -631,6 +631,10 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <label for="volMet">Metronome volume</label>
         <div class="field-row"><input id="volMet" type="range" min="0.05" max="1" step="0.05" value="0.5"><span class="val" id="volMetV">50%</span></div>
         <span class="small">The Click button above the pitch lane plays a click on every beat of the song's beat grid.</span>
+      </div>
+      <div class="field">
+        <label class="check" for="restoreBacksOn"><input id="restoreBacksOn" type="checkbox" checked>Restore deleted backings with updates</label>
+        <span class="small">On: when your choir leader's update arrives, backing tracks you deleted come back. Off: backings you deleted stay deleted (saves space on this device).</span>
       </div>
       <div class="field">
         <label for="delay">Delay compensation</label>
@@ -774,7 +778,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bu';
+const APP_VERSION='2026-10-26 bv';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1214,7 +1218,8 @@ async function deleteBacking(btn){
   const i=S.curBackSel; if(i<0||!S.curBacks[i]) return;
   if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent='Tap again to delete'; setTimeout(()=>{ delete btn.dataset.armed; btn.textContent='Delete'; },4000); return; }
   delete btn.dataset.armed; btn.textContent='Delete';
-  const gone=S.curBacks[i].name; S.curBacks=S.curBacks.filter((_,k)=>k!==i);
+  const gb=S.curBacks[i], gone=gb.name; S.curBacks=S.curBacks.filter((_,k)=>k!==i);
+  { const r=await libGet(S.cur.libId); if(r){ const d=(r.delBacks||[]).filter(x=>!(x.name===gb.name&&!!x.sep===!!gb.sep)); d.push({name:gb.name,sep:!!gb.sep,size:gb.blob?gb.blob.size:null}); r.delBacks=d; await libPutRaw(r); } }
   if(S.curBacks.length){ await libSetBacks(S.cur.libId,S.curBacks,0); await useBacking(0); }
   else { await libSetBacks(S.cur.libId,[],-1); stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); renderBackPick(); }
   renderLib(); setStatus('Deleted '+gone+' from this song.');
@@ -1290,6 +1295,10 @@ const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
 // the choir leader's device (it makes the share files, or has the review key) is the source: its songs are never treated as members' copies
 function ownerParts(){ try{ return JSON.parse(localStorage.getItem('pc-owner-parts')||'[]'); }catch(e){ return []; } }
 function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
+// backings you deleted on this device: updates bring them back only when "Restore deleted backings" is on
+function restoreBacks(){ try{ return localStorage.getItem('pc-restore-backs')!=='0'; }catch(e){ return true; } }
+const wasDeleted=(c,b)=>!!c&&(c.delBacks||[]).some(d=>d.name===b.name&&!!d.sep===!!b.sep&&(d.size==null||b.size==null||d.size===b.size));
+const wantsBacksBack=c=>!!c&&restoreBacks()&&(c.delBacks||[]).length>0&&!isOwnerPart(partOf(c));   // never on the leader's own device
 const memberBase=(c,part)=>c&&c.base&&part&&!isOwnerPart(part)?c.base:null;
 async function backupLibrary(fixedName,btn0,txt0){
   const btn=btn0||$('#bkSave'), txt=txt0||$('#bkText'); btn.disabled=true;
@@ -1320,10 +1329,10 @@ async function backupLibrary(fixedName,btn0,txt0){
 }
 function neededBytes(z,man,byUid){
   let need=0;
-  for(const m of man.songs){ const cur=byUid[m.uid]; if(cur&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
+  for(const m of man.songs){ const cur=byUid[m.uid]; if(cur&&!wantsBacksBack(cur)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
     const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) need+=z.size(m.files.pcm);
     for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) need+=z.size(f);
-    const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
+    const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!(!restoreBacks()&&wasDeleted(cur,b))&&!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
   return need;
 }
 async function restoreLibrary(file,out,askBig){
@@ -1346,7 +1355,7 @@ async function restoreLibrary(file,out,askBig){
     for(const m of man.songs){
       i++; txt.textContent='Restoring song '+i+' of '+man.songs.length+'…';
       const cur=byUid[m.uid];
-      if(cur&&verOf(cur)>=(m.updated||m.created)){ skipped++;
+      if(cur&&!wantsBacksBack(cur)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
         if(shared&&!cur.base){ // shared before this version: remember the shared version now (from the file if you edited it since)
           const same=(cur.updated||cur.created)===(m.updated||m.created), c0=same?toF32(cur.contour):(m.files.contour?new Float32Array(await (await z.get(m.files.contour)).arrayBuffer()):null);
           if(c0){ cur.base={updated:m.updated||m.created,contour:Float32Array.from(c0),lyrics:(same?cur.lyrics:m.lyrics||[]).map(l=>({t:l.t,text:l.text}))}; await libPutRaw(cur); } }
@@ -1360,8 +1369,9 @@ async function restoreLibrary(file,out,askBig){
       const co=await rd(m.files.contourOrig); if(co) rec.contourOrig=new Float32Array(co);
       const tt=await rd(m.files.tt); if(tt) rec.tt=new Float32Array(tt);
       rec.backs=[]; const old=cur?backsOf(cur):[];
-      for(const b of (m.backs||[])){ const keep=old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size)); if(keep){ rec.backs.push({name:b.name,sep:!!b.sep,blob:keep.blob}); continue; } const bl=await z.get(b.file); if(bl) rec.backs.push({name:b.name,sep:!!b.sep,blob:new Blob([await bl.arrayBuffer()],{type:b.type||'audio/mpeg'})}); }
+      for(const b of (m.backs||[])){ if(!restoreBacks()&&wasDeleted(cur,b)) continue; const keep=old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size)); if(keep){ rec.backs.push({name:b.name,sep:!!b.sep,blob:keep.blob}); continue; } const bl=await z.get(b.file); if(bl) rec.backs.push({name:b.name,sep:!!b.sep,blob:new Blob([await bl.arrayBuffer()],{type:b.type||'audio/mpeg'})}); }
       rec.backSel=rec.backs.length?Math.max(0,Math.min(rec.backs.length-1,m.backSel||0)):-1;
+      if(cur&&cur.delBacks&&!restoreBacks()) rec.delBacks=cur.delBacks;   // keep remembering what you deleted
       if(cur) rec.id=cur.id;
       if(shared&&rec.contour) rec.base={updated:rec.updated,contour:Float32Array.from(rec.contour),lyrics:rec.lyrics.map(l=>({t:l.t,text:l.text}))};   // the shared version: suggestions are made against it
       await libPutRaw(rec); if(cur){ updated++; updIds.push(cur.id); } else added++;
@@ -3683,6 +3693,8 @@ $('#bkFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.fil
 $('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) useBacking(i); });
 $('#backSave').addEventListener('click',saveBacking);
 $('#backDel').addEventListener('click',e=>deleteBacking(e.currentTarget));
+$('#restoreBacksOn').checked=restoreBacks();
+$('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted backings come back with the next update (tap Update when it appears).':'Backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
@@ -3792,7 +3804,7 @@ async function sharedChanges(url){
   const rf=await remoteFile(directUrl(url)); if(!rf) return null;
   const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
   const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
-  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if((memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
+  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if(wantsBacksBack(c)||(memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
   let reordered=false; if(Array.isArray(man.order)&&man.part){ const mine=sortSongs(local.filter(x=>partOf(x)===man.part)).map(x=>x.uid).filter(u=>man.order.includes(u)), theirs=man.order.filter(u=>mine.includes(u)); reordered=mine.join()!==theirs.join(); }
   if(man.part&&!isOwnerPart(man.part)) await rememberBases(z,man,byUid);
   return {added,updated,reordered,total:man.songs.length,part:man.part||null,bytes:neededBytes(z,man,byUid)};
