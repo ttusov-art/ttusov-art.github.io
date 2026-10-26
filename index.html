@@ -569,7 +569,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <textarea id="lyrText" placeholder="First line of the song&#10;Second line&#10;…"></textarea>
       <div class="row">
         <button id="lyrApply" type="button" class="primary">Use these lines</button>
-        <button id="lyrSuggest" type="button" class="primary" hidden title="Send your edits of this song to the choir leader">Suggest my edits</button><span class="small" id="lyrSugState"></span>
+        <button id="lyrSuggest" type="button" class="primary" hidden title="Send your edits of this song to the choir leader">Suggest my edits</button><button id="lyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel my edits</button><span class="small" id="lyrSugState"></span>
         <button id="lyrAuto" type="button">Place lines automatically</button>
         <button id="lyrTap" type="button">Tap to time</button>
         <button id="lyrClear" type="button">Remove lyrics</button>
@@ -757,7 +757,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bo';
+const APP_VERSION='2026-10-26 bp';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1990,9 +1990,10 @@ let paintSugTimer=null;
 function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout(()=>{  const b=$('#edSuggest'), st=$('#sugState'); if(!b) return;
   if(S.sugSending) return;   // keep "Sending…" until the inbox answers
   const cb=S.curBase, both=(fn)=>[[b,st],[$('#lyrSuggest'),$('#lyrSugState')]].forEach(([bb,ss])=>fn(bb,ss));
-  if(!cb||!S.tM){ both((bb,ss)=>{ bb.hidden=true; ss.textContent=''; }); return; }
+  if(!cb||!S.tM){ both((bb,ss)=>{ bb.hidden=true; ss.textContent=''; }); $('#lyrDiscard').hidden=true; return; }
   const d=songDiff(cb,liveOf()), n=diffCount(d), unsent=n>0&&hashOf(d)!==cb.sentHash;
-  both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; ss.textContent=unsent?'':sugStateFor(cb.uid); }); },150); }
+  both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; ss.textContent=unsent?'':sugStateFor(cb.uid); });
+  $('#lyrDiscard').hidden=!d.lyrics.length; },150); }
 // an update is about to replace songs that have edits not sent yet: ask
 async function askUnsent(recs){
   const names=recs.map(r=>r.name);
@@ -3502,6 +3503,13 @@ $('#edShL').addEventListener('click',()=>edShiftLine(-1));
 $('#edKey').addEventListener('click',openKeyView);
 $('#edSuggest').addEventListener('click',suggestCurrent);
 $('#lyrSuggest').addEventListener('click',suggestCurrent);
+// back to the lyrics as shared (text and timing); asks for a second tap; Undo in the editor brings your version back
+$('#lyrDiscard').addEventListener('click',e=>{ const b=e.currentTarget, cb=S.curBase; if(!cb) return;
+  if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to cancel your edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Cancel my edits'; b.classList.remove('danger'); } },4000); return; }
+  delete b.dataset.armed; b.textContent='Cancel my edits'; b.classList.remove('danger');
+  S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); if(S.undo.length>30) S.undo.shift();
+  S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged();
+  setStatus('Your lyric edits were removed: the lyrics are back as your choir leader shared them.'); });
 $('#dlgClose').addEventListener('click',()=>$('#dlgView')._done&&$('#dlgView')._done(null));
 $('#dlgView').addEventListener('click',e=>{ if(e.target.id==='dlgView'&&$('#dlgView')._done) $('#dlgView')._done(null); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#dlgView').hidden){ e.stopPropagation(); $('#dlgView')._done(null); } },true);
