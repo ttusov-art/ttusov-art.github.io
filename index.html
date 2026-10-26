@@ -507,8 +507,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
   </details>
 
-  <details class="panel fold" id="loopPanel" open aria-label="Loop a section">
-    <summary>Loop</summary>
+  <!-- the loop controls are not shown any more (loops are set and cleared on the lane); kept hidden because the loop code still updates them -->
+  <div id="loopPanel" hidden>
     <div class="loop">
     <label class="loop-on" for="loopOn" hidden><input id="loopOn" type="checkbox" disabled>Repeat</label>
     <label class="small" for="lead">Lead-in</label>
@@ -516,7 +516,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <button id="clearLoop" type="button" hidden>Clear</button>
       <span class="loop-info" id="loopInfo">Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you tap Clear or hold the lane outside the loop.</span>
   </div>
-  </details>
+  </div>
 
   <details class="panel fold" id="libPanel" open>
     <summary>Song library<span class="count" id="libCount"></span></summary>
@@ -736,7 +736,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bc';
+const APP_VERSION='2026-10-26 bd';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3608,7 +3608,7 @@ renderLyrics(true);
 { const hb=$('#hintBtn'), set=on=>{ $('#laneHint').hidden=!on; hb.textContent=on?'Hide info':'Expand for info'; hb.setAttribute('aria-expanded',String(on)); };
   try{ set(localStorage.getItem('pc-hint-open')==='1'); }catch(e){ set(false); }
   hb.addEventListener('click',()=>{ const on=$('#laneHint').hidden; set(on); try{ localStorage.setItem('pc-hint-open',on?'1':'0'); }catch(e){} }); }
-for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes'],['leadPanel','pc-open-lead'],['songPanel','pc-open-song'],['loopPanel','pc-open-loop'],['setPanel','pc-open-set']]){
+for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes'],['leadPanel','pc-open-lead'],['songPanel','pc-open-song'],['setPanel','pc-open-set']]){
   const el=document.getElementById(id);
   try{ const v=localStorage.getItem(key); if(v==='0') el.open=false; if(v==='1') el.open=true; }catch(x){}
   el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
