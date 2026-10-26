@@ -815,7 +815,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 cz';
+const APP_VERSION='2026-10-26 da';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -915,7 +915,7 @@ async function pitchLineOf(buf,onProg,rk){
 }
 function songReady(name,label){
   renderSheetBtns(); closeSheet();
-  S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase();
+  S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>scheduleBeatDetect(false),50); setTimeout(()=>scheduleKeyDetect(false),400);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
@@ -1227,16 +1227,24 @@ const newUid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 // a light copy of the library (names and details, no audio) kept in memory, so menus and lists open at once
 let libMetaCache=null, libMetaP=null, libMetaGen=0;
 const metaOf=x=>({id:x.id,uid:x.uid,name:x.name,part:x.part,dur:x.dur,created:x.created,updated:x.updated,ord:x.ord,nb:backsOf(x).length});
-function libMeta(){ if(libMetaCache) return Promise.resolve(libMetaCache); if(!libMetaP){ const gen=libMetaGen; libMetaP=libList().then(l=>{ const m=l.map(metaOf); if(gen===libMetaGen) libMetaCache=m; libMetaP=null; return m; }); } return libMetaP; }
+// the light copy is also kept in localStorage, so opening the app does not have to read every song's audio just to list the names
+function metaKeep(){ clearTimeout(metaKeep.t); metaKeep.t=setTimeout(()=>{ try{ if(libMetaCache) localStorage.setItem('pc-libmeta',JSON.stringify(libMetaCache)); }catch(e){} },50); }
+function metaFromStore(){ try{ const m=JSON.parse(localStorage.getItem('pc-libmeta')||'null'); return Array.isArray(m)?m:null; }catch(e){ return null; } }
+function libMeta(){ if(libMetaCache) return Promise.resolve(libMetaCache);
+  if(!libMetaP&&libMeta.first!==false){ libMeta.first=false; const m=metaFromStore();
+    if(m){ libMetaCache=m; const gen=libMetaGen;   // check quietly (keys only, no audio) that the saved list still matches the library
+      idbDo('songs','readonly',st=>st.getAllKeys()).then(keys=>{ if(gen!==libMetaGen||!libMetaCache) return; const a=keys.map(String).sort().join(','), b=libMetaCache.map(x=>String(x.id)).sort().join(','); if(a!==b){ metaChanged(); libMeta().then(()=>renderLib()); } }).catch(()=>{});
+      return Promise.resolve(libMetaCache); } }
+  if(!libMetaP){ const gen=libMetaGen; libMetaP=libList().then(l=>{ const m=l.map(metaOf); if(gen===libMetaGen){ libMetaCache=m; metaKeep(); } libMetaP=null; return m; }); } return libMetaP; }
 function metaChanged(){ libMetaGen++; libMetaCache=null; libMetaP=null; clearTimeout(metaChanged.t); metaChanged.t=setTimeout(()=>libMeta(),400); }   // fallback: re-read quietly
-function metaSaved(rec,id){ if(!libMetaCache||id==null){ metaChanged(); return; } libMetaGen++; const m=metaOf({...rec,id}), i=libMetaCache.findIndex(x=>x.id===id); if(i>=0) libMetaCache[i]=m; else libMetaCache.push(m); }
+function metaSaved(rec,id){ if(!libMetaCache||id==null){ metaChanged(); return; } libMetaGen++; const m=metaOf({...rec,id}), i=libMetaCache.findIndex(x=>x.id===id); if(i>=0) libMetaCache[i]=m; else libMetaCache.push(m); metaKeep(); }
 const libPutRaw=rec=>idbDo('songs','readwrite',st=>st.put(rec)).then(r=>{ metaSaved(rec,rec.id!=null?rec.id:r); return r; });
 // song order per part: songs you put in order have ord 0,1,2…; songs never ordered (new ones) come first, newest first
 const songKey=x=>x.ord!=null?x.ord:-(x.created||0)/1000;
 const sortSongs=a=>a.sort((x,y)=>songKey(x)-songKey(y)||(y.created||0)-(x.created||0));
 async function saveSongOrder(list){ for(let k=0;k<list.length;k++){ const x=list[k]; if(x.ord!==k){ x.ord=k; await libPutRaw(x); } } }   // raw put: the order is not a change to the song itself
 const libPut=rec=>{ if(!rec.uid) rec.uid=newUid(); rec.updated=Date.now(); return libPutRaw(rec); };
-const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id)).then(r=>{ if(libMetaCache){ libMetaGen++; libMetaCache=libMetaCache.filter(x=>x.id!==id); } else metaChanged(); return r; });
+const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id)).then(r=>{ if(libMetaCache){ libMetaGen++; libMetaCache=libMetaCache.filter(x=>x.id!==id); metaKeep(); } else metaChanged(); return r; });
 function backsOf(s){ if(!s) return []; if(Array.isArray(s.backs)) return s.backs; if(s.backBlob) return [{name:s.backName||'Backing',blob:s.backBlob}]; return []; }
 async function libSetBacks(id,backs,sel){ const s=await libGet(id); if(!s) return; s.backs=backs; s.backSel=sel; delete s.backBlob; delete s.backName; await libPut(s); }
 async function libAddBacking(id,name,blob,sep){
@@ -1538,7 +1546,7 @@ async function openLibSongInner(id,auto){
     S.curBacks=backsOf(s).slice(); S.curBackSel=S.curBacks.length?Math.max(0,Math.min(S.curBacks.length-1,s.backSel==null?0:s.backSel)):-1;
     if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
     S.cur={libId:id,fromFile:false}; S.curPart=partOf(s); RT.cm=null; S.sheet=s.sheet||null; S.beat=s.beat?{...s.beat}:null; S.pendingKey=s.musicKey?{...s.musicKey}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
-    setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } songReady(s.name,s.name+' (vocals, from library)');
+    setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } S.openRec=s; songReady(s.name,s.name+' (vocals, from library)');
     setStatus((auto?'Opened your last song, '+s.name+'. ':'')+(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.'));
     try{ localStorage.setItem('pc-last',String(id)); }catch(e){}
     if(!auto) window.scrollTo({top:0,behavior:'smooth'});
@@ -2092,7 +2100,7 @@ const SUG_WORD={sent:'Suggestion sent',queued:'Suggestion waiting for a connecti
 function sugStateFor(uid){ const s=sugList().find(x=>x.uid===uid); return s?SUG_WORD[s.status]||'':''; }
 // editor: "Suggest my edits (n)" for songs from a share link with unsent changes
 S.curBase=null;
-async function refreshCurBase(){ S.curBase=null; if(S.cur&&S.cur.libId!=null){ const r=await libGet(S.cur.libId); if(r&&memberBase(r,partOf(r))) S.curBase={id:r.id,uid:r.uid,base:r.base,sentHash:r.sentHash,hop:r.hop,t0:r.t0,tt:r.tt,name:r.name}; } paintSuggest(); }
+async function refreshCurBase(rec){ S.curBase=null; if(S.cur&&S.cur.libId!=null){ const r=rec&&rec.id===S.cur.libId?rec:await libGet(S.cur.libId); if(r&&memberBase(r,partOf(r))) S.curBase={id:r.id,uid:r.uid,base:r.base,sentHash:r.sentHash,hop:r.hop,t0:r.t0,tt:r.tt,name:r.name}; } paintSuggest(); }
 let paintSugTimer=null;
 function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout(()=>{  const b=$('#edSuggest'), st=$('#sugState'); if(!b) return;
   if(S.sugSending) return;   // keep "Sending…" until the inbox answers
@@ -4209,7 +4217,7 @@ async function makeDemo(){
   size(); draw();
   // reopen the song used last on this device; the demo only when there is none
   let last=null; try{ last=localStorage.getItem('pc-last'); }catch(e){}
-  if(last!=null){ try{ ensureCtx(); const id=isNaN(+last)?last:+last; if(await libGet(id)&&await openLibSong(id,true)) return; }catch(e){} }
+  if(last!=null){ try{ ensureCtx(); const id=isNaN(+last)?last:+last; if(await openLibSong(id,true)) return; }catch(e){} }
   try{ ensureCtx(); const d=await makeDemo(); S.guideBuf=d.buf; normalize(); setTarget(d.tt,d.mm); updateDur(); updateTime(); draw(); scheduleBeatDetect(false); scheduleKeyDetect(false); }catch(e){}
 })();
 </script>
