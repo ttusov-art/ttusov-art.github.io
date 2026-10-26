@@ -778,7 +778,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bw';
+const APP_VERSION='2026-10-26 bx';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1298,7 +1298,9 @@ function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
 // backings you deleted on this device: updates bring them back only when "Restore deleted backings" is on
 function restoreBacks(){ try{ return localStorage.getItem('pc-restore-backs')!=='0'; }catch(e){ return true; } }
 const wasDeleted=(c,b)=>!!c&&(c.delBacks||[]).some(d=>d.name===b.name&&!!d.sep===!!b.sep&&(d.size==null||b.size==null||d.size===b.size));
-const wantsBacksBack=c=>!!c&&restoreBacks()&&(c.delBacks||[]).length>0&&!isOwnerPart(partOf(c));   // never on the leader's own device
+// with restoring on, a song is refreshed when the share has a backing this device doesn't (also ones deleted before deletions were remembered); never on the leader's own device
+const sameBack=(o,b)=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||!o.blob||o.blob.size===b.size);
+const wantsBacksBack=(c,m)=>!!c&&restoreBacks()&&!isOwnerPart(partOf(c))&&((c.delBacks||[]).length>0||!!m&&(m.backs||[]).some(b=>!backsOf(c).some(o=>sameBack(o,b))));
 const memberBase=(c,part)=>c&&c.base&&part&&!isOwnerPart(part)?c.base:null;
 async function backupLibrary(fixedName,btn0,txt0){
   const btn=btn0||$('#bkSave'), txt=txt0||$('#bkText'); btn.disabled=true;
@@ -1329,7 +1331,7 @@ async function backupLibrary(fixedName,btn0,txt0){
 }
 function neededBytes(z,man,byUid){
   let need=0;
-  for(const m of man.songs){ const cur=byUid[m.uid]; if(cur&&!wantsBacksBack(cur)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
+  for(const m of man.songs){ const cur=byUid[m.uid]; if(cur&&!wantsBacksBack(cur,m)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
     const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) need+=z.size(m.files.pcm);
     for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) need+=z.size(f);
     const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!(!restoreBacks()&&wasDeleted(cur,b))&&!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
@@ -1355,7 +1357,7 @@ async function restoreLibrary(file,out,askBig){
     for(const m of man.songs){
       i++; txt.textContent='Restoring song '+i+' of '+man.songs.length+'…';
       const cur=byUid[m.uid];
-      if(cur&&!wantsBacksBack(cur)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
+      if(cur&&!wantsBacksBack(cur,m)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
         if(shared&&!cur.base){ // shared before this version: remember the shared version now (from the file if you edited it since)
           const same=(cur.updated||cur.created)===(m.updated||m.created), c0=same?toF32(cur.contour):(m.files.contour?new Float32Array(await (await z.get(m.files.contour)).arrayBuffer()):null);
           if(c0){ cur.base={updated:m.updated||m.created,contour:Float32Array.from(c0),lyrics:(same?cur.lyrics:m.lyrics||[]).map(l=>({t:l.t,text:l.text}))}; await libPutRaw(cur); } }
@@ -3804,7 +3806,7 @@ async function sharedChanges(url){
   const rf=await remoteFile(directUrl(url)); if(!rf) return null;
   const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
   const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
-  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if(wantsBacksBack(c)||(memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
+  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c) added++; else if(wantsBacksBack(c,m)||(memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
   let reordered=false; if(Array.isArray(man.order)&&man.part){ const mine=sortSongs(local.filter(x=>partOf(x)===man.part)).map(x=>x.uid).filter(u=>man.order.includes(u)), theirs=man.order.filter(u=>mine.includes(u)); reordered=mine.join()!==theirs.join(); }
   if(man.part&&!isOwnerPart(man.part)) await rememberBases(z,man,byUid);
   return {added,updated,reordered,total:man.songs.length,part:man.part||null,bytes:neededBytes(z,man,byUid)};
