@@ -571,17 +571,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div class="lib-head">
       <span class="small">Separated songs and songs you added are kept here on this device, in the part chosen above.</span>
-      <span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span>
-    </div>
-    <div class="sep-box" id="sepBox" hidden>
-      <div class="sep-row"><b id="sepName"></b><span class="engine" id="engine" hidden></span></div>
-      <div class="sep-row"><div class="bar"><i id="sepFill"></i></div><span class="small" id="sepText"></span></div>
-      <div class="sep-row">
-        <label class="check" for="keepLib"><input id="keepLib" type="checkbox" checked>Keep in library</label>
-        <button id="sepCancel" type="button">Cancel</button>
-        <button id="sepSave" type="button" hidden>Save vocals</button>
-      </div>
-      <span class="small">Keep this page open and the screen on while it works. On a laptop this takes a few minutes; on a phone it can take much longer.</span>
     </div>
     <div class="row" id="libOrderRow" hidden><button id="libOrder" type="button" title="Change the order of the songs in this part (also used for playback and shared with members)">⇅ Change the order</button></div>
     <div id="songList"></div>
@@ -591,7 +580,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="small" id="bkText"></span>
     </div>
     <span class="small" id="storeText"></span>
-    <span class="small" id="libEmpty">Choose a song (for example your part MP3). The app separates the voice, finds the pitch line and keeps the vocals here for next time.</span>
+    <span class="small" id="libEmpty">No songs in this part yet. Add them with Update or a shared link from your moderator.</span>
     </div>
   </details>
 
@@ -715,6 +704,21 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div id="adminTools" hidden>
     <div class="share-box">
+      <b>Add a new song</b>
+      <span class="small">Choose a song (for example a part MP3). The app separates the voice, finds the pitch line and keeps it in the library, in the part chosen in Song library.</span>
+      <div class="row"><span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span></div>
+    <div class="sep-box" id="sepBox" hidden>
+      <div class="sep-row"><b id="sepName"></b><span class="engine" id="engine" hidden></span></div>
+      <div class="sep-row"><div class="bar"><i id="sepFill"></i></div><span class="small" id="sepText"></span></div>
+      <div class="sep-row">
+        <label class="check" for="keepLib"><input id="keepLib" type="checkbox" checked>Keep in library</label>
+        <button id="sepCancel" type="button">Cancel</button>
+        <button id="sepSave" type="button" hidden>Save vocals</button>
+      </div>
+      <span class="small">Keep this page open and the screen on while it works. On a laptop this takes a few minutes; on a phone it can take much longer.</span>
+    </div>
+    </div>
+    <div class="share-box">
       <b>Share with your choir</b>
       <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
       <span class="small">1. Tap Make share file. 2. Upload “<span id="shareFile"></span>” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered the songs of this part.</span>
@@ -821,7 +825,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 dd';
+const APP_VERSION='2026-10-26 de';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1626,7 +1630,7 @@ async function getModel(my){
 async function separateSong(file){
   if(S.sep.worker) return;
   stop(); const my=++S.sep.token, name=file.name.replace(/\.(mp3|m4a|wav|ogg|aac|flac)$/i,'').replace(/_/g,' ');
-  $('#libPanel').open=true; $('#sepBox').hidden=false; $('#sepSave').hidden=true; $('#sepName').textContent=name; $('#engine').hidden=true; $('#sepCancel').hidden=false; $('#sepFile').disabled=true;
+  $('#leadPanel').open=true; $('#sepBox').hidden=false; $('#sepSave').hidden=true; $('#sepName').textContent=name; $('#engine').hidden=true; $('#sepCancel').hidden=false; $('#sepFile').disabled=true;
   let wake=null, wurl=null;
   try{ if(navigator.wakeLock) wake=await navigator.wakeLock.request('screen'); }catch(e){}
   try{
