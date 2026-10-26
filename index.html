@@ -778,7 +778,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 bx';
+const APP_VERSION='2026-10-26 by';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1338,7 +1338,7 @@ function neededBytes(z,man,byUid){
   return need;
 }
 async function restoreLibrary(file,out,askBig){
-  const txt=out||$('#bkText'); txt.textContent='Reading '+(file.name||'the library')+'…';
+  const txt=out||$('#bkText'); txt.textContent='Reading '+(out&&out.id==='status'?'the update':(file.name||'the library'))+'…';
   try{
     const z=await openZip(file), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
     const man=JSON.parse(await mb.text()); if(man.app!=='part-coach') throw new Error('this is not a Part Coach backup file');
@@ -1386,7 +1386,7 @@ async function restoreLibrary(file,out,askBig){
     await renderLib();
     if(S.cur&&updIds.includes(S.cur.libId)){ if(S.playing) stop(); const ed=S.editMode; await openLibSong(S.cur.libId,true); if(ed) setEditMode(true); }   // the open song was replaced: show the new version (never save the old one over it)
     const parts=[]; if(added) parts.push(added+' added'); if(updated) parts.push(updated+' updated'); if(reordered&&!added) parts.push('song order updated'); if(skipped) parts.push(skipped+' already up to date');
-    txt.textContent=(out?'Done: ':'Restore finished: ')+(parts.join(', ')||'nothing to restore')+'.'+(out&&(added||updated)?' Tap Choose song to open one.':'');
+    txt.textContent=(out?'Done: ':'Restore finished: ')+(parts.join(', ')||'nothing to restore')+'.'+(out&&out.id!=='status'&&(added||updated)?' Tap Choose song to open one.':'');
     return man.part||true;
   }catch(err){ txt.textContent=(out?'Could not add the songs: ':'Restore failed: ')+((err&&err.message)||'unknown error')+'.'; return false; }
 }
@@ -3819,10 +3819,11 @@ async function rememberBases(z,man,byUid){ let n=0;
     if(!c0) continue; cur.base={updated:mv,contour:Float32Array.from(c0),lyrics:(same?cur.lyrics||[]:m.lyrics||[]).map(l=>({t:l.t,text:l.text}))}; await libPutRaw(cur); n++; }
   if(n&&S.cur&&S.cur.libId!=null) refreshCurBase(); }
 function changesTxt(c){ const p=[]; if(c.added) p.push(c.added+' new song'+(c.added>1?'s':'')); if(c.updated) p.push(c.updated+' changed song'+(c.updated>1?'s':'')); if(c.reordered) p.push('a new song order'); return p.join(' and ')+(c.bytes!=null?' ('+(c.bytes<1048576?'under 1 MB':'about '+Math.round(c.bytes/1048576)+' MB')+')':''); }
-async function addFromLink(){
-  const out=$('#linkText'), btn=$('#linkGo'); let url; const raw=$('#linkIn').value.trim();
+// upd = {url, slug, part} when run from the Update button: progress goes to the message line, no link box
+async function addFromLink(upd){
+  const out=upd?$('#status'):$('#linkText'), btn=$('#linkGo'); let url; const raw=upd?upd.url:$('#linkIn').value.trim();
   try{ url=directUrl(raw); }catch(e){ out.textContent=e.message[0].toUpperCase()+e.message.slice(1)+'.'; return; }
-  btn.disabled=true; out.textContent='Checking the shared library…';
+  if(!upd) btn.disabled=true; out.textContent=upd?'Updating'+(upd.part?' '+upd.part:'')+'…':'Checking the shared library…';
   try{
     let ok=false; const rf=await remoteFile(url);
     if(rf){
@@ -3833,41 +3834,43 @@ async function addFromLink(){
       if(!blob){ out.textContent='Download cancelled. Tap again when you are on Wi-Fi, or to download anyway.'; return; }
       ok=await restoreLibrary(new File([blob],'shared library.zip'),out);
     }
-    if(ok){ setShared(raw,typeof ok==='string'?ok:null,S.pendingSlug||null); S.pendingSlug=null; setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>{ if(!(S.updReady&&S.updReady.length)) checkShared(false); },800); }
-  }catch(e){ out.textContent='Could not add the songs: '+e.message+'.'; }
-  finally{ btn.disabled=false; }
+    if(ok){ setShared(raw,typeof ok==='string'?ok:(upd&&upd.part)||null,upd?upd.slug||null:S.pendingSlug||null); if(!upd){ S.pendingSlug=null; setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>{ if(!(S.updReady&&S.updReady.length)) checkShared(false); },800); } }
+    if(ok&&upd) out.textContent=out.textContent.replace(' Tap Choose song to open one.','').replace(/^Done: /,'Update finished'+(upd.part?' for '+upd.part:'')+': ');
+    return ok;
+  }catch(e){ out.textContent=(upd?'Could not update':'Could not add the songs')+': '+e.message+'.'; return false; }
+  finally{ if(!upd) btn.disabled=false; }
 }
 S.lastCheck=0;
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&getShared().length&&Date.now()-S.lastCheck>5*60e3&&!S.playing) checkShared(false); });
 setInterval(()=>{ if(!document.hidden&&getShared().length&&Date.now()-S.lastCheck>15*60e3&&!S.playing) checkShared(false); },60e3);
 function paintUpd(){ const r=S.updReady||[], b=$('#updBtn'); b.hidden=!r.length; if(!r.length) return;
   $('#updLbl').textContent=r.length>1?'Update '+r.length+' parts':'Update'+(r[0].sh.part?' '+r[0].sh.part:'');
-  b.title='New songs or changes are waiting: '+r.map(x=>(x.sh.part?x.sh.part+': ':'')+changesTxt(x.c)).join('; '); }
+  b.title='New songs or changes are waiting: '+r.map(x=>(x.sh.part?x.sh.part+': ':'')+(x.c?changesTxt(x.c):'download it whole')).join('; '); }
 // when updates newly appear, bring the Update button into view (not while playing, editing, typing or reading the lyrics sheet)
-function showUpdBtn(){ const b=$('#updBtn'), ae=document.activeElement;
-  if(S.playing||S.editMode||S.tap||!$('#sheetView').hidden||(ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName))) return;
+function showUpdBtn(force){ const b=$('#updBtn'), ae=document.activeElement;
+  if(!force&&(S.playing||S.editMode||S.tap||!$('#sheetView').hidden||(ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName)))) return;
   const r=b.getBoundingClientRect(); if(r.top<8||r.bottom>innerHeight-8) b.scrollIntoView({block:'center',behavior:'smooth'}); }
 async function runUpdates(){
   const list=(S.updReady||[]).slice(); if(!list.length) return; $('#updBtn').disabled=true;
-  try{ for(const r of list){ showLinkBox(r.sh.url,'update'); await addFromLink(); } }
+  $('#linkBox').hidden=true; setStatus('Updating…');
+  let done=0; try{ for(const r of list){ if(await addFromLink({url:r.sh.url,slug:r.sh.slug,part:r.sh.part})) done++; } }
   finally{ $('#updBtn').disabled=false; S.updReady=[]; paintUpd(); }
 }
 async function checkShared(manual){
   const list=getShared(); if(!list.length) return; S.lastCheck=Date.now();
-  if(manual){ showLinkBox(list[0].url,'check'); $('#linkText').textContent='Checking for updates…'; }
+  if(manual) setStatus('Checking for updates…');
   let unknown=null, failed=null; const lj=list.some(x=>x.slug)?await fetchLinks():null;
   for(const sh of list) if(sh.slug&&lj&&lj[sh.slug]&&lj[sh.slug].url&&lj[sh.slug].url!==sh.url){ sh.url=lj[sh.slug].url; setShared(sh.url,sh.part,sh.slug); }
   const res=await Promise.all(list.map(sh=>sharedChanges(sh.url).then(c=>({sh,c}),e=>({sh,e}))));
   const ready=res.filter(r=>r.c&&(r.c.added||r.c.updated||r.c.reordered));
   for(const r of res){ if(r.e) failed=failed||{sh:r.sh,e:r.e}; else if(r.c==null) unknown=unknown||r.sh; }
   const wasShown=!$('#updBtn').hidden; S.updReady=ready; paintUpd();
-  if(ready.length&&!manual&&!wasShown) showUpdBtn();
-  if(ready.length){ const r=ready[0], txt='Updates are ready'+(r.sh.part?' for '+r.sh.part:'')+': '+changesTxt(r.c)+'.';
-    if(manual){ showLinkBox(r.sh.url,'update'); $('#linkText').textContent=txt; } else setStatus(txt+' Tap Update next to Play.'); return; }
+  if(ready.length&&(manual||!wasShown)) showUpdBtn(manual);
+  if(ready.length){ const r=ready[0], txt='Updates are ready'+(r.sh.part?' for '+r.sh.part:'')+': '+changesTxt(r.c)+'.'; setStatus(txt+' Tap Update next to Play.'); return; }
   if(!manual) return;
-  if(unknown){ $('#linkIn').value=unknown.url; $('#linkText').textContent='Could not check '+(unknown.part||'a shared link')+' without downloading everything. Tap Update to download it whole.'; }
-  else if(failed){ $('#linkIn').value=failed.sh.url; $('#linkText').textContent='Could not check '+(failed.sh.part||'a shared link')+': '+failed.e.message+'.'; }
-  else $('#linkText').textContent=list.length>1?'All shared parts are up to date.':'Everything is up to date.';
+  if(unknown){ S.updReady=[{sh:unknown,c:null}]; paintUpd(); showUpdBtn(true); setStatus('Could not check '+(unknown.part||'a shared link')+' without downloading everything. Tap Update next to Play to download it whole.'); }
+  else if(failed) setStatus('Could not check '+(failed.sh.part||'a shared link')+': '+failed.e.message+'.',true);
+  else setStatus(list.length>1?'All shared parts are up to date.':'Everything is up to date.');
 }
 function shareUrlFor(link){ return location.origin+location.pathname+'?lib='+encodeURIComponent(link.trim()); }
 // short links: ?alto-1 is looked up in links.json next to index.html
