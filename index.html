@@ -235,7 +235,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .check input{width:18px;height:18px;accent-color:var(--accent)}
 .status{font-size:13px;color:var(--muted);min-height:20px}
 .warn{color:var(--off)}
-.loop{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;padding:12px 14px}
+.loop{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;padding:0 16px 14px}
 .loop .lbl{margin-right:2px}
 .loop-on{display:inline-flex;align-items:center;gap:8px;font-weight:500}
 .loop-on input{width:20px;height:20px;accent-color:var(--accent)}
@@ -246,6 +246,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .fold{padding:0}
 .fold>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
 .fold>summary .count{font-family:var(--font-body);font-weight:500;font-size:14px;color:var(--muted);margin-left:6px}
+.link-btn{background:none;border:0;padding:4px 0;color:var(--accent);font:inherit;font-size:13px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;width:auto}
 .fold-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .lib-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
 .sep-box{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:8px;background:var(--lane-alt)}
@@ -416,7 +417,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="metBtn" type="button" aria-pressed="false" title="Metronome click on every beat">Click: off</button>
         <span class="sync" role="group" aria-label="Picture delay"><span class="small">Picture</span><button id="pdDown" type="button" aria-label="Show the picture earlier">−</button><span class="val" id="pdV">0 ms</span><button id="pdUp" type="button" aria-label="Show the picture later">+</button></span>
       </div>
-      <span class="row"><details class="ed-fold" id="edFold"><summary>Editor</summary><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></details><span id="laneHint">Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span></span>
+      <span class="row"><details class="ed-fold" id="edFold"><summary>Editor</summary><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></details><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span></span>
     </div>
   </section>
 
@@ -437,14 +438,16 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <label class="btn icon-btn mic-btn guide-on" for="micOn" id="micLbl" title="Sing with microphone: on"><input id="micOn" type="checkbox" checked aria-label="Sing with microphone"><svg class="ic-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/><path d="M8 22h8"/></svg><svg class="ic-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1"/><path d="M19 10v1a7 7 0 0 1-.9 3.4"/><path d="M5 10v1a7 7 0 0 0 11 5.7"/><path d="M12 18v4"/><path d="M8 22h8"/><path d="M3 3l18 18"/></svg><span class="dot" id="micDot"></span></label>
     <label class="mic" for="recOn" style="margin-left:0"><input id="recOn" type="checkbox" checked>Record my voice</label>
   </section>
-  <section class="panel loop" aria-label="Loop a section">
-    <span class="lbl">Loop</span>
+  <details class="panel fold" id="loopPanel" open aria-label="Loop a section">
+    <summary>Loop</summary>
+    <div class="loop">
     <label class="loop-on" for="loopOn" hidden><input id="loopOn" type="checkbox" disabled>Repeat</label>
     <label class="small" for="lead">Lead-in</label>
     <select id="lead"><option value="0">0 s</option><option value="1">1 s</option><option value="2" selected>2 s</option><option value="3">3 s</option></select>
     <button id="clearLoop" type="button" hidden>Clear</button>
-    <span class="loop-info" id="loopInfo">Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you tap Clear or hold the lane outside the loop.</span>
-  </section>
+      <span class="loop-info" id="loopInfo">Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you tap Clear or hold the lane outside the loop.</span>
+  </div>
+  </details>
   <div class="status" id="status">Use headphones, so the microphone hears only you. Press Play to try the demo.</div>
 
   <section class="panel result" id="result" hidden>
@@ -452,8 +455,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div id="resultText"></div>
   </section>
 
-  <div class="panel setup" id="songPanel">
-    <h2>Song</h2>
+  <details class="panel fold" id="songPanel" open>
+    <summary>Song</summary>
+    <div class="fold-body">
     <div class="field">
       <span class="lbl">Guide (target line)</span>
       <div class="row">
@@ -510,8 +514,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="field-row"><input id="volMet" type="range" min="0.05" max="1" step="0.05" value="0.5"><span class="val" id="volMetV">50%</span></div>
       <span class="small">The Click button above the pitch lane plays a click on every beat of the song's beat grid.</span>
     </div>
-  </div>
-
+    </div>
+  </details>
 
   <details class="panel fold" id="libPanel" open>
     <summary>Song library<span class="count" id="libCount"></span></summary>
@@ -628,8 +632,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </details>
 
   <section>
-    <div class="panel setup">
-      <h2>Settings</h2>
+    <details class="panel fold" id="setPanel" open>
+      <summary>Settings</summary>
+      <div class="fold-body">
       <div class="field">
         <label for="delay">Delay compensation</label>
         <div class="field-row"><input id="delay" type="range" min="0" max="800" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
@@ -685,7 +690,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <li>You can turn the screen off while singing. The song, scoring and recording keep going, and lock-screen controls can pause it.</li>
       </ul>
       <span class="small" id="appVer"></span>
-    </div>
+      </div>
+    </details>
   </section>
 </div>
 
@@ -728,7 +734,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 az';
+const APP_VERSION='2026-10-26 ba';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3565,7 +3571,10 @@ try{ if(localStorage.getItem('pc-lyr')==='0'){ S.lyrShow=false; $('#lyrShow').ch
 try{ const o=localStorage.getItem('pc-lyr-open'); if(o==='1') $('#lyrPanel').open=true; }catch(x){}
 $('#lyrPanel').addEventListener('toggle',e=>{ try{localStorage.setItem('pc-lyr-open',e.target.open?'1':'0')}catch(x){} });
 renderLyrics(true);
-for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes'],['leadPanel','pc-open-lead']]){
+{ const hb=$('#hintBtn'), set=on=>{ $('#laneHint').hidden=!on; hb.textContent=on?'Hide info':'Expand for info'; hb.setAttribute('aria-expanded',String(on)); };
+  try{ set(localStorage.getItem('pc-hint-open')==='1'); }catch(e){ set(false); }
+  hb.addEventListener('click',()=>{ const on=$('#laneHint').hidden; set(on); try{ localStorage.setItem('pc-hint-open',on?'1':'0'); }catch(e){} }); }
+for(const [id,key] of [['libPanel','pc-open-lib'],['takesPanel','pc-open-takes'],['leadPanel','pc-open-lead'],['songPanel','pc-open-song'],['loopPanel','pc-open-loop'],['setPanel','pc-open-set']]){
   const el=document.getElementById(id);
   try{ const v=localStorage.getItem(key); if(v==='0') el.open=false; if(v==='1') el.open=true; }catch(x){}
   el.addEventListener('toggle',()=>{ try{localStorage.setItem(key,el.open?'1':'0')}catch(x){} });
