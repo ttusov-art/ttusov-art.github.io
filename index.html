@@ -721,7 +721,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 av';
+const APP_VERSION='2026-10-26 aw';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1949,7 +1949,8 @@ async function sugFetchInbox(manual){
   const url=sugUrl(), key=sugKey(), t=$('#sugText');
   if(!url||!key){ S.inbox=[]; paintSugBtn(); if(manual) t.textContent=!url?'Paste the inbox address first.':'Type your review key first.'; return; }
   if(manual) t.textContent='Checking the inbox…';
-  try{ const j=await sugGet(url,{action:'list',key}); S.inbox=(j.list||[]).sort((a,b)=>a.received-b.received); paintSugBtn(); if(manual) t.textContent=S.inbox.length?S.inbox.length+' suggestion'+(S.inbox.length>1?'s':'')+' waiting. Tap Suggestions next to Play.':'The inbox works. No suggestions waiting.'; }
+  try{ const j=await sugGet(url,{action:'list',key}); S.inbox=(j.list||[]).sort((a,b)=>a.received-b.received); paintSugBtn(); if(manual){ t.textContent=S.inbox.length?S.inbox.length+' suggestion'+(S.inbox.length>1?'s':'')+' waiting. Tap Suggestions next to Play.':'The inbox works. No suggestions waiting.';
+      if(S.inbox.length) setTimeout(()=>$('#sugBtn').scrollIntoView({block:'center',behavior:'smooth'}),400); } }
   catch(e){ if(manual) t.textContent='Could not read the inbox: '+e.message+'.'; }
 }
 function paintSugBtn(){ const b=$('#sugBtn'), n=S.inbox.length; b.hidden=!n||!sugKey(); b.textContent='Suggestions ('+n+')'; }
