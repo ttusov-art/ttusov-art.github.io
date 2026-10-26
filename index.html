@@ -124,6 +124,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .edit-sep{width:1px;height:24px;background:var(--line);margin:0 2px}
 .snd{gap:6px;flex:1 1 100%}
 .sync{display:inline-flex;align-items:center;gap:4px;margin-left:auto}
+.pd-row{gap:8px}
+.pd-row button{padding:5px 12px;flex:none}
 .sync .val{min-width:5ch;text-align:center}
 .sync button{padding:5px 10px}
 .snd button{padding:7px 9px;font-size:14px}
@@ -455,7 +457,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone</button>
         <button id="metBtn" type="button" aria-pressed="false" title="Metronome click on every beat">Click</button>
         </span>
-        <span class="sync" role="group" aria-label="Picture delay"><span class="small">Picture</span><button id="pdDown" type="button" aria-label="Show the picture earlier">−</button><span class="val" id="pdV">0 ms</span><button id="pdUp" type="button" aria-label="Show the picture later">+</button></span>
       </div>
       <span class="row"><details class="ed-fold" id="edFold"><summary>Editor</summary><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></details><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span></span>
     </div>
@@ -650,8 +651,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="field">
         <label for="pdelay">Picture delay</label>
-        <div class="field-row"><input id="pdelay" type="range" min="0" max="600" step="10" value="0"><span class="val" id="pdelayV">0 ms</span></div>
-        <span class="small">Moves the playhead and lane to match what you hear. Raise it if the playhead runs ahead of the music (Bluetooth: often 150–300 ms). Also under the lane as Picture − / +.</span>
+        <div class="field-row pd-row"><button id="pdDown" type="button" aria-label="Show the picture earlier" title="Earlier">−</button><input id="pdelay" type="range" min="0" max="600" step="10" value="0" aria-label="Picture delay"><button id="pdUp" type="button" aria-label="Show the picture later" title="Later">+</button><span class="val" id="pdelayV">0 ms</span><span id="pdV" hidden></span></div>
+        <span class="small">Lines up what you see with what you hear. If the playhead and moving lane run ahead of the music (common with Bluetooth headphones, often 150–300 ms), press + until they match; − moves them back. It changes only the picture, not the sound or your score.</span>
       </div>
       <div class="field">
         <span class="small warn" id="delayHint" hidden></span>
@@ -786,7 +787,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 cc';
+const APP_VERSION='2026-10-26 cd';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
