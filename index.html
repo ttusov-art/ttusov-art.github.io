@@ -810,7 +810,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-26 cl';
+const APP_VERSION='2026-10-26 cm';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3555,10 +3555,24 @@ try{ [['volGuide','volGuideV','pc-volguide'],['volBack','volBackV','pc-volback']
 S.toneMuted=true; try{ if(localStorage.getItem('pc-tone-muted')==='0') setToneOn(true); }catch(x){}
 paintToggle('toneBtn','Tone',toneIsOn());
 try{ if(localStorage.getItem('pc-guide-muted')==='1') setGuideMuted(true); }catch(x){}
-$('#editBtn').addEventListener('click',()=>setEditMode(!S.editMode));
+$('#editBtn').addEventListener('click',()=>{ if(S.editMode) closeEditor(false); else setEditMode(true); });
+// leaving the editor with edits not sent yet (members' songs from a share link): suggest them, cancel them, or keep editing
+async function closeEditor(fromPencil){
+  const cb=S.curBase, d=cb&&S.tM?songDiff(cb,liveOf()):null;
+  if(d&&diffCount(d)&&hashOf(d)!==cb.sentHash){
+    const r=await dlg({title:'Your edits are not sent yet',html:'<p class="kv-sub">You changed '+esc(diffText(d))+' in this song. Send them to the moderator, or cancel them, before closing the editor.</p>',
+      buttons:[{label:'Suggest my edits',value:'send',primary:true},{label:'Cancel my edits',value:'cancel'},{label:'Back to editing',value:null}]});
+    if(r.value==='send'){ await suggestCurrent(); const d2=songDiff(S.curBase,liveOf()); if(diffCount(d2)&&hashOf(d2)!==S.curBase.sentHash) return; }   // not sent (no inbox?): stay in the editor
+    else if(r.value==='cancel'){ S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); pushUndo();
+      const base=toF32(cb.base.contour), out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out;
+      S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged(); targetEdited('Your edits were cancelled: the song is back as the moderator shared it.'); }
+    else return;   // back to editing
+  }
+  setEditMode(false); if(fromPencil) setEdFold(false);
+}
 // the pencil next to Voice / Backing / Tone / Click shows or hides the editor buttons
 function setEdFold(on){ $('#edFold').hidden=!on; $('#edToggle').setAttribute('aria-expanded',String(on)); }
-$('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; setEdFold(open); if(!open&&S.editMode) setEditMode(false); });   // closing the pencil also ends editing
+$('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; if(!open&&S.editMode){ closeEditor(true); return; } setEdFold(open); });   // closing the pencil also ends editing
 $('#edClearSel').addEventListener('click',()=>{ S.sel=null; updateSelInfo(); draw(); });
 $('#edTimeBtn').addEventListener('click',()=>{ if(S.editMode) setEditMode(false); $('#lyrTap').click(); });
 $('#edOne').addEventListener('click',edOneNote);
