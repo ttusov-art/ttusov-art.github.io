@@ -832,7 +832,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 dm';
+const APP_VERSION='2026-10-27 dn';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2836,6 +2836,12 @@ function tapSkip(){
     if(nx.t!=null) seek(S.playing?Math.max(0,nx.t-2):nx.t); }   // jump to the next line (playing: with a short run-up, like Back)
   $('#lyrSkip').disabled=S.tap.i>=S.lyrics.length; tapBtns(); S.lyrBarKey=null; lyrChanged();
 }
+// lyric timing: when you move the playhead by hand, the active line becomes the next one after the playhead
+// (lines placed at or before it count as passed), so Place here, Skip and Back work from where you are
+function tapFollow(){ if(!S.tap||S.playing) return; const pos=S.pos+0.001; let j=-1;
+  S.lyrics.forEach((l,k)=>{ if(l.t!=null&&l.t<=pos) j=k; });
+  const i=Math.min(S.lyrics.length,j+1); if(i===S.tap.i) return;
+  S.tap.i=i; $('#lyrSkip').disabled=i>=S.lyrics.length; tapBtns(); S.lyrBarKey=null; updateLyricBar(S.pos); }
 function tapBtns(){ if(!S.tap) return; $('#lyrBack').disabled=S.tap.i<=0; $('#lyrPlace').disabled=S.tap.i>=S.lyrics.length; }
 // Back: step to the previous line and keep every time as it is (the mirror of Skip); tap Place here to re-time it
 function tapBack(){
@@ -3543,7 +3549,7 @@ canvas.addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); }
 canvas.addEventListener('pointermove',e=>{ if(drag&&drag.stretch){ const d=drag, t=snapT(laneTimeAt(e.clientX)), minL=Math.max(0.05,snapStep(t)||0.1); let a1=d.a0,b1=d.b0;   // edge handle: make the selection bigger or smaller
     if(d.stretch==='a') a1=Math.max(0,Math.min(t,d.b0-minL)); else b1=Math.min(S.dur,Math.max(t,d.a0+minL));
     if(a1!==d.a1||b1!==d.b1){ d.a1=a1; d.b1=b1; S.sel={a:a1,b:b1,m:S.sel&&S.sel.m}; updateSelInfo(); draw(); } return; }
-  if(S.lyrDrag){ const d=S.lyrDrag, pps=(canvas.clientWidth-LABELW)/S.win; let t=lyrT(d.t0+(e.clientX-d.x0)/pps); if(t<d.min) t=lyrT(d.min+snapStep()); if(t>d.max) t=lyrT(d.max-snapStep()); if(t>=d.min&&t<=d.max) S.lyrics[d.i].t=t; draw(); return; } if(kb&&kb.pts.has(e.pointerId)){ kb.pts.set(e.pointerId,e.clientY); kbMove(); return; } if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(drag.scroll){ pageDrag(drag,e.clientY); return; } if(!drag.isMouse&&!drag.moved&&!drag.long&&!drag.sweep){ const dx=Math.abs(e.clientX-drag.x), dy=Math.abs(e.clientY-drag.y0); if(dy>9&&dy>1.4*dx){ drag.scroll=true; clearTimeout(drag.timer); drag.sy=drag.y0; drag.ys=[]; pageDrag(drag,e.clientY); return; } if(dx<=6) return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.sweep){ sweepSel(drag.sweep,laneTimeAt(e.clientX)); return; } if(drag.samples){ drag.samples.push([performance.now(),e.clientX]); if(drag.samples.length>8) drag.samples.shift(); } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); draw(); });
+  if(S.lyrDrag){ const d=S.lyrDrag, pps=(canvas.clientWidth-LABELW)/S.win; let t=lyrT(d.t0+(e.clientX-d.x0)/pps); if(t<d.min) t=lyrT(d.min+snapStep()); if(t>d.max) t=lyrT(d.max-snapStep()); if(t>=d.min&&t<=d.max) S.lyrics[d.i].t=t; draw(); return; } if(kb&&kb.pts.has(e.pointerId)){ kb.pts.set(e.pointerId,e.clientY); kbMove(); return; } if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); tapFollow(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(drag.scroll){ pageDrag(drag,e.clientY); return; } if(!drag.isMouse&&!drag.moved&&!drag.long&&!drag.sweep){ const dx=Math.abs(e.clientX-drag.x), dy=Math.abs(e.clientY-drag.y0); if(dy>9&&dy>1.4*dx){ drag.scroll=true; clearTimeout(drag.timer); drag.sy=drag.y0; drag.ys=[]; pageDrag(drag,e.clientY); return; } if(dx<=6) return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.sweep){ sweepSel(drag.sweep,laneTimeAt(e.clientX)); return; } if(drag.samples){ drag.samples.push([performance.now(),e.clientX]); if(drag.samples.length>8) drag.samples.shift(); } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); tapFollow(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
   if(drag&&drag.stretch){ drag=null; touchPts.delete(e.pointerId); updateSelInfo(); draw(); return; }
   if(S.lyrDrag){ const d=S.lyrDrag; S.lyrDrag=null; const L=S.lyrics[d.i]; if(L.t!==d.t0){ if(S.tap){ S.tap.hist.push({i:d.i,t:d.t0,cleared:[],moved:true,back:S.tap.i}); $('#lyrUndo').disabled=false; } else { S.undo.push({lyr:d.i,t:d.t0}); if(S.undo.length>30) S.undo.shift(); updateSelInfo(); } setStatus('“'+L.text+'” moved to '+fmtT1(L.t)+'.'); } lyrChanged(); return; }
@@ -3790,7 +3796,7 @@ document.addEventListener('keydown',e=>{
   else if(mod&&!(k==='ArrowLeft'||k==='ArrowRight')) done=false;
   else if(k==='ArrowLeft'||k==='ArrowRight'){ const dir=k==='ArrowLeft'?-1:1;   // Ctrl: jump half a screen; plain: half a beat
     const from=S.playing?songTime():S.pos, to=mod?stepGrid(from+dir*0.5*S.win,0):stepGrid(from,dir);
-    if(S.playing) seek(to); else { S.pos=Math.max(0,Math.min(S.dur,to)); updateTime(); draw(); } }
+    if(S.playing) seek(to); else { S.pos=Math.max(0,Math.min(S.dur,to)); updateTime(); tapFollow(); draw(); } }
   else if(k===' '||e.code==='Space') (S.playing||S.review)?stop():play();
   else if(k==='ArrowUp') edShift(e.shiftKey?12:1);
   else if(k==='ArrowDown') edShift(e.shiftKey?-12:-1);
@@ -4130,8 +4136,8 @@ try{ const w=+localStorage.getItem('pc-win'); if(w>=2&&w<=30) setWin(w,false); }
 // overview bar: tap or drag to jump anywhere in the song
 let ovDrag=null;
 function ovTime(e){ const r=ovw.getBoundingClientRect(); return Math.max(0,Math.min(S.dur,(e.clientX-r.left)/r.width*S.dur)); }
-ovw.addEventListener('pointerdown',e=>{ if(!S.dur||S.review) return; stopGlide(); ovDrag={resume:S.playing}; if(S.playing) stop(); ovw.setPointerCapture(e.pointerId); S.pos=ovTime(e); updateTime(); draw(); e.preventDefault(); });
-ovw.addEventListener('pointermove',e=>{ if(!ovDrag) return; S.pos=ovTime(e); updateTime(); draw(); });
+ovw.addEventListener('pointerdown',e=>{ if(!S.dur||S.review) return; stopGlide(); ovDrag={resume:S.playing}; if(S.playing) stop(); ovw.setPointerCapture(e.pointerId); S.pos=ovTime(e); updateTime(); tapFollow(); draw(); e.preventDefault(); });
+ovw.addEventListener('pointermove',e=>{ if(!ovDrag) return; S.pos=ovTime(e); updateTime(); tapFollow(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>ovw.addEventListener(ev,()=>{ if(!ovDrag) return; const r=ovDrag.resume; ovDrag=null; if(r) play(); }));
 // flick: a fast swipe on the lane keeps gliding and slows down
 // vertical drags on the lane scroll the page (the lane blocks the browser's own scrolling, so the app does it)
@@ -4150,7 +4156,7 @@ function stopGlide(){ if(S.glide){ const g=S.glide; S.glide=null; if(g.resume) p
 function startGlide(vel,resume){ // vel in song seconds per second
   vel=Math.max(-80,Math.min(80,vel)); const g={vel,resume,last:performance.now()}; S.glide=g;
   const stepG=now=>{ if(S.glide!==g) return; const dt=Math.min(0.05,(now-g.last)/1000); g.last=now;
-    S.pos=Math.max(0,Math.min(S.dur,S.pos+g.vel*dt)); g.vel*=Math.exp(-dt/0.35); updateTime(); draw();
+    S.pos=Math.max(0,Math.min(S.dur,S.pos+g.vel*dt)); g.vel*=Math.exp(-dt/0.35); updateTime(); tapFollow(); draw();
     if(Math.abs(g.vel)<0.4||S.pos<=0||S.pos>=S.dur){ S.glide=null; if(g.resume) play(); return; } requestAnimationFrame(stepG); };
   requestAnimationFrame(stepG);
 }
@@ -4178,7 +4184,7 @@ canvas.addEventListener('wheel',e=>{ e.preventDefault();
   const pinch=e.ctrlKey&&e.deltaMode===0&&Math.abs(e.deltaY)<10&&!Number.isInteger(e.deltaY);
   const sideways=(e.ctrlKey&&!pinch)||Math.abs(e.deltaX)>Math.abs(e.deltaY);
   if(sideways&&S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; wheelAcc+=(e.deltaX||e.deltaY)/pps; clearTimeout(wheelTimer); wheelTimer=setTimeout(()=>{ const d=wheelAcc; wheelAcc=0; if(S.playing) seek(songTime()+d); },120); return; }
-  if(sideways){ if(S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,S.pos+(e.deltaX||e.deltaY)/pps)); updateTime(); draw(); }
+  if(sideways){ if(S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,S.pos+(e.deltaX||e.deltaY)/pps)); updateTime(); tapFollow(); draw(); }
   else setWin(S.win*Math.exp(e.deltaY*0.0015),true); },{passive:false});
 S.timMarks='gentle'; try{ const v=localStorage.getItem('pc-timmarks'); if(['gentle','detailed','off'].includes(v)) S.timMarks=v; }catch(x){} $('#timMarks').value=S.timMarks;
 $('#timMarks').addEventListener('change',e=>{ S.timMarks=e.target.value; try{localStorage.setItem('pc-timmarks',S.timMarks)}catch(x){} draw(); });
