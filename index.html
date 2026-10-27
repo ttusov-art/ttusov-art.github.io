@@ -330,6 +330,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-edit{padding:0}
 .lyr-edit>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
 .lyr-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
+.ed-lyr{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .lyr-pending{font-size:13px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,#f59e0b 16%,var(--surface));border:1px solid color-mix(in srgb,#f59e0b 45%,var(--line));color:var(--fg)}
 .lyr-body textarea{font:inherit;font-size:15px;line-height:1.5;width:100%;min-height:140px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);resize:vertical}
 .lyr-list{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px}
@@ -459,6 +460,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <button id="edToggle" type="button" class="icon-btn ed-toggle" aria-expanded="false" aria-controls="edFold" aria-label="Editor" title="Editor: edit the pitch line or time the lyrics"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
       </div>
       <div class="row ed-row" id="edFold" hidden><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></div><span class="row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span></span>
+      <div class="ed-lyr" id="edLyrBox" hidden><div class="lyr-list" id="lyrList" hidden></div><span class="small" id="lyrHint"></span></div>
     </div>
   </section>
 
@@ -579,19 +581,18 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <textarea id="lyrText" placeholder="First line of the song&#10;Second line&#10;…"></textarea>
       <span class="lyr-pending" id="lyrPending" role="status" hidden>Your text changes are not used yet. Tap <b>Use these lines</b> to apply them.</span>
       <div class="row">
-        <button id="lyrApply" type="button" class="primary">Use these lines</button>
+        <button id="lyrApply" type="button" class="primary">Use these lines</button><button id="lyrTextUndo" type="button" hidden>↶ Undo</button>
         <button id="lyrSuggest" type="button" class="primary" hidden title="Send your edits of this song to the moderator">Suggest my edits</button><button id="lyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel my edits</button><span class="small" id="lyrSugState"></span>
         <button id="lyrTap" type="button">Tap to time</button>
         <button id="sheetOpen" type="button" disabled>View lyrics sheet</button>
       </div>
+      <span class="lyr-pending" id="lyrCheckNote" role="status" hidden></span>
       <div class="row" id="lyrPdfRow" hidden>
         <label class="small" for="lyrPdfCol">Column from the PDF</label>
         <select id="lyrPdfCol" class="sel" style="flex:1 1 160px;min-width:0"></select>
       </div>
       <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
       <input id="lyrSnapOn" type="checkbox" checked hidden aria-hidden="true">
-      <div class="lyr-list" id="lyrList" hidden></div>
-      <span class="small" id="lyrHint"></span>
     </div>
   </details>
 
@@ -834,7 +835,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 do';
+const APP_VERSION='2026-10-27 dp';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -934,7 +935,7 @@ async function pitchLineOf(buf,onProg,rk){
 }
 function songReady(name,label){
   renderSheetBtns(); closeSheet();
-  S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
+  S.lyrTextHist=[]; $('#lyrCheckNote').hidden=true; S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>scheduleBeatDetect(false),50); setTimeout(()=>scheduleKeyDetect(false),400);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
@@ -2755,8 +2756,11 @@ function fillFromPdf(){ const c=S.pdfCols&&S.pdfCols[+$('#lyrPdfCol').value]; if
 function applyLyricText(){
   const lines=$('#lyrText').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   const old=S.lyrics, hadTimes=old.some(l=>l.t!=null);
+  if(lines.join('\n')!==old.map(l=>l.text).join('\n')){ (S.lyrTextHist=S.lyrTextHist||[]).push(old.map(l=>({t:l.t,text:l.text}))); if(S.lyrTextHist.length>20) S.lyrTextHist.shift(); }
+  const ops=alignLines(old.map(l=>l.text),lines), added=ops.filter(o=>o.op==='add').length, removed=ops.filter(o=>o.op==='del').length;
+  const cn=$('#lyrCheckNote'); if(hadTimes&&(added||removed)){ cn.innerHTML=(added?added+' line'+(added>1?'s':'')+' added':'')+(added&&removed?' and ':'')+(removed?removed+' line'+(removed>1?'s':'')+' removed':'')+'. <b>Check the timing</b> (Tap to time, or drag the labels on the graph) before you '+(isOwnerPart(S.curPart||S.part)?'share the song.':'suggest your edits.'); cn.hidden=false; } else cn.hidden=true;
   S.lyrics=lines.map(text=>({text,t:null}));
-  for(const o of alignLines(old.map(l=>l.text),lines)) if(o.op==='same'||o.op==='chg') S.lyrics[o.j].t=old[o.i].t;   // unchanged and reworded lines keep their timing
+  for(const o of ops) if(o.op==='same'||o.op==='chg') S.lyrics[o.j].t=old[o.i].t;   // unchanged and reworded lines keep their timing
   if(S.lyrics.length&&!hadTimes&&S.lyrics.every(l=>l.t==null)&&S.tT){ autoPlace(true); return; }
   lyrChanged(); setStatus(S.lyrics.length?S.lyrics.length+' lyric lines ready.':'Lyrics removed.');
 }
@@ -2804,6 +2808,8 @@ function autoPlace(silent){
 }
 // tap-to-time
 function startTap(){
+  if(lyrTextDiffers()){ applyLyricText(); setStatus('Your text changes are now used.'); }   // typed lines are used before timing
+  $('#lyrCheckNote').hidden=true;
   if(!S.lyrics.length) return;
   let i=S.lyrics.findIndex(l=>l.t==null); if(i<0) i=0;
   const prev=i>0?S.lyrics[i-1].t:null, from=prev!=null?Math.max(0,prev-1):Math.max(0,(S.lyrics[i].t!=null?S.lyrics[i].t:0)-4);
@@ -3643,7 +3649,7 @@ async function closeEditor(fromPencil){
   if(S.editMode) setEditMode(false); if(S.tap) stopTap(); if(fromPencil) setEdFold(false);
 }
 // the pencil next to Voice / Backing / Tone / Click shows or hides the editor buttons
-function setEdFold(on){ $('#edFold').hidden=!on; $('#edToggle').setAttribute('aria-expanded',String(on)); }
+function setEdFold(on){ $('#edFold').hidden=!on; $('#edLyrBox').hidden=!on; $('#edToggle').setAttribute('aria-expanded',String(on)); }
 $('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; if(!open&&(S.editMode||S.tap)){ closeEditor(true); return; } setEdFold(open); });   // closing the pencil also ends editing
 $('#edClearSel').addEventListener('click',()=>{ S.sel=null; updateSelInfo(); draw(); });
 $('#edTimeBtn').addEventListener('click',()=>{ if(S.tap){ closeEditor(false); return; } if(S.editMode) setEditMode(false); startTap(); });
@@ -3838,7 +3844,12 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
 $('#lyrApply').addEventListener('click',()=>{ applyLyricText(); lyrPendingCheck(false); });
 // typed lyric text is only used after "Use these lines": say so when you leave the text box with changes in it
 function lyrTextDiffers(){ const a=$('#lyrText').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).join('\n'), b=S.lyrics.map(l=>l.text).join('\n'); return a!==b; }
-function lyrPendingCheck(show){ const d=lyrTextDiffers(), el=$('#lyrPending'); if(!d){ el.hidden=true; return; } if(show) el.hidden=false; }
+function lyrPendingCheck(show){ const d=lyrTextDiffers(), el=$('#lyrPending'), u=$('#lyrTextUndo');
+  u.hidden=!(d||(S.lyrTextHist&&S.lyrTextHist.length)); u.textContent=d?'↶ Undo text changes':'↶ Undo last change'; u.title=d?'Put the text back to the lines in use':'Bring back the lines as they were before you last tapped Use these lines';
+  if(!d){ el.hidden=true; return; } if(show) el.hidden=false; }
+// Undo: first the typing that is not used yet; then, step by step, each "Use these lines" (with the timing the lines had)
+$('#lyrTextUndo').addEventListener('click',()=>{ if(lyrTextDiffers()){ $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrPendingCheck(false); setStatus('Text changes undone.'); return; }
+  const h=S.lyrTextHist&&S.lyrTextHist.pop(); if(!h) return; S.lyrics=h; $('#lyrText').value=h.map(l=>l.text).join('\n'); $('#lyrCheckNote').hidden=true; lyrChanged(); setStatus('The lyric lines are back as they were.'); });
 $('#lyrText').addEventListener('focusout',()=>setTimeout(()=>{ if(document.activeElement!==$('#lyrText')) lyrPendingCheck(true); },250));
 $('#lyrText').addEventListener('input',()=>lyrPendingCheck(false));
 $('#lyrAuto').addEventListener('click',()=>autoPlace(false));
