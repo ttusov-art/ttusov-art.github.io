@@ -844,7 +844,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 dx';
+const APP_VERSION='2026-10-27 dy';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1382,13 +1382,17 @@ async function openZip(file){
 }
 const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
 // the moderator's device (it makes the share files, or has the review key) is the source: its songs are never treated as members' copies
-function unpubGet(){ try{ return JSON.parse(localStorage.getItem('pc-unpub')||'{}')||{}; }catch(e){ return {}; } }
-function unpubMark(part,name){ if(!part||!name||!isOwnerPart(part)) return; const u=unpubGet(), l=u[part]||[]; if(!l.includes(name)){ l.push(name); u[part]=l; try{ localStorage.setItem('pc-unpub',JSON.stringify(u)); }catch(e){} } paintUnpub(); }
+// per part: songs changed since the last share file, with what changed: {part:[{name, notes:[…]}]}
+function unpubGet(){ let u={}; try{ u=JSON.parse(localStorage.getItem('pc-unpub')||'{}')||{}; }catch(e){}
+  for(const p in u) u[p]=(u[p]||[]).map(x=>typeof x==='string'?{name:x,notes:[]}:x); return u; }   // older versions kept only names
+function unpubMark(part,name,note){ if(!part||!name||!isOwnerPart(part)) return; const u=unpubGet(), l=u[part]||[]; let e=l.find(x=>x.name===name); if(!e){ e={name,notes:[]}; l.push(e); }
+  note=note||'your own edits'; const had=e.notes.includes(note); if(!had||note!=='your own edits'){ if(!had) e.notes.push(note); u[part]=l; try{ localStorage.setItem('pc-unpub',JSON.stringify(u)); }catch(x){} } paintUnpub(); }
 function unpubClear(part){ const u=unpubGet(); if(u[part]){ delete u[part]; try{ localStorage.setItem('pc-unpub',JSON.stringify(u)); }catch(e){} } paintUnpub(); }
 function paintUnpub(){ const u=unpubGet(), mine=Object.keys(u).filter(p=>S.parts.includes(p)&&u[p].length), here=u[S.part]||[], el=$('#unpubNote'); if(!el) return;
   $('#unpubDot').hidden=!mine.length||!sugKey();
   if(!here.length){ el.hidden=true; return; } el.hidden=false;
-  el.innerHTML='<b>Not published yet:</b> '+here.length+' song'+(here.length>1?'s':'')+' in '+esc(S.part)+' changed since your last share file ('+here.map(esc).join(', ')+'). Make the share file and upload it so the choir gets the changes.'+(mine.length>1?' Other parts with changes: '+mine.filter(p=>p!==S.part).map(esc).join(', ')+'.':''); }
+  const songLi=e=>{ const n=e.notes.slice(0,6); return '<li><b>'+esc(e.name)+'</b>'+(n.length?': '+n.map(esc).join('; ')+(e.notes.length>6?'; and '+(e.notes.length-6)+' more':''):'')+'</li>'; };
+  el.innerHTML='<b>Not published yet</b> in '+esc(S.part)+' (changed since your last share file):<ul style="margin:6px 0 6px 18px;padding:0">'+here.map(songLi).join('')+'</ul>Make the share file and upload it so the choir gets the changes.'+(mine.length>1?' Other parts with changes: '+mine.filter(p=>p!==S.part).map(esc).join(', ')+'.':''); }
 const curSongName=()=>{ const m=libMetaCache&&S.cur&&libMetaCache.find(x=>x.id===S.cur.libId); return m?m.name:null; };
 function ownerParts(){ try{ return JSON.parse(localStorage.getItem('pc-owner-parts')||'[]'); }catch(e){ return []; } }
 function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
@@ -1478,7 +1482,7 @@ async function restoreLibrary(file,out,askBig){
       if(cur&&cur.delBacks&&!restoreBacks()) rec.delBacks=cur.delBacks;   // keep remembering what you deleted
       if(cur) rec.id=cur.id;
       if(shared&&rec.contour) rec.base={updated:rec.updated,contour:Float32Array.from(rec.contour),lyrics:rec.lyrics.map(l=>({t:l.t,text:l.text}))};   // the shared version: suggestions are made against it
-      await libPutRaw(rec); if(cur){ updated++; updIds.push(cur.id); } else { added++; const dl=delSongs(); if(dl.includes(m.uid)) setDelSongs(dl.filter(u=>u!==m.uid)); }
+      await libPutRaw(rec); if(shared) markPublished(m.uid); if(cur){ updated++; updIds.push(cur.id); } else { added++; const dl=delSongs(); if(dl.includes(m.uid)) setDelSongs(dl.filter(u=>u!==m.uid)); }
     }
     let reordered=false; if(Array.isArray(man.order)&&man.order.length){ // the sharer's running order
       const all=await libList(), part=man.part, mine=sortSongs(all.filter(x=>partOf(x)===part)), byU={}; mine.forEach(x=>{ if(x.uid) byU[x.uid]=x; });
@@ -2056,6 +2060,12 @@ const newSugId=()=>Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>'abc
 // where the inbox is: links.json "_suggest" (remembered), or typed in Settings by the moderator
 function sugUrl(){ try{ return (localStorage.getItem('pc-sugurl')||'').trim(); }catch(e){ return ''; } }
 function sugKey(){ try{ return localStorage.getItem('pc-sugkey')||''; }catch(e){ return ''; } }
+// an update arrived for this song: suggestions the moderator had already accepted are now in it
+// accepted after an update already arrived: if that update came after the suggestion and the song now matches it, it is already in
+async function checkAlreadyPublished(l){ const recs=await libList();
+  for(const x of l){ if(x.pub||!(x.status==='accepted'||x.status==='partly')) continue; const r=recs.find(y=>y.uid===x.uid); if(!r||!r.base) continue;
+    if(r.base.updated>x.at&&(x.status==='partly'||!diffCount(songDiff(r,null)))) x.pub=true; } }
+function markPublished(uid){ const l=sugList(); let ch=false; l.forEach(x=>{ if(x.uid===uid&&(x.status==='accepted'||x.status==='partly')&&!x.pub){ x.pub=true; ch=true; } }); if(ch) sugListSave(l); }
 function sugList(){ try{ return JSON.parse(localStorage.getItem('pc-sugs')||'[]'); }catch(e){ return []; } }
 function sugListSave(l){ try{ localStorage.setItem('pc-sugs',JSON.stringify(l.slice(0,200))); }catch(e){} }
 function sugQueue(){ try{ return JSON.parse(localStorage.getItem('pc-sugq')||'[]'); }catch(e){ return []; } }
@@ -2109,7 +2119,7 @@ async function flushSugQueue(){ const q=sugQueue(); if(!q.length) return; const 
   for(const it of q){ try{ await sugPost(it.url,it.body); const x=l.find(s=>s.id===it.body.id); if(x) x.status='sent'; }catch(e){ if(!/too big|bad|empty/.test(e.message||'')) left.push(it); } }
   sugQueueSave(left); sugListSave(l); }
 async function pollSugStatus(){ const url=sugUrl(); if(!url) return; await flushSugQueue(); const l=sugList(), open=l.filter(s=>s.status==='sent'); if(!open.length){ paintSuggest(); return; }
-  try{ const j=await sugGet(url,{action:'status',ids:open.map(s=>s.id).join(',')}); let ch=false; const declined=[]; open.forEach(s=>{ const st=j.status[s.id]; if(st&&st!=='new'&&st!==s.status){ s.status=st; ch=true; if(st==='rejected') declined.push(s); } }); if(ch){ sugListSave(l); for(const s of declined) await undoDeclined(s); renderLib(); } }catch(e){}
+  try{ const j=await sugGet(url,{action:'status',ids:open.map(s=>s.id).join(',')}); let ch=false; const declined=[]; open.forEach(s=>{ const st=j.status[s.id]; if(st&&st!=='new'&&st!==s.status){ s.status=st; ch=true; if(st==='rejected') declined.push(s); } }); if(ch){ await checkAlreadyPublished(l); sugListSave(l); for(const s of declined) await undoDeclined(s); renderLib(); } }catch(e){}
   paintSuggest(); }
 // the moderator did not use a suggestion: put the member's copy back to the shared version where it still holds what was sent (newer edits stay)
 async function undoDeclined(entry){
@@ -2127,7 +2137,7 @@ async function undoDeclined(entry){
   setStatus('The moderator did not use your suggestion for '+rec.name+', so your copy is back to the shared version.');
 }
 const SUG_WORD={sent:'Suggestion sent',queued:'Suggestion waiting for a connection',accepted:'✓ Suggestion accepted',partly:'✓ Suggestion partly used',rejected:'Suggestion not used'};
-function sugStateFor(uid){ const s=sugList().find(x=>x.uid===uid); return s?SUG_WORD[s.status]||'':''; }
+function sugStateFor(uid){ const s=sugList().find(x=>x.uid===uid); if(!s) return ''; if(s.status==='accepted'||s.status==='partly') return (s.status==='accepted'?'✓ Suggestion accepted':'✓ Suggestion partly used')+(s.pub?' and published':', comes with the next update'); return SUG_WORD[s.status]||''; }
 // editor: "Suggest my edits (n)" for songs from a share link with unsent changes
 S.curBase=null;
 async function refreshCurBase(rec){ S.curBase=null; if(S.cur&&S.cur.libId!=null){ const r=rec&&rec.id===S.cur.libId?rec:await libGet(S.cur.libId); if(r&&memberBase(r,partOf(r))) S.curBase={id:r.id,uid:r.uid,base:r.base,sent:r.sent||null,sentHash:r.sentHash,hop:r.hop,t0:r.t0,tt:r.tt,name:r.name}; } paintSuggest(); }
@@ -2217,7 +2227,7 @@ async function sugFinish(){ const s=S.sug; if(!s) return; if(S.playing) stop();
   if(r.value!=='ok') return;
   const status=acc===0?'rejected':acc===s.changes.length?'accepted':'partly';
   if(await sugSetStatus(s.it,status)){ S.sug=null; $('#sugBar').hidden=true;
-    if(acc&&S.cur.libId!=null){ unpubMark(S.curPart,curSongName()); await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); }
+    if(acc&&S.cur.libId!=null){ unpubMark(S.curPart,curSongName(),'accepted suggestion from '+new Date(s.it.received).toLocaleDateString()+' ('+acc+' of '+s.changes.length+': '+s.changes.filter(c=>c.state==='acc').map(sugWhat).slice(0,3).join(', ')+(acc>3?', …':'')+')'); await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); }
     draw(); setStatus(acc?'Saved: '+acc+' of '+s.changes.length+' suggested changes accepted. Make the share file again so everyone gets them.':'Done: the suggestion was declined.'); if(S.inbox.length) setTimeout(openInbox,300); } }
 async function sugCancel(){ const s=S.sug; if(!s) return; if(S.playing) stop();
   const acc=s.changes.filter(c=>c.state==='acc').length;
