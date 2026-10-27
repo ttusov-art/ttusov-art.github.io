@@ -337,6 +337,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .hint-row{flex:1 1 100%;min-width:0;flex-direction:column;align-items:flex-start}
 .ed-lyr{display:flex;flex-direction:column;gap:6px;margin-top:8px;flex:1 1 100%;min-width:0;max-width:100%}
 .ed-lyr .lyr-list{min-width:0}
+.fold>summary .unpub-dot{color:#b45309;font-weight:600}
 .lyr-pending{font-size:13px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,#f59e0b 16%,var(--surface));border:1px solid color-mix(in srgb,#f59e0b 45%,var(--line));color:var(--fg)}
 .lyr-body textarea{font:inherit;font-size:15px;line-height:1.5;width:100%;min-height:140px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);resize:vertical}
 .lyr-list{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px}
@@ -689,7 +690,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
   </section>
 
   <details class="panel fold" id="leadPanel">
-    <summary>Admin</summary>
+    <summary>Admin<span class="count unpub-dot" id="unpubDot" hidden>· changes to share</span></summary>
     <div class="fold-body">
       <span class="small">Sharing songs with your choir and checking members' suggestions. Choir members don't need anything here.</span>
     <div class="share-box" id="adminLock">
@@ -737,6 +738,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     </div>
     <div class="share-box">
       <b>Share with your choir</b>
+      <span class="lyr-pending" id="unpubNote" hidden></span>
       <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
       <span class="small">1. Tap Make share file. 2. Upload “<span id="shareFile"></span>” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered the songs of this part.</span>
       <span class="small">You can change the file name below; the app remembers it for each part.</span>
@@ -842,7 +844,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 dw';
+const APP_VERSION='2026-10-27 dx';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1380,6 +1382,14 @@ async function openZip(file){
 }
 const f32buf=a=>a?(a instanceof ArrayBuffer?a:Float32Array.from(a).buffer):null;
 // the moderator's device (it makes the share files, or has the review key) is the source: its songs are never treated as members' copies
+function unpubGet(){ try{ return JSON.parse(localStorage.getItem('pc-unpub')||'{}')||{}; }catch(e){ return {}; } }
+function unpubMark(part,name){ if(!part||!name||!isOwnerPart(part)) return; const u=unpubGet(), l=u[part]||[]; if(!l.includes(name)){ l.push(name); u[part]=l; try{ localStorage.setItem('pc-unpub',JSON.stringify(u)); }catch(e){} } paintUnpub(); }
+function unpubClear(part){ const u=unpubGet(); if(u[part]){ delete u[part]; try{ localStorage.setItem('pc-unpub',JSON.stringify(u)); }catch(e){} } paintUnpub(); }
+function paintUnpub(){ const u=unpubGet(), mine=Object.keys(u).filter(p=>S.parts.includes(p)&&u[p].length), here=u[S.part]||[], el=$('#unpubNote'); if(!el) return;
+  $('#unpubDot').hidden=!mine.length||!sugKey();
+  if(!here.length){ el.hidden=true; return; } el.hidden=false;
+  el.innerHTML='<b>Not published yet:</b> '+here.length+' song'+(here.length>1?'s':'')+' in '+esc(S.part)+' changed since your last share file ('+here.map(esc).join(', ')+'). Make the share file and upload it so the choir gets the changes.'+(mine.length>1?' Other parts with changes: '+mine.filter(p=>p!==S.part).map(esc).join(', ')+'.':''); }
+const curSongName=()=>{ const m=libMetaCache&&S.cur&&libMetaCache.find(x=>x.id===S.cur.libId); return m?m.name:null; };
 function ownerParts(){ try{ return JSON.parse(localStorage.getItem('pc-owner-parts')||'[]'); }catch(e){ return []; } }
 function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
 // backings you deleted on this device: updates bring them back only when "Restore deleted backings" is on
@@ -1415,7 +1425,7 @@ async function backupLibrary(fixedName,btn0,txt0){
     entries.unshift({name:'part-coach-backup.json',data:new TextEncoder().encode(JSON.stringify(man))});
     const zip=await zipBlob(entries,p=>{ txt.textContent='Preparing the backup… '+Math.round(p*100)+'%'; });
     const d=new Date(), name=fixedName||'Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
-    const a=document.createElement('a'); a.href=URL.createObjectURL(zip); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },5000);
+    const a=document.createElement('a'); a.href=URL.createObjectURL(zip); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },5000); if(sharePart) unpubClear(sharePart);
     txt.textContent='Saved '+name+' ('+fmtMB(zip.size)+', '+songs.length+' song'+(songs.length>1?'s':'')+') to your downloads.';
   }catch(err){ txt.textContent='Backup failed: '+((err&&err.message)||'unknown error')+'.'; }
   finally{ btn.disabled=false; }
@@ -1506,7 +1516,7 @@ function renderParts(songs){
   const sel=$('#partSel'); sel.innerHTML=''; S.parts.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n+' ('+songs.filter(x=>partOf(x)===n).length+')'; sel.appendChild(o); }); sel.value=S.part;
   $('#partDel').disabled=S.parts.length<2||songs.some(x=>partOf(x)===S.part); $('#partRange').value=rangeKey(S.part); renderParts._last=true;
   $('#shortEx').textContent=shortUrlFor(S.part); $('#sharePart').textContent=S.part; $('#shareFile').textContent=shareFileName(); if(document.activeElement!==$('#shareName')) $('#shareName').value=shareFileName().replace(/\.zip$/i,'');
-  const ln=shareLinks()[S.part]||''; if(document.activeElement!==$('#shareIn')) $('#shareIn').value=ln; $('#shareText').textContent='';
+  paintUnpub(); const ln=shareLinks()[S.part]||''; if(document.activeElement!==$('#shareIn')) $('#shareIn').value=ln; $('#shareText').textContent='';
 }
 async function newPart(){ const n=cleanPartName(prompt('Name of the new part (for example Alto 1):','')); if(!n) return; if(S.parts.includes(n)){ setPart(n); return; } setPart(n); setStatus('New part '+n+'. Songs you separate or add now go into it.'); }
 async function renamePart(){
@@ -2207,7 +2217,7 @@ async function sugFinish(){ const s=S.sug; if(!s) return; if(S.playing) stop();
   if(r.value!=='ok') return;
   const status=acc===0?'rejected':acc===s.changes.length?'accepted':'partly';
   if(await sugSetStatus(s.it,status)){ S.sug=null; $('#sugBar').hidden=true;
-    if(acc&&S.cur.libId!=null){ await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); }
+    if(acc&&S.cur.libId!=null){ unpubMark(S.curPart,curSongName()); await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); }
     draw(); setStatus(acc?'Saved: '+acc+' of '+s.changes.length+' suggested changes accepted. Make the share file again so everyone gets them.':'Done: the suggestion was declined.'); if(S.inbox.length) setTimeout(openInbox,300); } }
 async function sugCancel(){ const s=S.sug; if(!s) return; if(S.playing) stop();
   const acc=s.changes.filter(c=>c.state==='acc').length;
@@ -2251,7 +2261,7 @@ function targetEdited(msg){ S.ovwImg=null; paintSuggest();
   S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
   computeViewKeep(); updateSelInfo(); draw();
   if(msg) setStatus(msg);
-  if(S.cur.libId!=null&&!S.sug){ clearTimeout(edSaveTimer); const id=S.cur.libId; edSaveTimer=setTimeout(()=>{ libUpdate(id,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig)}).catch(()=>{}); },500); }
+  if(S.cur.libId!=null&&!S.sug){ unpubMark(S.curPart,curSongName()); clearTimeout(edSaveTimer); const id=S.cur.libId; edSaveTimer=setTimeout(()=>{ libUpdate(id,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig)}).catch(()=>{}); },500); }
 }
 function computeViewKeep(){ if(S.viewManual) return; const {lo,hi}=S.view; computeView(); S.view.lo=Math.min(S.view.lo,lo); S.view.hi=Math.max(S.view.hi,hi); }
 // note used by Fill: the selection's own note if it has one, otherwise the row where the drag started
@@ -2491,7 +2501,7 @@ function timingSummary(){
 function lyrSorted(){ return S.lyrics; }
 let lyrSaveTimer=null;
 function saveLyrics(){
-  if(S.cur.libId==null||S.sug) return;   // while reviewing a suggestion, nothing is saved until Finish is confirmed
+  if(S.cur.libId==null||S.sug) return; unpubMark(S.curPart,curSongName());   // while reviewing a suggestion, nothing is saved until Finish is confirmed
   clearTimeout(lyrSaveTimer);
   lyrSaveTimer=setTimeout(()=>{ libUpdate(S.cur.libId,{lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); },400);
 }
