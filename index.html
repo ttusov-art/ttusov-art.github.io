@@ -594,7 +594,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <label class="small" for="lyrPdfCol">Column from the PDF</label>
         <select id="lyrPdfCol" class="sel" style="flex:1 1 160px;min-width:0"></select>
       </div>
-      <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
       <input id="lyrSnapOn" type="checkbox" checked hidden aria-hidden="true">
     </div>
   </details>
@@ -663,6 +662,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         </select>
         <span class="small">Tap a key on the keyboard left of the pitch lane to hear its note, also while the song plays. Its volume follows the guide tone volume. The recorded grand piano downloads about 1.5 MB the first time (Salamander Grand Piano by Alexander Holm, CC BY 3.0).</span>
       </div>
+      <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
       <div class="field">
         <label for="timMarks">Timing marks on the pitch lane</label>
@@ -838,7 +838,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 ds';
+const APP_VERSION='2026-10-27 dt';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
