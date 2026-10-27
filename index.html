@@ -835,7 +835,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 dp';
+const APP_VERSION='2026-10-27 dq';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -935,7 +935,7 @@ async function pitchLineOf(buf,onProg,rk){
 }
 function songReady(name,label){
   renderSheetBtns(); closeSheet();
-  S.lyrTextHist=[]; $('#lyrCheckNote').hidden=true; S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
+  S.lyrTextHist=[]; S.needTiming=false; $('#lyrCheckNote').hidden=true; S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>scheduleBeatDetect(false),50); setTimeout(()=>scheduleKeyDetect(false),400);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
@@ -2062,6 +2062,7 @@ async function postSuggestion(rec,live){   // anonymous: no name, no note
 }
 async function suggestCurrent(confirmed){
   if(!S.cur||S.cur.libId==null||S.sugSending) return;
+  if(S.needTiming){ setStatus('Lines were added or removed: check their timing first (Tap to time, or the editor buttons), then suggest your edits.',true); return; }
   if(confirmed!==true){ // a mistaken tap should not send anything: ask first
     const cb=S.curBase, d=cb&&S.tM?songDiff(cb,liveOf()):null; if(!d||!diffCount(d)){ setStatus('There are no edits to suggest in this song.'); return; }
     const r=await dlg({title:'Send your edits?',html:'<p class="kv-sub">You made '+esc(diffText(d))+' in '+esc(cb.name||'this song')+'. Are you happy with these changes? Once sent, a suggestion goes to the moderator and can\'t be taken back.</p>',
@@ -2108,7 +2109,7 @@ function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout((
   const cb=S.curBase, both=(fn)=>[[b,st],[$('#lyrSuggest'),$('#lyrSugState')]].forEach(([bb,ss])=>fn(bb,ss));
   if(!cb||!S.tM){ both((bb,ss)=>{ bb.hidden=true; ss.textContent=''; }); $('#lyrDiscard').hidden=true; $('#edLyrDiscard').hidden=true; $('#edDiscard').hidden=true; return; }
   const d=songDiff(cb,liveOf()), n=diffCount(d), unsent=n>0&&hashOf(d)!==cb.sentHash;
-  both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; ss.textContent=unsent?'':sugStateFor(cb.uid); });
+  both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; bb.disabled=!!S.needTiming; bb.title=S.needTiming?'Lines were added or removed: time them first (Tap to time, or the editor buttons)':'Send your edits of this song to the moderator'; ss.textContent=unsent?'':sugStateFor(cb.uid); });
   $('#lyrDiscard').hidden=!(unsent&&d.lyrics.length); $('#edLyrDiscard').hidden=!(unsent&&d.lyrics.length); $('#edDiscard').hidden=!(unsent&&d.notes.length); },150); }   // once sent, nothing to cancel until new edits
 // an update is about to replace songs that have edits not sent yet: ask
 async function askUnsent(recs){
@@ -2399,6 +2400,7 @@ function selectFragmentAt(t){
   S.sel={a:S.tT[a],b:S.tT[b]}; updateSelInfo(); draw();
 }
 function setEditMode(on){
+  if(on) timingTried();
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
   $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
   if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime());
@@ -2487,7 +2489,7 @@ function renderLyrics(fillText){
     const mk=(label,title,fn)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; b.title=title; b.setAttribute('aria-label',title); b.addEventListener('click',fn); row.appendChild(b); };
     mk('−',lyrSnapping()?'Move line half a beat earlier':'Move line 0.2 s earlier',()=>nudgeLine(i,-1));
     mk('+',lyrSnapping()?'Move line half a beat later':'Move line 0.2 s later',()=>nudgeLine(i,1));
-    mk('Now','Set line start to the playhead',()=>{ S.lyrics[i].t=lyrT(songTime()); lyrChanged(); });
+    mk('Now','Set line start to the playhead',()=>{ timingTried(); S.lyrics[i].t=lyrT(songTime()); lyrChanged(); });
     mk('▶','Play from just before this line',()=>{ if(S.lyrics[i].t!=null) seek(Math.max(0,S.lyrics[i].t-1.5)); if(!S.playing&&!S.review) play(); });
     list.appendChild(row);
   });
@@ -2497,7 +2499,7 @@ function renderLyrics(fillText){
 function lyrSnapping(){ return !!S.beat; }   // lyric lines always snap to the beat grid
 function lyrStep(){ return lyrSnapping()?beatP()/2:0.2; }
 function lyrT(t){ if(lyrSnapping()){ const d=snapDiv(); t=gridAt(t,d); if(t<0) t+=beatP(t)/d; } return Math.max(0,Math.round(t*100)/100); }
-function nudgeLine(i,dir){ const L=S.lyrics[i]; if(L.t==null) return; L.t=lyrT(L.t+dir*lyrStep()); lyrChanged(); }
+function nudgeLine(i,dir){ timingTried(); const L=S.lyrics[i]; if(L.t==null) return; L.t=lyrT(L.t+dir*lyrStep()); lyrChanged(); }
 function snapAllLines(){ if(!lyrSnapping()) return; S.lyrics.forEach(L=>{ if(L.t!=null) L.t=lyrT(L.t); }); lyrChanged(); setStatus('All timed lines moved to the nearest beat or half beat.'); }
 function renderLyrSnap(){
   $('#lyrSnapAll').disabled=!S.beat||!S.lyrics.length;
@@ -2758,7 +2760,7 @@ function applyLyricText(){
   const old=S.lyrics, hadTimes=old.some(l=>l.t!=null);
   if(lines.join('\n')!==old.map(l=>l.text).join('\n')){ (S.lyrTextHist=S.lyrTextHist||[]).push(old.map(l=>({t:l.t,text:l.text}))); if(S.lyrTextHist.length>20) S.lyrTextHist.shift(); }
   const ops=alignLines(old.map(l=>l.text),lines), added=ops.filter(o=>o.op==='add').length, removed=ops.filter(o=>o.op==='del').length;
-  const cn=$('#lyrCheckNote'); if(hadTimes&&(added||removed)){ cn.innerHTML=(added?added+' line'+(added>1?'s':'')+' added':'')+(added&&removed?' and ':'')+(removed?removed+' line'+(removed>1?'s':'')+' removed':'')+'. <b>Check the timing</b> (Tap to time, or drag the labels on the graph) before you '+(isOwnerPart(S.curPart||S.part)?'share the song.':'suggest your edits.'); cn.hidden=false; } else cn.hidden=true;
+  const cn=$('#lyrCheckNote'); if(hadTimes&&(added||removed)){ cn.innerHTML=(added?added+' line'+(added>1?'s':'')+' added':'')+(added&&removed?' and ':'')+(removed?removed+' line'+(removed>1?'s':'')+' removed':'')+'. <b>Check the timing</b> (Tap to time, or drag the labels on the graph) before you '+(isOwnerPart(S.curPart||S.part)?'share the song.':'suggest your edits.'); cn.hidden=false; S.needTiming=true; paintSuggest(); } else cn.hidden=true;
   S.lyrics=lines.map(text=>({text,t:null}));
   for(const o of ops) if(o.op==='same'||o.op==='chg') S.lyrics[o.j].t=old[o.i].t;   // unchanged and reworded lines keep their timing
   if(S.lyrics.length&&!hadTimes&&S.lyrics.every(l=>l.t==null)&&S.tT){ autoPlace(true); return; }
@@ -2809,7 +2811,7 @@ function autoPlace(silent){
 // tap-to-time
 function startTap(){
   if(lyrTextDiffers()){ applyLyricText(); setStatus('Your text changes are now used.'); }   // typed lines are used before timing
-  $('#lyrCheckNote').hidden=true;
+  $('#lyrCheckNote').hidden=true; timingTried();
   if(!S.lyrics.length) return;
   let i=S.lyrics.findIndex(l=>l.t==null); if(i<0) i=0;
   const prev=i>0?S.lyrics[i-1].t:null, from=prev!=null?Math.max(0,prev-1):Math.max(0,(S.lyrics[i].t!=null?S.lyrics[i].t:0)-4);
@@ -2850,6 +2852,7 @@ function tapFollow(){ if(!S.tap||S.playing) return; const pos=S.pos+0.001; let j
   S.lyrics.forEach((l,k)=>{ if(l.t!=null&&l.t<=pos) j=k; });
   const i=Math.min(S.lyrics.length,j+1); if(i===S.tap.i) return;
   S.tap.i=i; $('#lyrSkip').disabled=i>=S.lyrics.length; tapBtns(); S.lyrBarKey=null; updateLyricBar(S.pos); }
+function timingTried(){ if(S.needTiming){ S.needTiming=false; $('#lyrCheckNote').hidden=true; paintSuggest(); } }
 function tapBtns(){ if(!S.tap) return; $('#lyrBack').disabled=S.tap.i<=0; $('#lyrPlace').disabled=S.tap.i>=S.lyrics.length; }
 // Back: step to the previous line and keep every time as it is (the mirror of Skip); tap Place here to re-time it
 function tapBack(){
@@ -3534,7 +3537,7 @@ canvas.addEventListener('pointerdown',e=>{
     if(x>=c.x0-4&&x<=c.x1+4&&y>=c.y0-4&&y<=c.y1){ e.preventDefault(); lyricToPlayhead(); return; } }
   const lh=touchPts.size===0&&!kb?lyricHitAt(e):null;
   if(lh){ const L=S.lyrics[lh.i], prev=S.lyrics.slice(0,lh.i).filter(l=>l.t!=null).pop(), next=S.lyrics.slice(lh.i+1).find(l=>l.t!=null);
-    S.lyrDrag={i:lh.i,x0:e.clientX,t0:L.t,min:prev?prev.t+0.05:0,max:next?next.t-0.05:S.dur}; canvas.setPointerCapture(e.pointerId); e.preventDefault(); draw(); return; }
+    timingTried(); S.lyrDrag={i:lh.i,x0:e.clientX,t0:L.t,min:prev?prev.t+0.05:0,max:next?next.t-0.05:S.dur}; canvas.setPointerCapture(e.pointerId); e.preventDefault(); draw(); return; }
   if(kb||(e.clientX-canvas.getBoundingClientRect().left<LABELW&&touchPts.size===0)){
     const first=!kb; if(!kb) kb={pts:new Map(),moved:false}; kb.pts.set(e.pointerId,e.clientY); kbStart(); canvas.setPointerCapture(e.pointerId); e.preventDefault();
     if(first) keyNoteOn(laneNoteAt(e.clientY)); else keyNoteOff(true); return; }
@@ -3639,7 +3642,7 @@ async function confirmPending(what){
     if(r.value==='send'){ await suggestCurrent(true); const d2=songDiff(S.curBase,liveOf()); if(diffCount(d2)&&hashOf(d2)!==S.curBase.sentHash) return false; }   // not sent (no inbox?): keep working
     else if(r.value==='cancel'){ S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); pushUndo();
       const base=toF32(cb.base.contour), out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out;
-      S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged(); targetEdited('Your edits were cancelled: the song is back as the moderator shared it.'); }
+      S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); S.needTiming=false; $('#lyrCheckNote').hidden=true; $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged(); targetEdited('Your edits were cancelled: the song is back as the moderator shared it.'); }
     else return false;
   }
   return true;
@@ -3693,7 +3696,7 @@ function discardLyrics(e){ const b=e.currentTarget, cb=S.curBase; if(!cb) return
   if(!b.dataset.armed){ b.dataset.armed='1'; const lbl=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.textContent='Tap again to cancel your lyric edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=lbl; b.classList.remove('danger'); } },4000); return; }
   delete b.dataset.armed; b.textContent=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.classList.remove('danger');
   S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); if(S.undo.length>30) S.undo.shift();
-  S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged();
+  S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); S.needTiming=false; $('#lyrCheckNote').hidden=true; $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged();
   setStatus('Your lyric edits were removed: the lyrics are back as the moderator shared them.'); }
 $('#lyrDiscard').addEventListener('click',discardLyrics);
 $('#edLyrDiscard').addEventListener('click',discardLyrics);
@@ -3849,7 +3852,7 @@ function lyrPendingCheck(show){ const d=lyrTextDiffers(), el=$('#lyrPending'), u
   if(!d){ el.hidden=true; return; } if(show) el.hidden=false; }
 // Undo: first the typing that is not used yet; then, step by step, each "Use these lines" (with the timing the lines had)
 $('#lyrTextUndo').addEventListener('click',()=>{ if(lyrTextDiffers()){ $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrPendingCheck(false); setStatus('Text changes undone.'); return; }
-  const h=S.lyrTextHist&&S.lyrTextHist.pop(); if(!h) return; S.lyrics=h; $('#lyrText').value=h.map(l=>l.text).join('\n'); $('#lyrCheckNote').hidden=true; lyrChanged(); setStatus('The lyric lines are back as they were.'); });
+  const h=S.lyrTextHist&&S.lyrTextHist.pop(); if(!h) return; S.lyrics=h; $('#lyrText').value=h.map(l=>l.text).join('\n'); $('#lyrCheckNote').hidden=true; S.needTiming=false; lyrChanged(); setStatus('The lyric lines are back as they were.'); });
 $('#lyrText').addEventListener('focusout',()=>setTimeout(()=>{ if(document.activeElement!==$('#lyrText')) lyrPendingCheck(true); },250));
 $('#lyrText').addEventListener('input',()=>lyrPendingCheck(false));
 $('#lyrAuto').addEventListener('click',()=>autoPlace(false));
