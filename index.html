@@ -868,7 +868,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 ei';
+const APP_VERSION='2026-10-27 ej';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3098,11 +3098,21 @@ function calPitchTrack(cal,sr){
     if(best<0){ out.push([t,NaN]); continue; } let tt=best; const a=cm[best-1],b=cm[best],c=cm[best+1],den=a-2*b+c; if(den>0) tt=best+0.5*(a-c)/den; out.push([t,f2m(fs/tt)]); }
   return out; }
 // when did the voice arrive on each note? (any octave counts) -> median lateness and how steady it was
+// first the overall lateness is found by sliding the whole sung line along the scale (0 to 1.5 s late, so even slow
+// Bluetooth headphones fit); then each note is timed near that lateness
 function calAnalyse(track,notes,times){
   if(!track.length) return {ok:false,msg:'No sound came from the microphone.'};
-  const pc=(a,b)=>{ const d=((a-b)%12+18)%12-6; return Math.abs(d); }, offs=[];
+  const pc=(a,b)=>{ const d=((a-b)%12+18)%12-6; return Math.abs(d); }, T0=track[0][0], dt=0.01, n=track.length;
+  const voiced=track.filter(x=>!isNaN(x[1])).length; if(voiced<20) return {ok:false,msg:'The microphone heard almost no singing.'};
+  const step=times.length>1?times[1]-times[0]:0.75, endT=times[times.length-1]+step;
+  const want=t=>{ if(t<times[0]||t>=endT) return null; return notes[Math.min(notes.length-1,Math.floor((t-times[0])/step))]; };
+  let best=null;
+  for(let lag=0;lag<=1.5;lag+=0.01){ let sc=0;
+    for(const [t,v] of track){ const w=want(t-lag); if(w==null){ if(!isNaN(v)) sc-=0.5; continue; } if(isNaN(v)) continue; sc+=pc(v,w)<=0.6?1:-1; }
+    if(!best||sc>best.sc) best={lag,sc}; }
+  const lag=best.lag, offs=[];
   notes.forEach((mk,k)=>{ const tk=times[k], prev=k?notes[k-1]:null;
-    for(let i=0;i<track.length;i++){ const [t,v]=track[i]; if(t<tk-0.35) continue; if(t>tk+0.65) break; if(isNaN(v)) continue;
+    for(let i=0;i<n;i++){ const [t,v]=track[i]; if(t<tk+lag-0.3) continue; if(t>tk+lag+0.3) break; if(isNaN(v)) continue;
       const near=prev==null?pc(v,mk)<=1:pc(v,mk)<pc(v,prev)&&pc(v,mk)<=1.2; if(!near) continue;
       let ok=true; for(let j=1;j<=3;j++){ const q=track[i+j]; if(!q||isNaN(q[1])||(prev==null?pc(q[1],mk)>1:pc(q[1],mk)>=pc(q[1],prev))){ ok=false; break; } }
       if(ok){ offs.push(t-tk); break; } } });
@@ -3111,7 +3121,7 @@ function calAnalyse(track,notes,times){
   return {ok:true,ms:Math.round(med*1000),spread:Math.round(dev*1000),n:offs.length}; }
 async function calRun(kind,ui){
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
-  const notes=calScale(), dest=S.limiter, t0=ctx.currentTime+0.6, start=t0+CAL_COUNT*CAL_STEP, times=notes.map((_,k)=>start+k*CAL_STEP), end=start+notes.length*CAL_STEP+0.8;
+  const notes=calScale(), dest=S.limiter, t0=ctx.currentTime+0.6, start=t0+CAL_COUNT*CAL_STEP, times=notes.map((_,k)=>start+k*CAL_STEP), end=start+notes.length*CAL_STEP+1.5;   // room for slow (Bluetooth) headphones
   S.cal={chunks:[],from:start-0.5,to:end};
   if(kind==='sound'){ for(let i=0;i<CAL_COUNT;i++) calClick(t0+i*CAL_STEP,dest); notes.forEach((m,k)=>calNote(m,times[k],CAL_STEP*0.9,dest)); }
   await new Promise(res=>{ const keys=ui.querySelectorAll('.cal-piano rect'), dots=ui.querySelectorAll('.cal-count i'), bar=ui.querySelector('.cal-prog i');
@@ -3149,8 +3159,8 @@ async function openCalibration(){
     const V=await run('picture','Step 2: watching…','Sing each note when its key lights up.'); if(V==='x'||V==null){ close(); return; }
     if(!V.ok){ const r=await show('Step 2 did not work','<p class="kv-sub">'+esc(V.msg)+' Sing a bit louder and start each note as its key lights up.</p>',[{label:'Start again',value:'again',primary:true},{label:'Cancel',value:null}]); if(r!=='again'){ close(); return; } continue; }
     // results
-    const dc=Math.max(0,Math.min(800,Math.round(A.ms/10)*10)), pd=Math.max(0,Math.min(600,Math.round((A.ms-V.ms)/10)*10));
-    const r=await show('Results','<div class="cal-res"><div><span>Delay compensation</span><b>'+dc+' ms</b><small>'+A.n+' of 15 notes, '+steady(A)+'</small></div><div><span>Picture delay</span><b>'+pd+' ms</b><small>'+V.n+' of 15 notes, '+steady(V)+'</small></div></div><p class="kv-sub">Now: delay compensation '+Math.round(S.delay*1000)+' ms, picture delay '+Math.round((S.pdelay||0)*1000)+' ms.</p>',
+    const dc=Math.max(0,Math.min(800,Math.round(A.ms/10)*10)), pd=Math.max(0,Math.min(600,dc,Math.round((A.ms-V.ms)/10)*10)), ahead=V.ms<-60;
+    const r=await show('Results','<div class="cal-res"><div><span>Delay compensation</span><b>'+dc+' ms</b><small>'+A.n+' of 15 notes, '+steady(A)+'</small></div><div><span>Picture delay</span><b>'+pd+' ms</b><small>'+V.n+' of 15 notes, '+steady(V)+'</small></div></div>'+(ahead?'<p class="kv-sub warn">In step 2 you sang ahead of the keys ('+(-V.ms)+' ms early), so the picture delay may be off. For a better value, try again and start each note only when its key lights up.</p>':'')+'<p class="kv-sub">The measured values replace the current ones (they are not added). Now: delay compensation '+Math.round(S.delay*1000)+' ms, picture delay '+Math.round((S.pdelay||0)*1000)+' ms.</p>',
       [{label:'Use these',value:'use',primary:true},{label:'Try again',value:'again'},{label:'Cancel',value:null}]);
     if(r==='again') continue;
     if(r==='use'){ setDelay(dc); setPDelay(pd,true); $('#calText').textContent='Measured: delay compensation '+dc+' ms, picture delay '+pd+' ms.'; setStatus('Delays set: delay compensation '+dc+' ms, picture delay '+pd+' ms.'); }
