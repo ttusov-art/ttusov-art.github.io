@@ -662,7 +662,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="field">
         <label for="delay">Delay compensation</label>
-        <div class="field-row"><input id="delay" type="range" min="0" max="800" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
+        <div class="field-row"><input id="delay" type="range" min="0" max="1500" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
       </div>
       <div class="field">
         <label for="pdelay">Picture delay</label>
@@ -875,7 +875,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 ek';
+const APP_VERSION='2026-10-27 el';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3118,11 +3118,12 @@ function calAnalyse(track,notes,times){
     for(const [t,v] of track){ const w=want(t-lag); if(w==null){ if(!isNaN(v)) sc-=0.5; continue; } if(isNaN(v)) continue; sc+=pc(v,w)<=0.6?1:-1; }
     if(!best||sc>best.sc) best={lag,sc}; }
   const lag=best.lag, offs=[], hits=notes.map(()=>false);
+  let ctr=lag;
   notes.forEach((mk,k)=>{ const tk=times[k], prev=k?notes[k-1]:null;
-    for(let i=0;i<n;i++){ const [t,v]=track[i]; if(t<tk+lag-0.35) continue; if(t>tk+lag+0.35) break; if(isNaN(v)) continue;
+    for(let i=0;i<n;i++){ const [t,v]=track[i]; if(t<tk+ctr-0.35) continue; if(t>tk+ctr+0.35) break; if(isNaN(v)) continue;
       const near=prev==null?pc(v,mk)<=1.5:pc(v,mk)<pc(v,prev)&&pc(v,mk)<=1.5; if(!near) continue;
       let ok=true; for(let j=1;j<=2;j++){ const q=track[i+j]; if(!q||isNaN(q[1])||(prev==null?pc(q[1],mk)>1.5:pc(q[1],mk)>=pc(q[1],prev))){ ok=false; break; } }
-      if(ok){ offs.push(t-tk); hits[k]=true; break; } } });
+      if(ok){ offs.push(t-tk); hits[k]=true; ctr=ctr*0.5+(t-tk)*0.5; break; } } });
   const sung=track.filter(x=>x[0]>=times[0]+lag-0.2&&x[0]<=endT+lag), diag={hits,voiced:Math.round(100*sung.filter(x=>!isNaN(x[1])).length/Math.max(1,sung.length)),level:Math.max(0,...sung.map(x=>x[2]||0)),lag:Math.round(lag*1000)};
   if(offs.length<8) return {ok:false,msg:offs.length?'Only '+offs.length+' of the 15 notes were clear enough.':'The singing could not be followed.',n:offs.length,diag};
   const srt=offs.slice().sort((a,b)=>a-b), med=srt[srt.length>>1], dev=offs.map(o=>Math.abs(o-med)).sort((a,b)=>a-b)[offs.length>>1];
@@ -3165,21 +3166,26 @@ async function openCalibration(){
   const scaleTxt='C'+(Math.floor(base/12)-1)+' up to C'+Math.floor(base/12)+' and back down';
   if(await show('Measure delay','<p class="kv-sub">Two short steps of about 15 seconds. You sing a C major scale ('+scaleTxt+'): first together with the sound, then together with the picture. This sets both the delay compensation and the picture delay. Use the headphones you practise with, so the microphone hears only you.</p>'+calMicCheckHtml(),[{label:'Start measuring',value:'go',primary:true},{label:'Cancel',value:null}],true,true)!=='go'){ close(); return; }
   if(!S.mic){ const ok=await startMic(); if(!ok){ await show('Measure delay','<p class="kv-sub">The microphone is needed for this. Allow it and try again.</p>',[{label:'Close',value:null}]); close(); return; } $('#micOn').checked=true; paintMic(); }
+  let A=null, V=null, todo='both';
+  const step1=async()=>{ for(;;){
+      if(await show('Step 1 of 2: follow the sound','<p class="kv-sub"><b>Close your eyes and follow only the sound.</b> After 4 clicks the piano plays the scale up and back down. Sing each note together with the piano (“la” is fine).</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go') return false;
+      if(S.muteAll) setMuteAll(false);
+      const r=await run('sound','Step 1: listening…','Eyes closed: sing along with the piano.'); if(r==='x'||r==null) return false;
+      if(r.ok){ A=r; return true; }
+      if(await show('Step 1 did not work','<p class="kv-sub">'+esc(r.msg)+' Sing each note clearly and stay with the piano.</p>'+calDiagHtml(r,notes)+calMicCheckHtml(),[{label:'Redo step 1',value:'again',primary:true},{label:'Cancel',value:null}])!=='again') return false; } };
+  const step2=async()=>{ for(;;){
+      if(await show('Step 2 of 2: follow the picture','<p class="kv-sub"><b>Watch the keys and follow only the picture.</b> There is no sound now. After 4 dots the keys light up one by one, up and back down. Sing each note the moment its key lights up, all the way down to the last C.</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go') return false;
+      const r=await run('picture','Step 2: watching…','Sing each note when its key lights up, up and back down.'); if(r==='x'||r==null) return false;
+      if(r.ok){ V=r; return true; }
+      if(await show('Step 2 did not work','<p class="kv-sub">'+esc(r.msg)+' Start each note as its key lights up, and keep going all the way down.</p>'+calDiagHtml(r,notes)+calMicCheckHtml(),[{label:'Redo step 2',value:'again',primary:true},{label:'Cancel',value:null}])!=='again') return false; } };
   for(;;){
-    // step 1: sound only
-    if(await show('Step 1 of 2: follow the sound','<p class="kv-sub"><b>Close your eyes and follow only the sound.</b> After 4 clicks the piano plays the scale up and back down. Sing each note together with the piano (“la” is fine).</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go'){ close(); return; }
-    if(S.muteAll) setMuteAll(false);
-    const A=await run('sound','Step 1: listening…','Eyes closed: sing along with the piano.'); if(A==='x'||A==null){ close(); return; }
-    if(!A.ok){ const r=await show('Step 1 did not work','<p class="kv-sub">'+esc(A.msg)+' Sing each note clearly and stay with the piano.</p>'+calDiagHtml(A,notes)+calMicCheckHtml(),[{label:'Try again',value:'again',primary:true},{label:'Cancel',value:null}]); if(r!=='again'){ close(); return; } continue; }
-    // step 2: picture only
-    if(await show('Step 2 of 2: follow the picture','<p class="kv-sub"><b>Watch the keys and follow only the picture.</b> There is no sound now. After 4 dots the keys light up one by one, up and back down: sing each note the moment its key lights up.</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go'){ close(); return; }
-    const V=await run('picture','Step 2: watching…','Sing each note when its key lights up.'); if(V==='x'||V==null){ close(); return; }
-    if(!V.ok){ const r=await show('Step 2 did not work','<p class="kv-sub">'+esc(V.msg)+' Start each note as its key lights up.</p>'+calDiagHtml(V,notes)+calMicCheckHtml(),[{label:'Start again',value:'again',primary:true},{label:'Cancel',value:null}]); if(r!=='again'){ close(); return; } continue; }
+    if((todo==='both'||todo==='1')&&!(await step1())){ close(); return; }
+    if((todo==='both'||todo==='2')&&!(await step2())){ close(); return; }
     // results
-    const dc=Math.max(0,Math.min(800,Math.round(A.ms/10)*10)), pd=Math.max(0,Math.min(600,dc,Math.round((A.ms-V.ms)/10)*10)), ahead=V.ms<-60;
-    const r=await show('Results','<div class="cal-res"><div><span>Delay compensation</span><b>'+dc+' ms</b><small>'+A.n+' of 15 notes, '+steady(A)+'</small></div><div><span>Picture delay</span><b>'+pd+' ms</b><small>'+V.n+' of 15 notes, '+steady(V)+'</small></div></div>'+(ahead?'<p class="kv-sub warn">In step 2 you sang ahead of the keys ('+(-V.ms)+' ms early), so the picture delay may be off. For a better value, try again and start each note only when its key lights up.</p>':'')+'<p class="kv-sub">The measured values replace the current ones (they are not added). Now: delay compensation '+Math.round(S.delay*1000)+' ms, picture delay '+Math.round((S.pdelay||0)*1000)+' ms.</p>',
-      [{label:'Use these',value:'use',primary:true},{label:'Try again',value:'again'},{label:'Cancel',value:null}]);
-    if(r==='again') continue;
+    const dc=Math.max(0,Math.min(1500,Math.round(A.ms/10)*10)), pd=Math.max(0,Math.min(600,dc,Math.round((A.ms-V.ms)/10)*10)), ahead=V.ms<-60;
+    const r=await show('Results','<div class="cal-res"><div><span>Delay compensation</span><b>'+dc+' ms</b><small>'+A.n+' of 15 notes, '+steady(A)+'</small></div><div><span>Picture delay</span><b>'+pd+' ms</b><small>'+V.n+' of 15 notes, '+steady(V)+'</small></div></div>'+(ahead?'<p class="kv-sub warn">In step 2 you sang ahead of the keys ('+(-V.ms)+' ms early), so the picture delay may be off. For a better value, redo step 2 and start each note only when its key lights up.</p>':'')+'<p class="kv-sub">The measured values replace the current ones (they are not added). Now: delay compensation '+Math.round(S.delay*1000)+' ms, picture delay '+Math.round((S.pdelay||0)*1000)+' ms.</p>',
+      [{label:'Use these',value:'use',primary:true},{label:'Redo step 1',value:'1'},{label:'Redo step 2',value:'2'},{label:'Cancel',value:null}]);
+    if(r==='1'||r==='2'){ todo=r; continue; }
     if(r==='use'){ setDelay(dc); setPDelay(pd,true); $('#calText').textContent='Measured: delay compensation '+dc+' ms, picture delay '+pd+' ms.'; setStatus('Delays set: delay compensation '+dc+' ms, picture delay '+pd+' ms.'); }
     close(); return; }
 }
