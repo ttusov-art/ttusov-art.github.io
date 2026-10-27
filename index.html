@@ -842,7 +842,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 dv';
+const APP_VERSION='2026-10-27 dw';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1411,7 +1411,7 @@ async function backupLibrary(fixedName,btn0,txt0){
     }
     if(sharePart) man.order=sortSongs(songs.slice()).map(x=>x.uid);   // the running order (uids were filled in above)
     if(sharePart){ try{ const o=ownerParts(); if(!o.includes(sharePart)){ o.push(sharePart); localStorage.setItem('pc-owner-parts',JSON.stringify(o)); } }catch(e){}
-      for(const x of songs) if(x.base||x.sentHash){ delete x.base; delete x.sentHash; await libPutRaw(x); } }   // you make the share file: these songs are yours
+      for(const x of songs) if(x.base||x.sentHash||x.sent){ delete x.base; delete x.sentHash; delete x.sent; await libPutRaw(x); } }   // you make the share file: these songs are yours
     entries.unshift({name:'part-coach-backup.json',data:new TextEncoder().encode(JSON.stringify(man))});
     const zip=await zipBlob(entries,p=>{ txt.textContent='Preparing the backup… '+Math.round(p*100)+'%'; });
     const d=new Date(), name=fixedName||'Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
@@ -2037,7 +2037,10 @@ function songDiff(rec,live){ if(!rec||!rec.base) return {notes:[],lyrics:[]};
   return {notes:lineDiff(base,cur,tt), lyrics:lyricDiff(rec.base.lyrics||[], live?live.lyrics:(rec.lyrics||[]))}; }
 const diffCount=d=>d.notes.length+d.lyrics.length;
 function hashOf(o){ const s=JSON.stringify(o); let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0).toString(36); }
-function hasUnsent(rec,live){ const d=songDiff(rec,live); return diffCount(d)>0&&hashOf(d)!==rec.sentHash; }
+// what was already suggested is remembered (rec.sent: the song as it was when last sent); only edits made after that count as new
+function sentRec(rec){ return rec&&rec.base&&rec.sent?{...rec,base:{...rec.base,contour:rec.sent.contour,lyrics:rec.sent.lyrics}}:rec; }
+function newDiff(rec,live){ return songDiff(sentRec(rec),live); }
+function hasUnsent(rec,live){ return diffCount(newDiff(rec,live))>0; }
 function liveOf(){ return S.tM?{contour:Float32Array.from(S.tM),tt:S.tT,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}:null; }
 const newSugId=()=>Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>'abcdefghijkmnpqrstuvwxyz23456789'[b%32]).join('');
 // where the inbox is: links.json "_suggest" (remembered), or typed in Settings by the moderator
@@ -2060,19 +2063,20 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 function diffText(d){ const p=[]; if(d.notes.length) p.push(d.notes.length+' change'+(d.notes.length>1?'s':'')+' to the notes'); if(d.lyrics.length) p.push(d.lyrics.length+' lyric change'+(d.lyrics.length>1?'s':'')); return p.join(' and '); }
 // send one song's edits (queued when offline); returns 'sent', 'queued' or a reason it was not sent
 async function postSuggestion(rec,live){   // anonymous: no name, no note
-  const d=songDiff(rec,live); if(!diffCount(d)) return 'none';
+  const d=newDiff(rec,live); if(!diffCount(d)) return 'none';
   const url=sugUrl(); if(!url) return 'nourl';
   const body={action:'suggest',id:newSugId(),part:partOf(rec),songUid:rec.uid||'',songName:rec.name,baseUpdated:rec.base.updated,notes:d.notes,lyrics:d.lyrics};
   let status='sent'; try{ await sugPost(url,body); }catch(e){ if(/too big|bad|empty|unknown/.test(e.message||'')) throw e; const q=sugQueue(); q.push({url,body}); sugQueueSave(q); status='queued'; }
-  const fresh=await libGet(rec.id); if(fresh){ fresh.sentHash=hashOf(d); await libPutRaw(fresh); } rec.sentHash=hashOf(d); if(S.curBase&&S.curBase.id===rec.id) S.curBase.sentHash=hashOf(d);
+  const snap={contour:Float32Array.from(live?live.contour:toF32(rec.contour)),lyrics:(live?live.lyrics:(rec.lyrics||[])).map(l=>({t:l.t,text:l.text}))};
+  const fresh=await libGet(rec.id); if(fresh){ fresh.sent=snap; fresh.sentHash=hashOf(d); await libPutRaw(fresh); } rec.sent=snap; rec.sentHash=hashOf(d); if(S.curBase&&S.curBase.id===rec.id){ S.curBase.sent=snap; S.curBase.sentHash=hashOf(d); }
   const l=sugList(); l.unshift({id:body.id,uid:rec.uid,song:rec.name,at:Date.now(),status,sent:{notes:d.notes.map(n=>({i0:n.i0,i1:n.i1,m:n.m})),lh:hashOf(d.lyrics),nl:d.lyrics.length}}); sugListSave(l); return status;
 }
 async function suggestCurrent(confirmed){
   if(!S.cur||S.cur.libId==null||S.sugSending) return;
-  { const cb=S.curBase, u=cb&&S.tM?untimedEdits(songDiff(cb,liveOf())):0; if(u){ setStatus(u+' lyric line'+(u>1?'s have':' has')+' no time yet. Time '+(u>1?'them':'it')+' first (Tap to time), then suggest your edits.',true); return; } }
+  { const cb=S.curBase, u=cb&&S.tM?untimedEdits(newDiff(cb,liveOf())):0; if(u){ setStatus(u+' lyric line'+(u>1?'s have':' has')+' no time yet. Time '+(u>1?'them':'it')+' first (Tap to time), then suggest your edits.',true); return; } }
   if(S.needTiming){ setStatus('Lines were added or removed: check their timing first (Tap to time, or the editor buttons), then suggest your edits.',true); return; }
   if(confirmed!==true){ // a mistaken tap should not send anything: ask first
-    const cb=S.curBase, d=cb&&S.tM?songDiff(cb,liveOf()):null; if(!d||!diffCount(d)){ setStatus('There are no edits to suggest in this song.'); return; }
+    const cb=S.curBase, d=cb&&S.tM?newDiff(cb,liveOf()):null; if(!d||!diffCount(d)){ setStatus('There are no new edits to suggest in this song.'); return; }
     const r=await dlg({title:'Send your edits?',html:'<p class="kv-sub">You made '+esc(diffText(d))+' in '+esc(cb.name||'this song')+'. Are you happy with these changes? Once sent, a suggestion goes to the moderator and can\'t be taken back.</p>',
       buttons:[{label:'Send to the moderator',value:'send',primary:true},{label:'Not yet',value:null}]});
     if(r.value!=='send') return; }
@@ -2086,7 +2090,7 @@ function busyShow(text){ $('#busyIcon').className='busy-spin'; $('#busyIcon').te
 async function busyHide(okText){ if(okText){ $('#busyIcon').className='busy-ok'; $('#busyIcon').textContent='✓'; $('#busyText').textContent=okText; await new Promise(r=>setTimeout(r,1100)); } $('#busyView').hidden=true; }
 async function suggestNow(){
   const rec=await libGet(S.cur.libId); if(!rec||!rec.base){ setStatus('Only songs from your choir\'s share link can be suggested.',true); return; }
-  const live=liveOf(), d=songDiff(rec,live); if(!diffCount(d)){ setStatus('There are no edits to suggest in this song.'); return; }
+  const live=liveOf(), d=newDiff(rec,live); if(!diffCount(d)){ setStatus('There are no new edits to suggest in this song.'); return; }
   if(!sugUrl()){ setStatus('Suggestions are not set up for your choir yet. Ask the moderator.',true); return; }
   try{ const st=await postSuggestion(rec,live); setStatus(st==='queued'?'No connection right now: your suggestion is saved and goes out automatically when you are online.':'Thank you! Your edits ('+diffText(d)+') were sent to the moderator.'); return st; }
   catch(e){ setStatus('Could not send the suggestion: '+e.message+'.',true); return null; }
@@ -2106,7 +2110,9 @@ async function undoDeclined(entry){
   let lyr=open?S.lyrics.map(l=>({t:l.t,text:l.text})):(rec.lyrics||[]).map(l=>({t:l.t,text:l.text}));
   if(sent.nl&&hashOf(lyricDiff(rec.base.lyrics||[],lyr))===sent.lh){ lyr=(rec.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); changed++; }   // lyrics still exactly as sent
   if(!changed) return;
-  rec.contour=cur; rec.lyrics=lyr; const left=songDiff(rec,null); if(!diffCount(left)) delete rec.sentHash; await libPutRaw(rec);
+  if(rec.sent){ const sc=Float32Array.from(toF32(rec.sent.contour)); for(const n of sent.notes||[]){ const v=unrle(n.m); for(let k=0;k<v.length;k++){ const i=n.i0+k; if(i>=sc.length) break; const a=sc[i], b=v[k]; if((isNaN(a)&&isNaN(b))||Math.abs(a-b)<0.005) sc[i]=base[i]; } }
+    rec.sent={contour:sc,lyrics:sent.nl&&hashOf(lyricDiff(rec.base.lyrics||[],rec.sent.lyrics))===sent.lh?(rec.base.lyrics||[]).map(l=>({t:l.t,text:l.text})):rec.sent.lyrics}; }
+  rec.contour=cur; rec.lyrics=lyr; const left=songDiff(rec,null); if(!diffCount(left)){ delete rec.sentHash; delete rec.sent; } await libPutRaw(rec);
   if(open){ S.tM=cur; S.lyrics=lyr; $('#lyrText').value=lyr.map(l=>l.text).join('\n'); renderLyrics(false); targetEdited(); await refreshCurBase(); }
   setStatus('The moderator did not use your suggestion for '+rec.name+', so your copy is back to the shared version.');
 }
@@ -2114,13 +2120,13 @@ const SUG_WORD={sent:'Suggestion sent',queued:'Suggestion waiting for a connecti
 function sugStateFor(uid){ const s=sugList().find(x=>x.uid===uid); return s?SUG_WORD[s.status]||'':''; }
 // editor: "Suggest my edits (n)" for songs from a share link with unsent changes
 S.curBase=null;
-async function refreshCurBase(rec){ S.curBase=null; if(S.cur&&S.cur.libId!=null){ const r=rec&&rec.id===S.cur.libId?rec:await libGet(S.cur.libId); if(r&&memberBase(r,partOf(r))) S.curBase={id:r.id,uid:r.uid,base:r.base,sentHash:r.sentHash,hop:r.hop,t0:r.t0,tt:r.tt,name:r.name}; } paintSuggest(); }
+async function refreshCurBase(rec){ S.curBase=null; if(S.cur&&S.cur.libId!=null){ const r=rec&&rec.id===S.cur.libId?rec:await libGet(S.cur.libId); if(r&&memberBase(r,partOf(r))) S.curBase={id:r.id,uid:r.uid,base:r.base,sent:r.sent||null,sentHash:r.sentHash,hop:r.hop,t0:r.t0,tt:r.tt,name:r.name}; } paintSuggest(); }
 let paintSugTimer=null;
 function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout(()=>{  const b=$('#edSuggest'), st=$('#sugState'); if(!b) return;
   if(S.sugSending) return;   // keep "Sending…" until the inbox answers
   const cb=S.curBase, both=(fn)=>[[b,st],[$('#lyrSuggest'),$('#lyrSugState')]].forEach(([bb,ss])=>fn(bb,ss));
   if(!cb||!S.tM){ both((bb,ss)=>{ bb.hidden=true; ss.textContent=''; }); $('#lyrDiscard').hidden=true; $('#edLyrDiscard').hidden=true; $('#edDiscard').hidden=true; return; }
-  const d=songDiff(cb,liveOf()), n=diffCount(d), unsent=n>0&&hashOf(d)!==cb.sentHash;
+  const d=newDiff(cb,liveOf()), n=diffCount(d), unsent=n>0;
   const untimed=untimedEdits(d), block=!!S.needTiming||untimed>0, why=untimed?untimed+' lyric line'+(untimed>1?'s have':' has')+' no time yet: time '+(untimed>1?'them':'it')+' first':'Lines were added or removed: time them first (Tap to time, or the editor buttons)';
   both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; bb.disabled=block; bb.title=block?why:'Send your edits of this song to the moderator'; ss.textContent=unsent?(block?why+'.':''):sugStateFor(cb.uid); });
   $('#lyrDiscard').hidden=!(unsent&&d.lyrics.length); $('#edLyrDiscard').hidden=!(unsent&&d.lyrics.length); $('#edDiscard').hidden=!(unsent&&d.notes.length); },150); }   // once sent, nothing to cancel until new edits
@@ -3650,14 +3656,14 @@ $('#editBtn').addEventListener('click',()=>{ if(S.editMode) closeEditor(false); 
 // leaving the editor with edits not sent yet (members' songs from a share link): suggest them, cancel them, or keep editing
 // before leaving the editor or lyric timing: edits not sent yet are suggested or cancelled first; false = keep working
 async function confirmPending(what){
-  const cb=S.curBase, d=cb&&S.tM?songDiff(cb,liveOf()):null;
-  if(d&&diffCount(d)&&hashOf(d)!==cb.sentHash){
+  const cb=S.curBase, d=cb&&S.tM?newDiff(cb,liveOf()):null;
+  if(d&&diffCount(d)){
     const r=await dlg({title:'Your edits are not sent yet',html:'<p class="kv-sub">You made '+esc(diffText(d))+' in this song. Send them to the moderator, or cancel them, before '+what+'.</p>',
       buttons:[{label:'Suggest my edits',value:'send',primary:true},{label:'Cancel my edits',value:'cancel'},{label:'Keep working',value:null}]});
-    if(r.value==='send'){ await suggestCurrent(true); const d2=songDiff(S.curBase,liveOf()); if(diffCount(d2)&&hashOf(d2)!==S.curBase.sentHash) return false; }   // not sent (no inbox?): keep working
+    if(r.value==='send'){ await suggestCurrent(true); const d2=newDiff(S.curBase,liveOf()); if(diffCount(d2)) return false; }   // not sent (no inbox?): keep working
     else if(r.value==='cancel'){ S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); pushUndo();
-      const base=toF32(cb.base.contour), out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out;
-      S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); S.needTiming=false; $('#lyrCheckNote').hidden=true; $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged(); targetEdited('Your edits were cancelled: the song is back as the moderator shared it.'); }
+      const sb=sentRec(cb).base, base=toF32(sb.contour), out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out;
+      S.lyrics=(sb.lyrics||[]).map(l=>({t:l.t,text:l.text})); S.needTiming=false; $('#lyrCheckNote').hidden=true; $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged(); targetEdited('Your edits were cancelled: the song is back as the moderator shared it.'); }
     else return false;
   }
   return true;
@@ -3704,14 +3710,14 @@ $('#lyrSuggest').addEventListener('click',()=>suggestCurrent(false));
 $('#edDiscard').addEventListener('click',e=>{ const b=e.currentTarget, cb=S.curBase; if(!cb||!S.tM) return;
   if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to cancel your note edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Cancel note edits'; b.classList.remove('danger'); } },4000); return; }
   delete b.dataset.armed; b.textContent='Cancel note edits'; b.classList.remove('danger');
-  const base=toF32(cb.base.contour); pushUndo(); const out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out; S.sel=null;
+  const base=toF32(sentRec(cb).base.contour); pushUndo(); const out=Float32Array.from(S.tM); for(let i=0;i<out.length&&i<base.length;i++) out[i]=base[i]; S.tM=out; S.sel=null;
   targetEdited('Your note edits were removed: the pitch line is back as the moderator shared it. Undo brings your version back.'); });
 // back to the lyrics as shared (text and timing); asks for a second tap; Undo in the editor brings your version back
 function discardLyrics(e){ const b=e.currentTarget, cb=S.curBase; if(!cb) return;
   if(!b.dataset.armed){ b.dataset.armed='1'; const lbl=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.textContent='Tap again to cancel your lyric edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=lbl; b.classList.remove('danger'); } },4000); return; }
   delete b.dataset.armed; b.textContent=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.classList.remove('danger');
   S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); if(S.undo.length>30) S.undo.shift();
-  S.lyrics=(cb.base.lyrics||[]).map(l=>({t:l.t,text:l.text})); S.needTiming=false; $('#lyrCheckNote').hidden=true; $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged();
+  S.lyrics=(sentRec(cb).base.lyrics||[]).map(l=>({t:l.t,text:l.text})); S.needTiming=false; $('#lyrCheckNote').hidden=true; $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged();
   setStatus('Your lyric edits were removed: the lyrics are back as the moderator shared them.'); }
 $('#lyrDiscard').addEventListener('click',discardLyrics);
 $('#edLyrDiscard').addEventListener('click',discardLyrics);
