@@ -104,6 +104,9 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .lane-loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:4;max-width:80%;padding:10px 16px;border-radius:10px;background:var(--surface);color:var(--fg);border:1px solid var(--line);box-shadow:0 6px 20px rgba(0,0,0,.18);font-weight:600;font-size:15px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lane-loading::before{content:'';display:inline-block;width:12px;height:12px;margin-right:9px;vertical-align:-1px;border-radius:50%;border:2px solid var(--accent);border-right-color:transparent;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes nextPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 0%,transparent)}}
+.next-step{animation:nextPulse 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.next-step{animation:none}}
 .busy-view{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 55%,transparent);padding:16px}
 .busy-card{display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 28px;border-radius:14px;background:var(--surface);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.25);color:var(--fg);font-weight:600;font-size:15px;text-align:center;max-width:300px}
 .busy-spin{width:38px;height:38px;border-radius:50%;border:4px solid var(--accent);border-right-color:transparent;animation:spin .8s linear infinite}
@@ -844,7 +847,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 dy';
+const APP_VERSION='2026-10-27 dz';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2209,7 +2212,8 @@ function renderSugBar(){ const s=S.sug; if(!s) return; const c=s.changes[s.k], d
   const what=sugWhat(c);
   const st=c.state==='acc'?' · accepted':c.state==='rej'?' · declined':'', warn=!c.state&&sugConflict(c)?(c.type==='lyric'&&c.k!=='time'?(c.k==='add'?' · this line is already in your lyrics':' · this line has changed in your lyrics since; it can\'t be found'):' · you changed this part since; accepting replaces your version'):'';
   $('#sgInfo').textContent='Suggestion from '+new Date(s.it.received).toLocaleDateString()+' · change '+(s.k+1)+' of '+s.changes.length+': '+what+st+warn+' · '+done+' decided';
-  $('#sgPrev').disabled=s.k===0; $('#sgNext').disabled=s.k===s.changes.length-1; $('#sgAcc').disabled=$('#sgRej').disabled=!!c.state; $('#sgUndo').disabled=!s.hist.length; }
+  $('#sgPrev').disabled=s.k===0; $('#sgNext').disabled=s.k===s.changes.length-1; $('#sgAcc').disabled=$('#sgRej').disabled=!!c.state; $('#sgUndo').disabled=!s.hist.length;
+  const all=s.changes.every(x=>x.state), fb=$('#sgDone'); fb.classList.toggle('primary',all); fb.classList.toggle('next-step',all); $('#sgAll').disabled=all; }   // everything decided: Finish is the next step
 function sugAccept(c){
   if(c.type==='notes'){ const j=sugStart(c); pushUndo(); for(let k=0;k<c.vals.length&&j+k<S.tM.length;k++) S.tM[j+k]=c.vals[k]; c.state='acc'; targetEdited(); }
   else { const snap=S.lyrics.map(l=>({t:l.t,text:l.text}));
