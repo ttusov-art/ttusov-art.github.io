@@ -110,6 +110,22 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .busy-view{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 55%,transparent);padding:16px}
 .busy-card{display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 28px;border-radius:14px;background:var(--surface);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.25);color:var(--fg);font-weight:600;font-size:15px;text-align:center;max-width:300px}
 .busy-spin{width:38px;height:38px;border-radius:50%;border:4px solid var(--accent);border-right-color:transparent;animation:spin .8s linear infinite}
+.cal-card{max-width:440px;width:100%;align-items:stretch;text-align:left;font-weight:400;gap:10px}
+.cal-title{font-family:var(--font-display);font-size:18px}
+.cal-card .kv-sub{margin:0}
+.cal-btns{justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.cal-piano{display:block;width:100%;max-width:340px;margin:8px auto 0;user-select:none}
+.cal-piano .cw{fill:#fff;stroke:#9aa3ad;stroke-width:1.2}
+.cal-piano .cb{fill:#1f2933;stroke:#1f2933}
+.cal-piano text{font-size:13px;fill:#4b5563;pointer-events:none;font-family:var(--font-body)}
+.cal-piano .cw.lit{fill:var(--accent)} .cal-piano .cb.lit{fill:var(--accent)} .cal-piano .cw.lit+text{fill:#fff}
+#calView{background:color-mix(in srgb,var(--bg) 88%,transparent)}
+.cal-count{display:flex;justify-content:center;gap:10px;min-height:14px}
+.cal-count i{width:12px;height:12px;border-radius:50%;background:var(--line)} .cal-count i.on{background:var(--accent)}
+.cal-prog{height:4px;border-radius:2px;background:var(--line);overflow:hidden} .cal-prog i{display:block;height:100%;width:0;background:var(--accent)}
+.cal-res{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cal-res div{display:flex;flex-direction:column;gap:2px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.cal-res span{font-size:12px;color:var(--muted)} .cal-res b{font-size:22px} .cal-res small{font-size:12px;color:var(--muted)}
 .busy-ok{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px}
 .kb-arrow{position:absolute;left:3px;width:38px;height:26px;padding:0;justify-content:center;border-radius:6px;background:var(--surface);opacity:.92;touch-action:manipulation}
 #kbUp{top:3px}
@@ -648,7 +664,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="field">
         <span class="small warn" id="delayHint" hidden></span>
-        <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Measures your headphones and microphone in about 10 seconds.</span></div>
+        <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Sing a C scale with the piano, then with the picture (about 30 seconds). Sets the delay compensation and the picture delay.</span></div>
         <span class="small">If your line always looks slightly late compared with the target, raise this or tap Measure delay. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
       </div>
       <div class="field" id="micSelField">
@@ -852,7 +868,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 eh';
+const APP_VERSION='2026-10-27 ei';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3057,45 +3073,88 @@ function setDelay(ms){ $('#delay').value=String(ms); S.delay=ms/1000; $('#delayV
 function delayHint(){ const el=document.getElementById('delayHint'); if(!el) return; const d=Math.round((S.delay||0)*1000), p=Math.round((S.pdelay||0)*1000); el.hidden=!(p>=100&&d<p-30); el.textContent='This is lower than your Picture delay ('+p+' ms). With headphones it is usually a bit higher than the Picture delay, so it is probably too low.'; }
 
 // ===== delay measurement: beeps, user claps or sings "ta" on each =====
-async function measureDelay(){
-  if(S.cal) return;
-  stop(); if(S.review) stopReview();
+// ===== measuring the delays: sing a C scale with the piano (eyes closed), then with the lighting keys (no sound) =====
+// sound step: sung notes come out late by the headphone + microphone delay  -> delay compensation
+// picture step: only the microphone delay (the screen is about instant)    -> the difference is the headphone delay = picture delay
+const CAL_STEP=0.75, CAL_COUNT=4;
+function calScale(){ const base=rangeKey(S.curPart||S.part)==='high'?60:48, up=[0,2,4,5,7,9,11,12]; return up.concat(up.slice(0,-1).reverse()).map(x=>base+x); }
+function calPianoSvg(base){ const W=[0,2,4,5,7,9,11,12], names=['C','D','E','F','G','A','B','C'], B=[[1,0],[3,1],[6,3],[8,4],[10,5]], w=40, h=150;
+  let g='<svg class="cal-piano" viewBox="0 0 '+(w*8+2)+' '+(h+2)+'" role="img" aria-label="Piano keys C to C">';
+  W.forEach((st,i)=>{ g+='<rect data-m="'+(base+st)+'" x="'+(1+i*w)+'" y="1" width="'+w+'" height="'+h+'" rx="4" class="cw"/><text x="'+(1+i*w+w/2)+'" y="'+(h-12)+'" text-anchor="middle">'+names[i]+(i===0||i===7?(i===0?Math.floor(base/12)-1:Math.floor(base/12)):'')+'</text>'; });
+  B.forEach(([st,i])=>{ g+='<rect data-m="'+(base+st)+'" x="'+(1+(i+1)*w-13)+'" y="1" width="26" height="'+(h*0.6)+'" rx="3" class="cb"/>'; });
+  return g+'</svg>'; }
+function calNote(m,t,dur,dest){ const c=S.ctx, f=m2f(m), env=c.createGain(); env.gain.setValueAtTime(0,t); env.gain.linearRampToValueAtTime(0.9,t+0.006); env.gain.setTargetAtTime(0.35,t+0.006,0.25); env.gain.setTargetAtTime(0.0001,t+dur,0.08); env.connect(dest);
+  [[1,1],[2,0.45],[3,0.22],[4,0.12]].forEach(([h,a])=>{ const o=c.createOscillator(), g=c.createGain(); o.frequency.value=f*h; g.gain.value=a*0.5; o.connect(g).connect(env); o.start(t); o.stop(t+dur+0.6); }); }
+function calClick(t,dest){ const c=S.ctx, o=c.createOscillator(), g=c.createGain(); o.frequency.value=1200; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.5,t+0.003); g.gain.exponentialRampToValueAtTime(0.001,t+0.06); o.connect(g).connect(dest); o.start(t); o.stop(t+0.08); }
+// pitch every 10 ms from the recorded microphone sound
+function calPitchTrack(cal,sr){
+  if(!cal.chunks.length) return [];
+  const n=cal.chunks.reduce((a,c)=>a+c.d.length,0), x=new Float32Array(n), t0=cal.chunks[0].t; let o=0; for(const c of cal.chunks){ x.set(c.d,o); o+=c.d.length; }
+  const dec=Math.max(1,Math.round(sr/16000)), fs=sr/dec, m=Math.floor(n/dec), y=new Float32Array(m); for(let i=0;i<m;i++){ let v=0; for(let k=0;k<dec;k++) v+=x[i*dec+k]; y[i]=v/dec; }
+  const mr=curRange().mic, tauMin=Math.floor(fs/mr[1]), tauMax=Math.ceil(fs/mr[0]), N=Math.round(fs*0.04), hop=Math.round(fs*0.01), cm=new Float32Array(tauMax+2), out=[];
+  for(let s0=0;s0+N+tauMax+2<m;s0+=hop){ let e=0; for(let j=0;j<N;j++) e+=y[s0+j]*y[s0+j]; const t=t0+(s0+N/2)/fs; if(Math.sqrt(e/N)<0.004){ out.push([t,NaN]); continue; }
+    let run=0; cm[0]=1; for(let tau=1;tau<=tauMax+1;tau++){ let sum=0; for(let j=0;j<N;j++){ const d=y[s0+j]-y[s0+j+tau]; sum+=d*d; } run+=sum; cm[tau]=run>0?sum*tau/run:1; }
+    let best=-1; for(let tau=tauMin;tau<=tauMax;tau++){ if(cm[tau]<0.2){ while(tau+1<=tauMax&&cm[tau+1]<cm[tau]) tau++; best=tau; break; } }
+    if(best<0){ out.push([t,NaN]); continue; } let tt=best; const a=cm[best-1],b=cm[best],c=cm[best+1],den=a-2*b+c; if(den>0) tt=best+0.5*(a-c)/den; out.push([t,f2m(fs/tt)]); }
+  return out; }
+// when did the voice arrive on each note? (any octave counts) -> median lateness and how steady it was
+function calAnalyse(track,notes,times){
+  if(!track.length) return {ok:false,msg:'No sound came from the microphone.'};
+  const pc=(a,b)=>{ const d=((a-b)%12+18)%12-6; return Math.abs(d); }, offs=[];
+  notes.forEach((mk,k)=>{ const tk=times[k], prev=k?notes[k-1]:null;
+    for(let i=0;i<track.length;i++){ const [t,v]=track[i]; if(t<tk-0.35) continue; if(t>tk+0.65) break; if(isNaN(v)) continue;
+      const near=prev==null?pc(v,mk)<=1:pc(v,mk)<pc(v,prev)&&pc(v,mk)<=1.2; if(!near) continue;
+      let ok=true; for(let j=1;j<=3;j++){ const q=track[i+j]; if(!q||isNaN(q[1])||(prev==null?pc(q[1],mk)>1:pc(q[1],mk)>=pc(q[1],prev))){ ok=false; break; } }
+      if(ok){ offs.push(t-tk); break; } } });
+  if(offs.length<8) return {ok:false,msg:offs.length?'Only '+offs.length+' of the 15 notes were clear enough.':'The singing could not be followed.',n:offs.length};
+  const srt=offs.slice().sort((a,b)=>a-b), med=srt[srt.length>>1], dev=offs.map(o=>Math.abs(o-med)).sort((a,b)=>a-b)[offs.length>>1];
+  return {ok:true,ms:Math.round(med*1000),spread:Math.round(dev*1000),n:offs.length}; }
+async function calRun(kind,ui){
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
-  if(!S.mic){ const ok=await startMic(); if(!ok){ $('#calText').textContent='The microphone is needed for this test.'; return; } $('#micOn').checked=true; paintMic(); }
-  const btn=$('#calBtn'), txt=$('#calText'); btn.disabled=true;
-  const N=10, beat=1.0, t0=ctx.currentTime+2.2, beeps=[];
-  S.cal={chunks:[],from:t0-0.3,to:t0+N*beat+1.0};
-  for(let i=0;i<N;i++){
-    const t=t0+i*beat, o=ctx.createOscillator(), g=ctx.createGain();
-    o.frequency.value=i<2?660:990; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.7,t+0.004); g.gain.exponentialRampToValueAtTime(0.001,t+0.09);
-    o.connect(g).connect(S.limiter); o.start(t); o.stop(t+0.1); beeps.push(t);
-  }
-  txt.textContent='Listen: two low beeps count you in, then clap or sing “ta” exactly on each of the 8 high beeps you hear. Go by your ears, not the screen.';
-  const iv=setInterval(()=>{},1000);
-  await new Promise(r=>setTimeout(r,(S.cal.to-ctx.currentTime)*1000+400));
-  clearInterval(iv);
-  const cal=S.cal; S.cal=null; btn.disabled=false;
-  const res=analyseCalibration(cal,beeps.slice(2),ctx.sampleRate);
-  if(!res.ok){ txt.textContent=res.msg+' Tap Measure delay to try again.'; return; }
-  setDelay(res.ms);
-  txt.textContent='Measured '+res.ms+' ms ('+res.n+' of '+(N-2)+' beats, '+(res.spread<=25?'very steady':res.spread<=50?'steady':'a bit uneven — try again for a better value')+'). Delay compensation is now '+res.ms+' ms.';
-}
-function analyseCalibration(cal,beeps,sr){
-  if(!cal.chunks.length) return {ok:false,msg:'No sound came from the microphone.'};
-  const t0=cal.chunks[0].t, n=cal.chunks.reduce((a,c)=>a+c.d.length,0), x=new Float32Array(n);
-  let o=0; for(const c of cal.chunks){ x.set(c.d,o); o+=c.d.length; }
-  const hop=Math.round(sr*0.002), m=Math.floor(n/hop), env=new Float32Array(m);
-  for(let i=0;i<m;i++){ let s=0; for(let j=0;j<hop;j++){ const v=x[i*hop+j]; s+=v*v; } env[i]=Math.sqrt(s/hop); }
-  const sorted=Array.from(env).sort((a,b)=>a-b), floor=sorted[Math.floor(m*0.3)]||0, peak=sorted[Math.floor(m*0.995)]||0;
-  if(peak<0.01) return {ok:false,msg:'The claps were too quiet for the microphone.'};
-  const th=Math.max(floor*4,peak*0.25), onsets=[];
-  for(let i=1;i<m;i++){ if(env[i]>=th&&env[i-1]<th){ const t=t0+i*hop/sr; if(!onsets.length||t-onsets[onsets.length-1]>0.25) onsets.push(t); } }
-  const lags=[];
-  for(const b of beeps){ let best=null; for(const t of onsets){ const d=t-b; if(d>-0.15&&d<0.85&&best===null) best=d; } if(best!==null) lags.push(best); }
-  if(lags.length<5) return {ok:false,msg:'Only '+lags.length+' claps were heard clearly.'};
-  const med=median(lags), spread=Math.round(median(lags.map(v=>Math.abs(v-med)))*1000);
-  const ms=Math.max(0,Math.min(800,Math.round(med*100)*10));
-  return {ok:true,ms,n:lags.length,spread};
+  const notes=calScale(), dest=S.limiter, t0=ctx.currentTime+0.6, start=t0+CAL_COUNT*CAL_STEP, times=notes.map((_,k)=>start+k*CAL_STEP), end=start+notes.length*CAL_STEP+0.8;
+  S.cal={chunks:[],from:start-0.5,to:end};
+  if(kind==='sound'){ for(let i=0;i<CAL_COUNT;i++) calClick(t0+i*CAL_STEP,dest); notes.forEach((m,k)=>calNote(m,times[k],CAL_STEP*0.9,dest)); }
+  await new Promise(res=>{ const keys=ui.querySelectorAll('.cal-piano rect'), dots=ui.querySelectorAll('.cal-count i'), bar=ui.querySelector('.cal-prog i');
+    const step=()=>{ if(!S.cal||S.cal.cancel){ res(); return; } const now=ctx.currentTime;
+      dots.forEach((d,i)=>d.classList.toggle('on',now>=t0+i*CAL_STEP&&now<start));
+      if(kind==='picture'){ let k=-1; times.forEach((t,i)=>{ if(now>=t&&now<t+CAL_STEP*0.9) k=i; }); keys.forEach(r=>r.classList.toggle('lit',k>=0&&+r.dataset.m===notes[k])); }
+      bar.style.width=Math.max(0,Math.min(100,(now-t0)/(end-t0)*100))+'%';
+      if(now>=end){ res(); return; } requestAnimationFrame(step); }; requestAnimationFrame(step); });
+  const cal=S.cal; S.cal=null; ui.querySelectorAll('.cal-piano rect').forEach(r=>r.classList.remove('lit'));
+  if(!cal||cal.cancel) return null;
+  return calAnalyse(calPitchTrack(cal,ctx.sampleRate),notes,times); }
+async function openCalibration(){
+  if(S.cal||!$('#calView').hidden) return; stop(); if(S.review) stopReview();
+  const notes=calScale(), base=notes[0], v=$('#calView'), body=$('#calBody'), btns=$('#calBtns');
+  const steady=r=>r.spread<=30?'very steady':r.spread<=60?'steady':'a bit uneven, try again for a better value';
+  // one screen of the popup; resolves with the value of the button pressed
+  const show=(title,html,buttons,piano)=>{ $('#calTitle').textContent=title; body.innerHTML=html+(piano?calPianoSvg(base)+'<div class="cal-count" aria-hidden="true">'+'<i></i>'.repeat(CAL_COUNT)+'</div><div class="cal-prog"><i></i></div>':''); btns.innerHTML='';
+    return new Promise(r=>buttons.forEach(b=>{ const e=document.createElement('button'); e.type='button'; e.textContent=b.label; if(b.primary) e.className='primary'; e.addEventListener('click',()=>r(b.value)); btns.appendChild(e); })); };
+  const close=()=>{ if(S.cal) S.cal.cancel=true; v.hidden=true; document.body.style.overflow=''; };
+  // a measuring step: the screen shows a Cancel button while the scale runs
+  const run=async(kind,title,sub)=>{ const cancel=show(title,'<p class="kv-sub">'+sub+'</p>',[{label:'Cancel',value:'x'}],true);
+    const r=await Promise.race([calRun(kind,body),cancel.then(()=>{ if(S.cal) S.cal.cancel=true; return 'x'; })]); return r; };
+  v.hidden=false; document.body.style.overflow='hidden';
+  const scaleTxt='C'+(Math.floor(base/12)-1)+' up to C'+Math.floor(base/12)+' and back down';
+  if(await show('Measure delay','<p class="kv-sub">Two short steps of about 15 seconds. You sing a C major scale ('+scaleTxt+'): first together with the sound, then together with the picture. This sets both the delay compensation and the picture delay. Use the headphones you practise with, so the microphone hears only you.</p>',[{label:'Start measuring',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go'){ close(); return; }
+  if(!S.mic){ const ok=await startMic(); if(!ok){ await show('Measure delay','<p class="kv-sub">The microphone is needed for this. Allow it and try again.</p>',[{label:'Close',value:null}]); close(); return; } $('#micOn').checked=true; paintMic(); }
+  for(;;){
+    // step 1: sound only
+    if(await show('Step 1 of 2: follow the sound','<p class="kv-sub"><b>Close your eyes and follow only the sound.</b> After 4 clicks the piano plays the scale up and back down. Sing each note together with the piano (“la” is fine).</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go'){ close(); return; }
+    if(S.muteAll) setMuteAll(false);
+    const A=await run('sound','Step 1: listening…','Eyes closed: sing along with the piano.'); if(A==='x'||A==null){ close(); return; }
+    if(!A.ok){ const r=await show('Step 1 did not work','<p class="kv-sub">'+esc(A.msg)+' Sing a bit louder, each note clearly, and stay with the piano.</p>',[{label:'Try again',value:'again',primary:true},{label:'Cancel',value:null}]); if(r!=='again'){ close(); return; } continue; }
+    // step 2: picture only
+    if(await show('Step 2 of 2: follow the picture','<p class="kv-sub"><b>Watch the keys and follow only the picture.</b> There is no sound now. After 4 dots the keys light up one by one, up and back down: sing each note the moment its key lights up.</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go'){ close(); return; }
+    const V=await run('picture','Step 2: watching…','Sing each note when its key lights up.'); if(V==='x'||V==null){ close(); return; }
+    if(!V.ok){ const r=await show('Step 2 did not work','<p class="kv-sub">'+esc(V.msg)+' Sing a bit louder and start each note as its key lights up.</p>',[{label:'Start again',value:'again',primary:true},{label:'Cancel',value:null}]); if(r!=='again'){ close(); return; } continue; }
+    // results
+    const dc=Math.max(0,Math.min(800,Math.round(A.ms/10)*10)), pd=Math.max(0,Math.min(600,Math.round((A.ms-V.ms)/10)*10));
+    const r=await show('Results','<div class="cal-res"><div><span>Delay compensation</span><b>'+dc+' ms</b><small>'+A.n+' of 15 notes, '+steady(A)+'</small></div><div><span>Picture delay</span><b>'+pd+' ms</b><small>'+V.n+' of 15 notes, '+steady(V)+'</small></div></div><p class="kv-sub">Now: delay compensation '+Math.round(S.delay*1000)+' ms, picture delay '+Math.round((S.pdelay||0)*1000)+' ms.</p>',
+      [{label:'Use these',value:'use',primary:true},{label:'Try again',value:'again'},{label:'Cancel',value:null}]);
+    if(r==='again') continue;
+    if(r==='use'){ setDelay(dc); setPDelay(pd,true); $('#calText').textContent='Measured: delay compensation '+dc+' ms, picture delay '+pd+' ms.'; setStatus('Delays set: delay compensation '+dc+' ms, picture delay '+pd+' ms.'); }
+    close(); return; }
 }
 function takeBuffer(k){
   if(k.buf) return k.buf;
@@ -4205,7 +4264,7 @@ $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.ta
 $('#volTone').addEventListener('input',e=>{ if(S.key) S.key.out.gain.setTargetAtTime(keyVol()*(S.key.mul||1),S.ctx.currentTime,0.02); const v=+e.target.value; $('#volToneV').textContent=v?pct(v):'off'; S.toneMuted=v<=0; try{localStorage.setItem('pc-voltone',String(v))}catch(x){} try{localStorage.setItem('pc-tone-muted',S.toneMuted?'1':'0')}catch(x){} paintToggle('toneBtn','Tone',toneIsOn()); applyGains(); });
 $('#micSel').addEventListener('change',async e=>{ S.micId=e.target.value; try{localStorage.setItem('pc-mic',S.micId)}catch(x){} if(!S.mic){ setStatus('Microphone chosen. It is used when you turn the microphone on.'); return; } const was=S.playing; if(was) stop(); stopMic(); const ok=await startMic(); if(!ok) $('#micOn').checked=false; paintMic(); if(was) play(); });
 $('#delay').addEventListener('input',e=>setDelay(+e.target.value));
-$('#calBtn').addEventListener('click',measureDelay);
+$('#calBtn').addEventListener('click',openCalibration);
 $('#resultText').addEventListener('click',e=>{ const b=e.target.closest('.fix-delay'); if(!b) return; const ms=+b.dataset.ms, nv=Math.max(0,Math.min(600,Math.round((S.delay*1000+ms)/10)*10)); setDelay(nv); b.disabled=true; b.textContent='Delay compensation is now '+nv+' ms'; setStatus('Delay compensation set to '+nv+' ms. Sing the passage again to check.'); });
 function setPDelay(ms,save){ ms=Math.max(0,Math.min(600,Math.round(ms/10)*10)); S.pdelay=ms/1000; setTimeout(delayHint,0); $('#pdelay').value=String(ms); $('#pdelayV').textContent=ms+' ms'; $('#pdV').textContent=ms+' ms'; if(save){ try{localStorage.setItem('pc-pdelay',String(ms))}catch(x){} } draw(); }
 $('#pdelay').addEventListener('input',e=>setPDelay(+e.target.value,true));
@@ -4460,5 +4519,6 @@ self.onmessage=async e=>{
 };
 </script>
 <div class="busy-view" id="busyView" hidden role="status" aria-live="polite"><div class="busy-card"><div class="busy-spin" id="busyIcon"></div><span id="busyText">Sending…</span></div></div>
+<div class="busy-view" id="calView" hidden role="dialog" aria-modal="true" aria-labelledby="calTitle"><div class="busy-card cal-card"><b id="calTitle" class="cal-title">Measure delay</b><div id="calBody"></div><div class="row cal-btns" id="calBtns"></div></div></div>
 </body>
 </html>
