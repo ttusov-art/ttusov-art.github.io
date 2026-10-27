@@ -838,7 +838,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 dt';
+const APP_VERSION='2026-10-27 du';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2065,6 +2065,7 @@ async function postSuggestion(rec,live){   // anonymous: no name, no note
 }
 async function suggestCurrent(confirmed){
   if(!S.cur||S.cur.libId==null||S.sugSending) return;
+  { const cb=S.curBase, u=cb&&S.tM?untimedEdits(songDiff(cb,liveOf())):0; if(u){ setStatus(u+' lyric line'+(u>1?'s have':' has')+' no time yet. Time '+(u>1?'them':'it')+' first (Tap to time), then suggest your edits.',true); return; } }
   if(S.needTiming){ setStatus('Lines were added or removed: check their timing first (Tap to time, or the editor buttons), then suggest your edits.',true); return; }
   if(confirmed!==true){ // a mistaken tap should not send anything: ask first
     const cb=S.curBase, d=cb&&S.tM?songDiff(cb,liveOf()):null; if(!d||!diffCount(d)){ setStatus('There are no edits to suggest in this song.'); return; }
@@ -2112,7 +2113,8 @@ function paintSuggest(){ clearTimeout(paintSugTimer); paintSugTimer=setTimeout((
   const cb=S.curBase, both=(fn)=>[[b,st],[$('#lyrSuggest'),$('#lyrSugState')]].forEach(([bb,ss])=>fn(bb,ss));
   if(!cb||!S.tM){ both((bb,ss)=>{ bb.hidden=true; ss.textContent=''; }); $('#lyrDiscard').hidden=true; $('#edLyrDiscard').hidden=true; $('#edDiscard').hidden=true; return; }
   const d=songDiff(cb,liveOf()), n=diffCount(d), unsent=n>0&&hashOf(d)!==cb.sentHash;
-  both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; bb.disabled=!!S.needTiming; bb.title=S.needTiming?'Lines were added or removed: time them first (Tap to time, or the editor buttons)':'Send your edits of this song to the moderator'; ss.textContent=unsent?'':sugStateFor(cb.uid); });
+  const untimed=untimedEdits(d), block=!!S.needTiming||untimed>0, why=untimed?untimed+' lyric line'+(untimed>1?'s have':' has')+' no time yet: time '+(untimed>1?'them':'it')+' first':'Lines were added or removed: time them first (Tap to time, or the editor buttons)';
+  both((bb,ss)=>{ bb.hidden=!unsent; bb.textContent='Suggest my edits ('+n+')'; bb.disabled=block; bb.title=block?why:'Send your edits of this song to the moderator'; ss.textContent=unsent?(block?why+'.':''):sugStateFor(cb.uid); });
   $('#lyrDiscard').hidden=!(unsent&&d.lyrics.length); $('#edLyrDiscard').hidden=!(unsent&&d.lyrics.length); $('#edDiscard').hidden=!(unsent&&d.notes.length); },150); }   // once sent, nothing to cancel until new edits
 // an update is about to replace songs that have edits not sent yet: ask
 async function askUnsent(recs){
@@ -2855,6 +2857,8 @@ function tapFollow(){ if(!S.tap||S.playing) return; const pos=S.pos+0.001; let j
   S.lyrics.forEach((l,k)=>{ if(l.t!=null&&l.t<=pos) j=k; });
   const i=Math.min(S.lyrics.length,j+1); if(i===S.tap.i) return;
   S.tap.i=i; $('#lyrSkip').disabled=i>=S.lyrics.length; tapBtns(); S.lyrBarKey=null; updateLyricBar(S.pos); }
+// lines you added (or whose time you cleared) that have no start time: edits can't be suggested until every one is timed
+function untimedEdits(d){ return d&&d.lyrics?d.lyrics.filter(c=>c.k!=='del'&&c.t==null).length:0; }
 function timingTried(){ if(S.needTiming){ S.needTiming=false; $('#lyrCheckNote').hidden=true; paintSuggest(); } }
 function tapBtns(){ if(!S.tap) return; $('#lyrBack').disabled=S.tap.i<=0; $('#lyrPlace').disabled=S.tap.i>=S.lyrics.length; }
 // Back: step to the previous line and keep every time as it is (the mirror of Skip); tap Place here to re-time it
