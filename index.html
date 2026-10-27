@@ -330,6 +330,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-edit{padding:0}
 .lyr-edit>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
 .lyr-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
+.lyr-pending{font-size:13px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,#f59e0b 16%,var(--surface));border:1px solid color-mix(in srgb,#f59e0b 45%,var(--line));color:var(--fg)}
 .lyr-body textarea{font:inherit;font-size:15px;line-height:1.5;width:100%;min-height:140px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);resize:vertical}
 .lyr-list{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px}
 .lyr-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--line)}
@@ -576,6 +577,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <div class="lyr-body">
       <span class="small">Paste or type the lyrics with one line per sung phrase. Blank lines are ignored.</span>
       <textarea id="lyrText" placeholder="First line of the song&#10;Second line&#10;…"></textarea>
+      <span class="lyr-pending" id="lyrPending" role="status" hidden>Your text changes are not used yet. Tap <b>Use these lines</b> to apply them.</span>
       <div class="row">
         <button id="lyrApply" type="button" class="primary">Use these lines</button>
         <button id="lyrSuggest" type="button" class="primary" hidden title="Send your edits of this song to the moderator">Suggest my edits</button><button id="lyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel my edits</button><span class="small" id="lyrSugState"></span>
@@ -832,7 +834,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 dn';
+const APP_VERSION='2026-10-27 do';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2475,7 +2477,7 @@ function lyricIndexAt(t){ let k=-1; for(let i=0;i<S.lyrics.length;i++){ const L=
 function nextTimedAfter(i){ for(let j=i+1;j<S.lyrics.length;j++) if(S.lyrics[j].t!=null) return j; return -1; }
 function renderLyrics(fillText){
   const has=S.lyrics.length>0;
-  if(fillText) $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n');
+  if(fillText) $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); if(fillText) lyrPendingCheck(false);
   const list=$('#lyrList'); list.hidden=!has; list.innerHTML='';
   S.lyrics.forEach((L,i)=>{
     const row=document.createElement('div'); row.className='lyr-row'; row.dataset.i=i;
@@ -2513,7 +2515,7 @@ function lyricToPlayhead(){
   const L=S.lyrics[i], old=L.t; L.t=t; S.undo.push({lyr:i,t:old}); if(S.undo.length>30) S.undo.shift(); updateSelInfo();
   lyrChanged(); setStatus('“'+L.text+'” moved from '+fmtT1(old)+' to '+fmtT1(t)+'. Undo brings it back.');
 }
-function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); paintSuggest(); }
+function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); paintSuggest(); lyrPendingCheck(false); }
 // ----- lyrics from a PDF table: one column per part, rows in singing order -----
 async function loadPdfJs(){
   if(window.pdfjsLib) return window.pdfjsLib;
@@ -3833,7 +3835,12 @@ $('#sheetSmaller').addEventListener('click',()=>setSheetType({fs:sheetType().fs-
 $('#sheetBigger').addEventListener('click',()=>setSheetType({fs:sheetType().fs+1}));
 $('#sheetFont').addEventListener('change',e=>setSheetType({font:e.target.value}));
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
-$('#lyrApply').addEventListener('click',applyLyricText);
+$('#lyrApply').addEventListener('click',()=>{ applyLyricText(); lyrPendingCheck(false); });
+// typed lyric text is only used after "Use these lines": say so when you leave the text box with changes in it
+function lyrTextDiffers(){ const a=$('#lyrText').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).join('\n'), b=S.lyrics.map(l=>l.text).join('\n'); return a!==b; }
+function lyrPendingCheck(show){ const d=lyrTextDiffers(), el=$('#lyrPending'); if(!d){ el.hidden=true; return; } if(show) el.hidden=false; }
+$('#lyrText').addEventListener('focusout',()=>setTimeout(()=>{ if(document.activeElement!==$('#lyrText')) lyrPendingCheck(true); },250));
+$('#lyrText').addEventListener('input',()=>lyrPendingCheck(false));
 $('#lyrAuto').addEventListener('click',()=>autoPlace(false));
 $('#lyrTap').addEventListener('click',()=>S.tap?closeEditor(false):startTap());   // stopping the timing asks about edits not sent yet
 $('#lyrClear').addEventListener('click',e=>{ const b=e.currentTarget; if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to remove'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Remove lyrics'; },4000); return; } delete b.dataset.armed; b.textContent='Remove lyrics'; stopTap(); S.lyrics=[]; renderLyrics(true); saveLyrics(); draw(); setStatus('Lyrics removed.'); });
