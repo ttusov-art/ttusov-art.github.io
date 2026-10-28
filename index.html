@@ -366,6 +366,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-edit>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
 .lyr-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .hint-row{flex:1 1 100%;min-width:0;flex-direction:column;align-items:flex-start}
+.gate-field{display:flex;flex-direction:column;gap:4px;margin-top:8px} .gate-field input{width:100%}
 .lane-foot .admin-tools{flex:1 1 100%;min-width:0;margin-top:8px;font-size:14px;color:var(--fg)}
 .ed-lyr{display:flex;flex-direction:column;gap:6px;margin-top:8px;flex:1 1 100%;min-width:0;max-width:100%}
 .ed-lyr .lyr-list{min-width:0;position:relative}
@@ -519,6 +520,11 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           <button id="setupShow" type="button" title="Show the step-by-step set-up guide for the open song">Set-up guide</button>
             <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
             <button id="edAlign" type="button" title="Move every note start and end to the nearest quarter of a beat (first moving the line if it is consistently early or late)">Align to grid</button>
+        </div>
+        <div class="field gate-field">
+          <label for="gateIn">Pitch line sensitivity <span class="small" id="gateV">100% (everything)</span></label>
+          <input id="gateIn" type="range" min="0" max="100" step="1" value="100" aria-label="Pitch line sensitivity">
+          <span class="small">Lower it to drop quiet bits of the line: background singers from other parts are usually quieter than the main voice. Changes can be undone with Undo; Reset to original brings everything back.</span>
         </div>
           <div class="beat-row" id="beatRow">
             <span class="small">Beats</span>
@@ -893,7 +899,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 eq';
+const APP_VERSION='2026-10-28 er';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -993,7 +999,7 @@ async function pitchLineOf(buf,onProg,rk){
 }
 function songReady(name,label){
   renderSheetBtns(); closeSheet();
-  S.lyrTextHist=[]; S.needTiming=false; $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
+  S.lyrTextHist=[]; S.needTiming=false; S.gateBase=null; S.gateLoud=null; { const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } } $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>scheduleBeatDetect(false),50); setTimeout(()=>scheduleKeyDetect(false),400);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
@@ -1457,7 +1463,7 @@ function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.e
     {k:'align',title:'Align to the grid',done:!!st.align,help:'Moves every note start and end onto the beat grid. Check the tempo first if the grid looks wrong (next step), then align again.',btns:[['Align to grid',()=>{ edAlign(); }]]},
     {k:'tempo',title:'Confirm the tempo and beat 1',done:!!st.tempo&&hasBars(),help:'Turn on Click and play: the clicks should sit on the beat (adjust BPM, ◀ ▶ or Tap tempo under the editor buttons if not). Then put the playhead on the first beat of a bar and tap Beat 1 here.'+(hasBars()?' Beat 1 is set'+(S.beat&&S.beat.bar!=null?' at '+fmtT1(S.beat.bar):'')+'.':''),btns:[['Click on/off',()=>$('#metBtn').click()],['Beat 1 here',()=>markBeatOne(),'beat1'],['Tempo is right ✓',()=>{ if(!hasBars()){ setStatus('Set beat 1 first: playhead on the first beat of a bar, then Beat 1 here.',true); return; } setupMark('tempo'); }]]},
     {k:'timed',title:'Time all the lyrics',done:timed&&!!st.timed,help:'Lines placed automatically are only a rough guess. Go through them with Time lyrics and place every line where it starts; the step ticks off when you stop timing with all lines timed.',btns:[['Time lyrics',()=>{ if(!S.lyrics.length){ setStatus('Add the lyrics first.',true); return; } setEdFold(true); startTap(); }],['Done ✓',()=>{ if(!timed){ setStatus('Some lyric lines have no time yet.',true); return; } setupMark('timed'); }]]},
-    {k:'cleanup',title:'Remove lines from other parts',done:!!st.cleanup,help:'Other parts singing in the background can leave stray bits in the pitch line. Play through, select those bits in the editor and tap Remove.',btns:[['Open the editor',()=>{ setEdFold(true); setEditMode(true); window.scrollTo({top:0,behavior:'smooth'}); }],['Done ✓',()=>setupMark('cleanup')]]}
+    {k:'cleanup',title:'Remove lines from other parts',done:!!st.cleanup,help:'Other parts singing in the background can leave stray bits in the pitch line. First try Pitch line sensitivity (under the editor buttons): lower it until the stray bits disappear but your part stays. Then play through, select anything left over in the editor and tap Remove.',btns:[['Sensitivity',()=>{ setEdFold(true); setTimeout(()=>$('#gateIn').scrollIntoView({block:'center',behavior:'smooth'}),100); }],['Open the editor',()=>{ setEdFold(true); setEditMode(true); window.scrollTo({top:0,behavior:'smooth'}); }],['Done ✓',()=>setupMark('cleanup')]]}
   ]; }
 function paintSetup(){ const box=$('#setupBox'); if(!box) return; const own=S.cur&&S.cur.libId!=null&&isOwnerPart(S.curPart||S.part);
   if(!own||!S.setup||S.setup.hidden){ box.hidden=true; return; } box.hidden=false; $('#setupName').textContent=curSongName()||'this song';
@@ -2264,6 +2270,22 @@ async function openInbox(){
 }
 async function sugSetStatus(it,status){ try{ await sugPost(sugUrl(),{action:'review',key:sugKey(),id:it.id,status}); S.inbox=S.inbox.filter(x=>x!==it); paintSugBtn(); return true; }
   catch(e){ setStatus('Could not update the inbox: '+e.message+'.',true); return false; } }
+// ----- pitch line sensitivity: keep only the parts of the line sung loudly enough -----
+// loudness of the guide vocals at every point of the line, in dB below the song's loud singing (cached per song)
+function gateLoudness(){ const T=S.tT, buf=S.guideBuf; if(!T||!buf) return null; if(S.gateLoud&&S.gateLoud.T===T&&S.gateLoud.buf===buf) return S.gateLoud.db;
+  const x=buf.getChannelData(0), sr=buf.sampleRate, W=Math.round(sr*0.02), db=new Float32Array(T.length);
+  for(let i=0;i<T.length;i++){ const c=Math.round(T[i]*sr); let e=0,n=0; for(let j=Math.max(0,c-W);j<Math.min(x.length,c+W);j+=2){ e+=x[j]*x[j]; n++; } db[i]=n?10*Math.log10(e/n+1e-12):-120; }
+  const v=[]; for(let i=0;i<T.length;i++) if(!isNaN(S.tM[i])||(S.tMorig&&!isNaN(S.tMorig[i]))) v.push(db[i]); v.sort((a,b)=>a-b); const ref=v.length?v[Math.floor(v.length*0.9)]:0;
+  for(let i=0;i<db.length;i++) db[i]-=ref; S.gateLoud={T,buf,db}; return db; }
+function gateLabel(v){ return v>=100?'100% (everything)':v+'%'+(v<=20?' (only loud singing)':''); }
+function applyGate(v){ const db=gateLoudness(); if(!db) return; const thr=-45+42*Math.pow(1-v/100,0.6);   // 100% keeps down to −45 dB; 50% ≈ −17 dB; 0% only within 3 dB of the loud singing
+  if(!S.gateBase||S.gateBase.len!==S.tM.length){ pushUndo(); S.gateBase={len:S.tM.length,m:Float32Array.from(S.tM)}; }
+  const B=S.gateBase.m, M=new Float32Array(B.length);
+  for(let i=0;i<B.length;i++) M[i]=isNaN(B[i])||db[i]<thr?NaN:B[i];
+  // drop tiny leftovers (shorter than 80 ms)
+  for(let i=0;i<M.length;){ if(isNaN(M[i])){ i++; continue; } let j=i; while(j<M.length&&!isNaN(M[j])) j++; if((S.tT[j-1]-S.tT[i])<0.08) for(let k=i;k<j;k++) M[k]=NaN; i=j; }
+  S.tM=M; const removed=B.reduce((a,x,i)=>a+(!isNaN(x)&&isNaN(M[i])?1:0),0);
+  S.gating=true; try{ targetEdited(v>=100?'Pitch line sensitivity at 100%: the whole line is kept.':'Sensitivity '+v+'%: '+(removed*0.01).toFixed(1)+' s of quieter line hidden.'); } finally{ S.gating=false; } }
 // a new key stroke inside a held note: a short (50 ms) break just before the playhead (on the beat grid);
 // the guide tone strikes again there and the timing score counts a new note. On an existing break it joins the notes again.
 const SPLIT_N=5;
@@ -2365,6 +2387,7 @@ function updateSelInfo(){ { const c=document.getElementById('edClearSel'); if(c)
 function pushUndo(){ S.undo.push(Float32Array.from(S.tM)); if(S.undo.length>30) S.undo.shift(); }
 let edSaveTimer=null;
 function targetEdited(msg){ S.ovwImg=null; paintSuggest();
+  if(!S.gating&&S.gateBase){ S.gateBase=null; const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } }   // another edit: the slider starts again from the line as it is now
   S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
   computeViewKeep(); updateSelInfo(); draw();
   if(msg) setStatus(msg);
@@ -4132,6 +4155,7 @@ $('#restoreBacksOn').checked=restoreBacks();
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
 $('#edSplit').addEventListener('click',splitAtPlayhead);
+{ let gt=null; $('#gateIn').addEventListener('input',e=>{ const v=+e.target.value; $('#gateV').textContent=gateLabel(v); clearTimeout(gt); gt=setTimeout(()=>applyGate(v),60); }); }
 $('#setupShow').addEventListener('click',setupStart);
 $('#setupHide').addEventListener('click',()=>{ if(S.setup){ S.setup.hidden=true; setupSave(); paintSetup(); setStatus('Set-up guide hidden. The Set-up guide button in the moderator tools under the editor buttons (pencil) brings it back.'); } });
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
