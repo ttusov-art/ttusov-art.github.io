@@ -943,7 +943,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 ez';
+const APP_VERSION='2026-10-28 fa';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1676,7 +1676,7 @@ async function renderLib(){
     row.querySelector('b').textContent=s.name;
     const mk=(label,fn,cls)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; if(cls) b.className=cls; b.addEventListener('click',()=>fn(b)); row.appendChild(b); return b; };
     mk('Practise',()=>openLibSong(s.id),'primary');
-    mk('Delete',b=>{ if(b.dataset.armed){ forgetSong(s); libDel(s.id).then(renderLib); return; } b.dataset.armed='1'; b.textContent='Tap again to delete'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; b.classList.remove('danger'); } },4000); });
+    mk('Delete',b=>{ if(b.dataset.armed){ forgetSong(s); unpubMark(S.part,s.name,'deleted'); libDel(s.id).then(renderLib); return; } b.dataset.armed='1'; b.textContent='Tap again to delete'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; b.classList.remove('danger'); } },4000); });
     list.appendChild(row);
   }
 }
@@ -1688,7 +1688,7 @@ function renderAdmSongs(songs){ const box=$('#admSongs'); if(!box) return; $('#a
       a.disabled=dir<0?k===0:k===songs.length-1; a.addEventListener('click',()=>moveSong(s.id,dir)); row.appendChild(a); }
     if(S.parts.length>1){ const mv=document.createElement('select'); mv.className='sel move'; mv.setAttribute('aria-label','Move to another part');
       mv.innerHTML='<option value="">Move to…</option>'; S.parts.filter(n=>n!==S.part).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; mv.appendChild(o); });
-      mv.addEventListener('change',async()=>{ if(!mv.value) return; const rec=await libGet(s.id); if(rec){ rec.part=mv.value; delete rec.ord; await libPut(rec); } setStatus(s.name+' moved to '+mv.value+'.'); renderLib(); }); row.appendChild(mv);
+      mv.addEventListener('change',async()=>{ if(!mv.value) return; const rec=await libGet(s.id); if(rec){ unpubMark(partOf(rec),s.name,'moved to '+mv.value); unpubMark(mv.value,s.name,'moved here from '+partOf(rec)); rec.part=mv.value; delete rec.ord; await libPut(rec); } setStatus(s.name+' moved to '+mv.value+'.'); renderLib(); }); row.appendChild(mv);
       const cp=document.createElement('select'); cp.className='sel move'; cp.setAttribute('aria-label','Copy to another part');
       cp.innerHTML='<option value="">Copy to…</option>'; S.parts.filter(n=>n!==S.part).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; cp.appendChild(o); });
       cp.addEventListener('change',async()=>{ const to=cp.value; cp.value=''; if(to) await copySongTo(s.id,to); }); row.appendChild(cp); }
@@ -1703,6 +1703,7 @@ async function copySongTo(id,part){
     const rec={...data,id:same.id,uid:same.uid,created:same.created}; if(same.ord!=null) rec.ord=same.ord; await libPut(rec);
     setStatus('“'+src.name+'” in '+part+' now matches this one.');
   } else { data.created=Date.now(); await libPut(data); setStatus('“'+src.name+'” copied to '+part+'.'); }
+  unpubMark(part,src.name,same?'replaced by a copy from '+partOf(src):'copied here from '+partOf(src));
   renderLib();
 }
 // "Loading…" while a song opens: on the pitch lane and on the Choose song button
@@ -1818,7 +1819,7 @@ async function separateSong(file){
       try{
         const pcm=await toInt16(voc,LIB_SR);
         const id=await libPut({name,part:S.part,created:Date.now(),dur:voc.duration,sr:LIB_SR,pcm:pcm.buffer,contour:pl.mm,hop:pl.hop,t0:pl.t0});
-        S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; note=' Saved in the library.'; S.setup={}; setupSave();
+        S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; note=' Saved in the library.'; S.setup={}; setupSave(); unpubMark(S.part,name,'new song');
         try{ const bb=await encodeMp3(back,96,p=>sepUI('Saving the backing track to the library… '+Math.round(p*100)+'%',1)); S.curBacks=[{name:name+' backing',blob:bb,sep:true}]; S.curBackSel=0; await libSetBacks(id,S.curBacks,0); S.curBackBlob=bb; renderBackPick(); note=' Vocals and backing saved in the library.'; }
         catch(e){ note=' Vocals saved in the library (the backing could not be saved).'; }
         await renderLib();
@@ -3946,7 +3947,7 @@ async function addCurrentToLib(btn){
   try{
     const name=$('#songName').textContent.trim()||'Song';
     const pcm=await toInt16(S.guideBuf,LIB_SR);
-    const id=await libPut({name,part:S.part,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,musicKey:S.mkey?{...S.mkey}:null,view:S.viewManual?{...S.view}:null,sheet:S.sheet||null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))});
+    const id=await libPut({name,part:S.part,created:Date.now(),dur:S.guideBuf.duration,sr:LIB_SR,pcm:pcm.buffer,contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),tt:Float32Array.from(S.tT),beat:S.beat?{...S.beat}:null,musicKey:S.mkey?{...S.mkey}:null,view:S.viewManual?{...S.view}:null,sheet:S.sheet||null,lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}); unpubMark(S.part,name,'new song');
     let note='Added to the library.';
     if(S.backBuf){
       try{ const bb=S.curBackBlob||await encodeMp3(S.backBuf,96,p=>setStatus('Saving the backing track… '+Math.round(p*100)+'%'));
@@ -4322,6 +4323,7 @@ async function openGuideMenu(){
   m.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 async function moveSong(id,dir){
+  unpubMark(S.part,'Song order','changed');
   const m=$('#admSongs'), list=sortSongs((await libList()).filter(x=>partOf(x)===S.part)), i=list.findIndex(x=>x.id===id), j=i+dir;
   if(i<0||j<0||j>=list.length) return;
   [list[i],list[j]]=[list[j],list[i]]; await saveSongOrder(list);
