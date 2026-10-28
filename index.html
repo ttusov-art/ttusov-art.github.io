@@ -472,6 +472,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <button id="edPlay" type="button" hidden style="display:none">▶ Play</button>
       <button id="edOne" type="button">One note</button>
       <button id="edFill" type="button">Fill</button>
+      <button id="edSplit" type="button" title="Start a new note of the same pitch at the playhead (a new piano key stroke). Tap again on a split to join the notes.">✂ New note here</button>
       <button id="edKey" type="button" hidden style="display:none" disabled>Key: –</button>
       <button id="edShL" type="button" title="Move the line (or the selection) a quarter beat earlier" aria-label="Move the line a quarter beat earlier">Line ◀</button>
       <button id="edShR" type="button" title="Move the line (or the selection) a quarter beat later" aria-label="Move the line a quarter beat later">Line ▶</button>
@@ -499,7 +500,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="row ed-row" id="edFold" hidden><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></div>
       <div class="ed-lyr" id="edLyrBox" hidden><div class="lyr-list" id="lyrList" hidden></div><span class="small" id="lyrHint"></span></div>
-      <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span></div>
+      <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span></div>
     </div>
   </section>
 
@@ -593,7 +594,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <label class="small" for="lead">Lead-in</label>
     <select id="lead"><option value="0" selected>0 s</option><option value="1">1 s</option><option value="2">2 s</option><option value="3">3 s</option></select>
     <button id="clearLoop" type="button" hidden>Clear</button>
-      <span class="loop-info" id="loopInfo">Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you tap Clear or hold the lane outside the loop.</span>
+      <span class="loop-info" id="loopInfo">Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you hold inside the loop to clear it. Holding outside it starts a new loop.</span>
   </div>
   </div>
 
@@ -681,7 +682,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="field">
         <label for="zoom">Seconds on screen</label>
-        <div class="field-row"><input id="zoom" type="range" min="2" max="30" step="1" value="8"><span class="val" id="zoomV">8 s</span></div>
+        <div class="field-row"><input id="zoom" type="range" min="0.5" max="30" step="0.5" value="8"><span class="val" id="zoomV">8 s</span></div>
       </div>
       <div class="field">
         <label for="toneSound">Sound of the guide tone</label>
@@ -875,7 +876,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 en';
+const APP_VERSION='2026-10-28 eo';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1142,7 +1143,7 @@ function loopWholeSong(){
 // hold on the lane: first hold sets the start, the next sets the end
 // editor: long-press selects. On empty lane: that beat (keep holding and drag to select more). Outside a selection: extend it to here.
 // Inside the selection: start a new one at that beat. Returns the anchor for dragging after the press.
-function beatSpan(t){ const sg=S.beat?segAt(t):null, P=sg?sg.P:0.5, a=sg?Math.max(sg.t0,sg.off+Math.floor((t-sg.off)/P+1e-6)*P):Math.floor(t/P)*P; return {a:Math.max(0,a),b:Math.min(S.dur,a+P)}; }
+function beatSpan(t){ const sg=S.beat?segAt(t):null, P=sg?sg.P/visDiv(t):0.5, a=sg?Math.max(sg.t0,sg.off+Math.floor((t-sg.off)/P+1e-6)*P):Math.floor(t/P)*P; return {a:Math.max(0,a),b:Math.min(S.dur,a+P)}; }
 function editHold(t,clientY){ try{ navigator.vibrate&&navigator.vibrate(25); }catch(e){}
   const m=laneNoteAt(clientY), sp=beatSpan(t);
   if(S.sel){ const a=Math.min(S.sel.a,S.sel.b), b=Math.max(S.sel.a,S.sel.b);
@@ -1151,11 +1152,11 @@ function editHold(t,clientY){ try{ navigator.vibrate&&navigator.vibrate(25); }ca
 function sweepSel(an,t){ const sp=beatSpan(t); S.sel={a:Math.min(an.a,sp.a),b:Math.max(an.b,sp.b),m:an.m}; updateSelInfo(); draw(); }
 function holdLoopPoint(t){
   const L=S.loop;
-  if(L.a!=null&&L.b!=null&&(t<L.a||t>L.b)){ // hold outside a finished loop: clear it
+  if(L.a!=null&&L.b!=null&&t>=L.a&&t<=L.b){ // hold inside a finished loop: clear it
     L.a=L.b=null; L.on=false; $('#loopOn').checked=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw();
     try{ navigator.vibrate&&navigator.vibrate(30); }catch(e){} setStatus('Loop cleared.'); return; }
-  const which=(L.a!=null&&L.b==null)?'b':'a';
-  if(which==='a'){ L.b=null; L.on=false; $('#loopOn').checked=false; }
+  const which=(L.a!=null&&L.b==null)?'b':'a';   // hold outside a loop (or with none): a new loop starts here
+  if(which==='a'){ L.b=null; L.on=false; $('#loopOn').checked=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; }
   setLoopPoint(which,t);
   try{ navigator.vibrate&&navigator.vibrate(30); }catch(e){}
   setStatus(which==='a'?'Loop start set at '+fmtT1(L.a)+'. Hold again where the loop should end.':'Loop set '+fmtT1(L.a)+' – '+fmtT1(L.b)+'. Repeat is on.');
@@ -1230,7 +1231,7 @@ function updateLoopUI(){
   $('#loopOn').disabled=!ready; if(!ready){ L.on=false; $('#loopOn').checked=false; }
   $('#clearLoop').hidden=L.a==null&&L.b==null;
   const el=$('#loopInfo');
-  if(L.a==null&&L.b==null){ el.textContent='Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you tap Clear or hold the lane outside the loop.'; return; }
+  if(L.a==null&&L.b==null){ el.textContent='Hold your finger on the pitch lane where the loop should start, then hold again where it should end. It repeats until you hold inside the loop to clear it. Holding outside it starts a new loop.'; return; }
   if(L.a!=null&&L.b==null){ el.innerHTML='Start '+fmtT1(L.a)+' · hold again on the lane where the loop should end.'; return; }
   let s=(L.a!=null?fmtT1(L.a):'…')+' – '+(L.b!=null?fmtT1(L.b):'…');
   if(L.a!=null&&L.b!=null&&L.b-L.a<0.5) s+=' · make the section longer';
@@ -1861,10 +1862,12 @@ function beatsIn(a,b,div,fn){ // every grid point (beat / div) from a to b: fn(t
     for(let k=Math.ceil((lo-s.off)/st-1e-6);;k++){ const t=s.off+k*st; if(t>hi+1e-6||t>s.cut) break; fn(t,k,s); } }
 }
 function hasBars(){ return !!S.beat&&(S.beat.bar!=null||(S.beat.changes||[]).some(c=>c.bar!=null)); }
-// snap step: half a beat; a quarter beat when zoomed in far enough (quarter ≥ 24 px) or while Alt is held
+// snap step: the smallest beat line on screen (see visDiv)
 function lanePps(){ const c=document.getElementById('lane'); return ((c&&c.clientWidth)||600)-LABELW>0?(((c&&c.clientWidth)||600)-LABELW)/S.win:50; }
-function fineSnap(){ return !!(S.beat&&(S.altHeld||lanePps()*beatP()/4>=24)); }
-function snapDiv(){ return fineSnap()?4:2; }
+// the smallest beat lines on screen (1 = beats, 2 = eighths, 4 = sixteenths); everything snaps to them
+function visDiv(t){ if(!S.beat) return 1; const P=beatP(t), pps=lanePps(); if(S.altHeld||S.win<=1.0001||pps*P/4>=24) return 4; if(pps*P/2>=12) return 2; return 1; }
+function fineSnap(){ return !!S.beat&&visDiv()===4; }
+function snapDiv(){ return visDiv(); }
 function snapStep(t){ return S.beat&&S.snap?beatP(t)/snapDiv():0; }
 function snapT(t){ if(!S.beat||!S.snap) return t; return gridAt(t,snapDiv()); }
 let beatSaveTimer=null;
@@ -2213,6 +2216,19 @@ async function openInbox(){
 }
 async function sugSetStatus(it,status){ try{ await sugPost(sugUrl(),{action:'review',key:sugKey(),id:it.id,status}); S.inbox=S.inbox.filter(x=>x!==it); paintSugBtn(); return true; }
   catch(e){ setStatus('Could not update the inbox: '+e.message+'.',true); return false; } }
+// a new key stroke inside a held note: a short (50 ms) break just before the playhead (on the beat grid);
+// the guide tone strikes again there and the timing score counts a new note. On an existing break it joins the notes again.
+const SPLIT_N=5;
+function splitAtPlayhead(){
+  if(!S.tT||!S.tT.length){ setStatus('Load a song first.',true); return; }
+  if(S.playing) stop();
+  const t=snapT(S.pos), M=S.tM, n=M.length, i=idxAt(t);
+  // a short break near the playhead → join it
+  for(let a=Math.max(1,i-SPLIT_N-3);a<=Math.min(n-2,i+3);a++){ if(isNaN(M[a])&&!isNaN(M[a-1])){ let b=a; while(b<n&&isNaN(M[b])&&b-a<=SPLIT_N+1) b++;
+      if(b<n&&!isNaN(M[b])&&b-a<=SPLIT_N+1&&Math.abs(M[a-1]-M[b])<0.6&&a<=i+1&&b>=i-1){ pushUndo(); for(let k=a;k<b;k++) M[k]=M[a-1]; targetEdited('Notes joined: one held note again at '+fmtT1(t)+'.'); return; } } }
+  const a=i-SPLIT_N; if(a<1||i>=n||isNaN(M[i])||isNaN(M[a-1])){ setStatus('Put the playhead inside a held note (where the line continues) to start a new note there.',true); return; }
+  for(let k=a;k<i;k++) if(isNaN(M[k])){ setStatus('There is already a break here.',true); return; }
+  pushUndo(); for(let k=a;k<i;k++) M[k]=NaN; targetEdited('New note at '+fmtT1(t)+': the held note is struck again here. Tap ✂ again to join.'); }
 function idxAt(t){ const T=S.tT; let lo=0,hi=T.length-1; while(hi-lo>1){ const m=(lo+hi)>>1; if(T[m]<t) lo=m; else hi=m; } return Math.abs(T[lo]-t)<=Math.abs(T[hi]-t)?lo:hi; }
 async function startReview(it,libId){
   const ok=await openLibSong(libId); if(!ok) return;
@@ -2463,7 +2479,7 @@ async function edRefind(btn){
 }
 function edLoop(){ const r=selRange(); if(!r) return; S.loop.a=Math.round(r.a*10)/10; S.loop.b=Math.round(Math.max(r.b,r.a+0.5)*10)/10; S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); setStatus('Loop set to the selection. Press Play.'); }
 // with Snap on, a tap selects the one beat under the finger (beat line to the next beat line)
-function selectBeatAt(t,m,half){ const sg=segAt(t), P=(half?snapStep(t):Math.min(sg.P,snapStep(t)*2))||sg.P, a=Math.max(sg.t0,sg.off+Math.floor((t-sg.off)/P+1e-6)*P); S.sel={a:Math.max(0,a),b:Math.min(a+P,sg.t1),m}; updateSelInfo(); draw(); }
+function selectBeatAt(t,m,half){ const sg=segAt(t), P=snapStep(t)||sg.P, a=Math.max(sg.t0,sg.off+Math.floor((t-sg.off)/P+1e-6)*P); S.sel={a:Math.max(0,a),b:Math.min(a+P,sg.t1),m}; updateSelInfo(); draw(); }
 function selectFragmentAt(t){
   if(!S.tT) return;
   let k=-1,bd=1e9; for(let i=0;i<S.tT.length;i++){ if(isNaN(S.tM[i])) continue; const d=Math.abs(S.tT[i]-t); if(d<bd){ bd=d; k=i; } }
@@ -2474,7 +2490,7 @@ function selectFragmentAt(t){
 function setEditMode(on){
   if(on) timingTried();
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold outside a loop to clear it. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
   if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
@@ -2487,7 +2503,7 @@ function computeOnsets(){
   let ref=null,lastV=-1e9,dev=-1;
   for(let i=0;i<n;i++){
     const v=sm[i]; if(isNaN(v)) continue; const t=T[i];
-    if(ref===null||t-lastV>0.12){ out.push({t,i,kind:'entry'}); ref=v; dev=-1; }
+    if(ref===null||t-lastV>0.12||(t-lastV>=0.035&&Math.abs(v-ref)<0.6)){ out.push({t,i,kind:'entry'}); ref=v; dev=-1; }
     else if(Math.abs(v-ref)>0.6){ if(dev<0) dev=i; if(t-T[dev]>=0.07){ out.push({t:T[dev],i:dev,kind:'change'}); const w=[]; for(let k=dev;k<=i;k++) if(!isNaN(sm[k])) w.push(sm[k]); ref=median(w); dev=-1; } }
     else { dev=-1; ref=0.9*ref+0.1*v; }
     lastV=t;
@@ -2559,8 +2575,8 @@ function renderLyrics(fillText){
     row.innerHTML=`<span class="lyr-t">${L.t==null?'—':fmtT1(L.t)}</span><span class="lyr-x"></span>`;
     row.querySelector('.lyr-x').textContent=L.text;
     const mk=(label,title,fn)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; b.title=title; b.setAttribute('aria-label',title); b.addEventListener('click',fn); row.appendChild(b); };
-    mk('−',lyrSnapping()?'Move line half a beat earlier':'Move line 0.2 s earlier',()=>nudgeLine(i,-1));
-    mk('+',lyrSnapping()?'Move line half a beat later':'Move line 0.2 s later',()=>nudgeLine(i,1));
+    mk('−',lyrSnapping()?'Move line one grid step earlier':'Move line 0.2 s earlier',()=>nudgeLine(i,-1));
+    mk('+',lyrSnapping()?'Move line one grid step later':'Move line 0.2 s later',()=>nudgeLine(i,1));
     mk('▶','Play from just before this line',()=>{ if(S.lyrics[i].t!=null) seek(Math.max(0,S.lyrics[i].t-1.5)); if(!S.playing&&!S.review) play(); });
     list.appendChild(row);
   });
@@ -2568,14 +2584,13 @@ function renderLyrics(fillText){
   renderLyrSnap(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
 function lyrSnapping(){ return !!S.beat; }   // lyric lines always snap to the beat grid
-function lyrStep(){ return lyrSnapping()?beatP()/2:0.2; }
+function lyrStep(){ return lyrSnapping()?snapStep()||beatP()/2:0.2; }
 function lyrT(t){ if(lyrSnapping()){ const d=snapDiv(); t=gridAt(t,d); if(t<0) t+=beatP(t)/d; } return Math.max(0,Math.round(t*100)/100); }
 function nudgeLine(i,dir){ timingTried(); const L=S.lyrics[i]; if(L.t==null) return; L.t=lyrT(L.t+dir*lyrStep()); lyrChanged(); }
 function snapAllLines(){ if(!lyrSnapping()) return; S.lyrics.forEach(L=>{ if(L.t!=null) L.t=lyrT(L.t); }); lyrChanged(); setStatus('All timed lines moved to the nearest beat or half beat.'); }
 function renderLyrSnap(){
   $('#lyrSnapAll').disabled=!S.beat||!S.lyrics.length;
-  const st=S.beat?(beatP()/2).toFixed(2)+' s (half a beat)':'0.2 s';
-  $('#lyrHint').textContent='After placing the lines, play the song and check them. Use − and + to move a line by '+(lyrSnapping()?st:'0.2 s')+', or ▶ to play from that line.'+(lyrSnapping()?' New times land on the nearest beat or half beat.':'');
+  $('#lyrHint').textContent='After placing the lines, play the song and check them. Use − and + to move a line by '+(lyrSnapping()?'one grid step (the smallest beat line you can see: zoom in for finer steps)':'0.2 s')+', or ▶ to play from that line.'+(lyrSnapping()?' New times land on the nearest visible beat line.':'');
 }
 // editor: the first timed lyric after the playhead moves to the playhead (handy when it sits far off screen)
 const LYR_LAG=0.25;   // fixed allowance for hearing the line and clicking (plus the audio delay from Settings): always the same, so it is predictable
@@ -3309,6 +3324,18 @@ function micPitch(){
   let t=best; const a=cm[best-1],b=cm[best],c=cm[best+1],den=a-2*b+c; if(den>0) t=best+0.5*(a-c)/den;
   return f2m(fs/t);
 }
+// paused with the microphone on: what you are singing right now (You / Off by, a key on the keyboard, a dot at the playhead)
+S.live=NaN; S.liveShown=null;
+function liveLoop(){ requestAnimationFrame(liveLoop);
+  const on=!S.playing&&!!S.mic&&!S.review&&!S.cal&&!document.hidden&&!!S.micBuf;
+  if(!on){ if(!isNaN(S.live)){ S.live=NaN; S.liveShown=null; if(!S.playing){ $('#rYou').textContent=S.mic?'–':'mic off'; $('#rCents').textContent='–'; $('#rCents').className=''; draw(); } } return; }
+  const you=micPitch(); S.live=you;
+  const key=(isNaN(you)?'x':Math.round(you*20))+'|'+S.pos.toFixed(2)+'|'+S.win; if(key===S.liveShown) return; S.liveShown=key;   // redraw only when it changes (5 cents)
+  const ry=$('#rYou'), rc=$('#rCents'); let tg=targetAt(S.pos); if(isNaN(tg)){ const m=targetNoteNear(S.pos); tg=m==null?NaN:m; }
+  if(isNaN(you)){ ry.textContent='–'; rc.textContent='–'; rc.className=''; }
+  else { ry.textContent=noteName(Math.round(you)); if(!isNaN(tg)){ const d=Math.round(centsDiff(you,tg)); rc.textContent=(d>0?'+':d<0?'−':'±')+Math.abs(d)+' ¢'; rc.className='c-'+grade(d); } else { rc.textContent='–'; rc.className=''; } }
+  draw(); }
+requestAnimationFrame(liveLoop);
 function centsDiff(you,target){
   let d=(you-target)*100;
   if(S.ignoreOct){ d=((d%1200)+1800)%1200-600; }
@@ -3481,8 +3508,8 @@ function draw(){
   }
   // seconds grid
   if(S.beat){
-    const showQ=S.editMode&&S.snap&&fineSnap(), cb=col('--beat'), ch=col('--halfbeat'), bars=hasBars();
-    beatsIn(t0,t1,4,(t,k,s)=>{ const showHalf=pps*s.P/2>=12, x=Math.round(xOf(t))+0.5; if(x<=LABELW) return;
+    const vd=visDiv(now), showQ=vd===4, cb=col('--beat'), ch=col('--halfbeat'), bars=hasBars();
+    beatsIn(t0,t1,4,(t,k,s)=>{ const showHalf=vd>=2, x=Math.round(xOf(t))+0.5; if(x<=LABELW) return;
       if(k%4===0){ const bar=bars&&barPos(k/4,s)===0; g.fillStyle=cb; if(bar){ g.globalAlpha=1; g.fillRect(x-0.5,0,2,h); } else g.fillRect(x,0,1,h); } else if(k%2===0){ if(showHalf){ g.fillStyle=ch; g.fillRect(x,0,1,h); } }
       else if(showQ){ g.fillStyle=ch; g.globalAlpha=0.55; g.fillRect(x,0,1,h); g.globalAlpha=1; } });
     // tempo changes: a dashed line with the new tempo
@@ -3602,6 +3629,9 @@ function draw(){
   const tgNow=targetAt(now), hit=isNaN(tgNow)?null:Math.round(tgNow);
   if(S.kbNote!=null&&S.kbNote>=lo&&S.kbNote<=hi){ const y=yOf(S.kbNote); g.fillStyle=col('--accent'); g.globalAlpha=0.55; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; }
   { const ab=document.getElementById('kbAuto'); if(ab&&ab.hidden===!!S.viewManual) ab.hidden=!S.viewManual; }
+  if(!S.playing&&!isNaN(S.live)){ const lm=Math.round(S.live), tgL=targetAt(now), gc=isNaN(tgL)?col('--you-idle'):col('--'+grade(centsDiff(S.live,tgL)));
+    if(lm>=lo&&lm<=hi){ const y=yOf(lm); g.fillStyle=gc; g.globalAlpha=0.5; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; }
+    const yy=yOf(S.live); if(yy>0&&yy<h){ g.fillStyle=gc; g.beginPath(); g.arc(headX,yy,7,0,Math.PI*2); g.fill(); g.strokeStyle=col('--lane-bg'); g.lineWidth=2; g.stroke(); } }
   if(hit!=null&&hit>=lo&&hit<=hi){ const y=yOf(hit); g.fillStyle=col('--key-hit'); g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.fillStyle=col('--accent'); g.fillRect(0,y-rh/2+0.5,3,rh-1); }
   g.fillStyle=col('--line'); g.fillRect(LABELW-1,0,1,h);
   g.textAlign='right'; g.textBaseline='middle';
@@ -4048,6 +4078,7 @@ $('#backDel').addEventListener('click',e=>deleteBacking(e.currentTarget));
 $('#restoreBacksOn').checked=restoreBacks();
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
+$('#edSplit').addEventListener('click',splitAtPlayhead);
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
@@ -4309,9 +4340,9 @@ $('#pdUp').addEventListener('click',()=>setPDelay(S.pdelay*1000+20,true));
   setPDelay(v,false); })();
 $('#alignR').addEventListener('input',onAlign);
 $('#alignUse').addEventListener('click',useAlignForNew);
-function setWin(w,save){ S.win=Math.max(2,Math.min(30,w)); $('#zoom').value=String(Math.round(S.win)); $('#zoomV').textContent=(S.win<10?S.win.toFixed(1).replace(/\.0$/,''):Math.round(S.win))+' s'; draw(); if(save){ try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } }
+function setWin(w,save){ S.win=Math.max(0.5,Math.min(30,w)); $('#zoom').value=String(Math.round(S.win*2)/2); $('#zoomV').textContent=(S.win<10?S.win.toFixed(S.win<2?2:1).replace(/\.?0+$/,''):Math.round(S.win))+' s'; draw(); if(save){ try{localStorage.setItem('pc-win',String(S.win))}catch(x){} } }
 $('#zoom').addEventListener('input',e=>setWin(+e.target.value,true));
-try{ const w=+localStorage.getItem('pc-win'); if(w>=2&&w<=30) setWin(w,false); }catch(x){}
+try{ const w=+localStorage.getItem('pc-win'); if(w>=0.5&&w<=30) setWin(w,false); }catch(x){}
 // mouse wheel / trackpad zoom on the lane
 // overview bar: tap or drag to jump anywhere in the song
 let ovDrag=null;
