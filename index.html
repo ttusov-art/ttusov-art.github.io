@@ -214,6 +214,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .rec-btn:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 .mic-grp{display:inline-flex;align-items:center;gap:12px;white-space:nowrap;margin-left:auto}   /* microphone and Record my voice stay on one row */
 .mic-btn.guide-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.mic-btn.guide-on.mic-wait{background:transparent;color:var(--accent);border-style:dashed}
 .mic-btn input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .mic-btn .ic-off{display:none}
 .mic-btn:not(.guide-on) .ic-on{display:none}
@@ -963,7 +964,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fn';
+const APP_VERSION='2026-10-28 fo';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3488,7 +3489,7 @@ async function startMic(){
     const an=ctx.createAnalyser(); an.fftSize=2048; an.smoothingTimeConstant=0; src.connect(an);
     S.mic={stream,an,src}; S.micBuf=new Float32Array(an.fftSize);
     await attachRecorder(src);
-    $('#micDot').classList.add('live');
+    $('#micDot').classList.add('live'); paintMic();
     listMics(stream);
     if(switched) setStatus('Singing into the phone’s microphone ('+switched+'), so Bluetooth headphones keep full sound and normal volume. You can change it in Settings.');
     return true;
@@ -3527,7 +3528,7 @@ async function listMics(stream){
       setStatus('You are using the Bluetooth headset’s microphone. This switches the headset into phone-call mode, so the music gets quiet and the volume can’t be changed. In Settings, choose '+(alt&&alt.label?'“'+alt.label+'”':'the phone’s own microphone')+' instead and keep listening on the headset.',true); }
   }catch(e){}
 }
-function stopMic(){ if(!S.mic) return; if(S.recNode){ try{S.recNode.disconnect()}catch(e){} S.recNode=null; } S.mic.stream.getTracks().forEach(t=>t.stop()); S.mic.src.disconnect(); S.mic=null; $('#micDot').classList.remove('live'); }
+function stopMic(){ if(!S.mic) return; if(S.recNode){ try{S.recNode.disconnect()}catch(e){} S.recNode=null; } S.mic.stream.getTracks().forEach(t=>t.stop()); S.mic.src.disconnect(); S.mic=null; $('#micDot').classList.remove('live'); paintMic(); }
 
 // real-time YIN on the analyser window, decimated to ~16 kHz
 const RT={dec:3,x:null,cm:null};
@@ -4383,9 +4384,14 @@ $('#restart').addEventListener('click',()=>{ const was=S.playing; if(was) stop()
 // remembered on this device: microphone on/off and Record my voice (the mic itself starts when you press Play, as before)
 try{ const m=localStorage.getItem('pc-mic-on'), r=localStorage.getItem('pc-rec-on'); if(m!=null) $('#micOn').checked=m==='1'; if(r!=null) $('#recOn').checked=r==='1'; }catch(x){}
 $('#recOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-rec-on',e.target.checked?'1':'0'); }catch(x){} });
-function paintMic(){ const on=$('#micOn').checked, l=$('#micLbl'); l.classList.toggle('guide-on',on); l.title='Sing with microphone: '+(on?'on':'off'); }
+// on but not listening yet (it starts with Play): dashed outline, and one tap starts it right away
+function paintMic(){ const on=$('#micOn').checked, wait=on&&!S.mic, l=$('#micLbl'); l.classList.toggle('guide-on',on); l.classList.toggle('mic-wait',wait);
+  l.title=wait?'Microphone on: it starts listening when you press Play. Tap to start listening now.':'Sing with microphone: '+(on?'on, listening':'off'); }
+$('#micLbl').addEventListener('click',async e=>{ if(e.target===$('#micOn')||!$('#micOn').checked||S.mic) return; e.preventDefault();
+  const ok=await startMic(); paintMic(); if(ok) setStatus('Listening. Sing to see your pitch, also while paused.'); });
 $('#micOn').addEventListener('change',async e=>{ try{ localStorage.setItem('pc-mic-on',e.target.checked?'1':'0'); }catch(x){} paintMic(); if(e.target.checked){ const ok=await startMic(); if(!ok){ e.target.checked=false; paintMic(); } } else stopMic(); });
 paintMic();
+try{ if($('#micOn').checked) setStatus('Microphone is on: it starts listening when you press Play. To check your pitch while paused, tap the microphone button.'); }catch(e){}
 async function openGuideMenu(){
   const m=$('#guideMenu'); m.innerHTML='';
   let songs=[]; try{ songs=sortSongs((await libMeta()).filter(x=>partOf(x)===S.part)).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})); }catch(e){}
