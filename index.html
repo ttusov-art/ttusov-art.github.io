@@ -671,7 +671,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="field">
         <span class="small warn" id="delayHint" hidden></span>
-        <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Sing a C scale with the piano, then with the picture (about 30 seconds). Sets the delay compensation and the picture delay.</span></div>
+        <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Clap along with the piano, then with the picture (about 30 seconds). Sets the delay compensation and the picture delay.</span></div>
         <span class="small">If your line always looks slightly late compared with the target, raise this or tap Measure delay. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
       </div>
       <div class="field" id="micSelField">
@@ -875,7 +875,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-27 el';
+const APP_VERSION='2026-10-28 em';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3080,7 +3080,7 @@ function setDelay(ms){ $('#delay').value=String(ms); S.delay=ms/1000; $('#delayV
 function delayHint(){ const el=document.getElementById('delayHint'); if(!el) return; const d=Math.round((S.delay||0)*1000), p=Math.round((S.pdelay||0)*1000); el.hidden=!(p>=100&&d<p-30); el.textContent='This is lower than your Picture delay ('+p+' ms). With headphones it is usually a bit higher than the Picture delay, so it is probably too low.'; }
 
 // ===== delay measurement: beeps, user claps or sings "ta" on each =====
-// ===== measuring the delays: sing a C scale with the piano (eyes closed), then with the lighting keys (no sound) =====
+// ===== measuring the delays: clap along with a C scale on the piano (eyes closed), then with the lighting keys (no sound) =====
 // sound step: sung notes come out late by the headphone + microphone delay  -> delay compensation
 // picture step: only the microphone delay (the screen is about instant)    -> the difference is the headphone delay = picture delay
 const CAL_STEP=0.75, CAL_COUNT=4;
@@ -3093,40 +3093,34 @@ function calPianoSvg(base){ const W=[0,2,4,5,7,9,11,12], names=['C','D','E','F',
 function calNote(m,t,dur,dest){ const c=S.ctx, f=m2f(m), env=c.createGain(); env.gain.setValueAtTime(0,t); env.gain.linearRampToValueAtTime(0.9,t+0.006); env.gain.setTargetAtTime(0.35,t+0.006,0.25); env.gain.setTargetAtTime(0.0001,t+dur,0.08); env.connect(dest);
   [[1,1],[2,0.45],[3,0.22],[4,0.12]].forEach(([h,a])=>{ const o=c.createOscillator(), g=c.createGain(); o.frequency.value=f*h; g.gain.value=a*0.5; o.connect(g).connect(env); o.start(t); o.stop(t+dur+0.6); }); }
 function calClick(t,dest){ const c=S.ctx, o=c.createOscillator(), g=c.createGain(); o.frequency.value=1200; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.5,t+0.003); g.gain.exponentialRampToValueAtTime(0.001,t+0.06); o.connect(g).connect(dest); o.start(t); o.stop(t+0.08); }
-// pitch every 10 ms from the recorded microphone sound
-function calPitchTrack(cal,sr){
-  if(!cal.chunks.length) return [];
+// claps: sharp onsets in the recorded microphone sound (2 ms steps)
+function calOnsets(cal,sr){
+  if(!cal.chunks.length) return {on:[],level:0};
   const n=cal.chunks.reduce((a,c)=>a+c.d.length,0), x=new Float32Array(n), t0=cal.chunks[0].t; let o=0; for(const c of cal.chunks){ x.set(c.d,o); o+=c.d.length; }
-  const dec=Math.max(1,Math.round(sr/16000)), fs=sr/dec, m=Math.floor(n/dec), y=new Float32Array(m); for(let i=0;i<m;i++){ let v=0; for(let k=0;k<dec;k++) v+=x[i*dec+k]; y[i]=v/dec; }
-  const mr=curRange().mic, tauMin=Math.floor(fs/mr[1]), tauMax=Math.ceil(fs/mr[0]), N=Math.round(fs*0.04), hop=Math.round(fs*0.01), cm=new Float32Array(tauMax+2), out=[];
-  for(let s0=0;s0+N+tauMax+2<m;s0+=hop){ let e=0; for(let j=0;j<N;j++) e+=y[s0+j]*y[s0+j]; const t=t0+(s0+N/2)/fs, rms=Math.sqrt(e/N); if(rms<0.004){ out.push([t,NaN,rms]); continue; }
-    let run=0; cm[0]=1; for(let tau=1;tau<=tauMax+1;tau++){ let sum=0; for(let j=0;j<N;j++){ const d=y[s0+j]-y[s0+j+tau]; sum+=d*d; } run+=sum; cm[tau]=run>0?sum*tau/run:1; }
-    let best=-1; for(let tau=tauMin;tau<=tauMax;tau++){ if(cm[tau]<0.2){ while(tau+1<=tauMax&&cm[tau+1]<cm[tau]) tau++; best=tau; break; } }
-    if(best<0){ out.push([t,NaN,rms]); continue; } let tt=best; const a=cm[best-1],b=cm[best],c=cm[best+1],den=a-2*b+c; if(den>0) tt=best+0.5*(a-c)/den; out.push([t,f2m(fs/tt),rms]); }
-  return out; }
-// when did the voice arrive on each note? (any octave counts) -> median lateness and how steady it was
-// first the overall lateness is found by sliding the whole sung line along the scale (0 to 1.5 s late, so even slow
-// Bluetooth headphones fit); then each note is timed near that lateness
-function calAnalyse(track,notes,times){
-  if(!track.length) return {ok:false,msg:'No sound came from the microphone.'};
-  const pc=(a,b)=>{ const d=((a-b)%12+18)%12-6; return Math.abs(d); }, T0=track[0][0], dt=0.01, n=track.length;
-  const voiced=track.filter(x=>!isNaN(x[1])).length; if(voiced<20) return {ok:false,msg:'The microphone heard almost no singing.',diag:{hits:notes.map(()=>false),voiced:0,level:Math.max(0,...track.map(x=>x[2]||0)),lag:null}};
-  const step=times.length>1?times[1]-times[0]:0.75, endT=times[times.length-1]+step;
-  const want=t=>{ if(t<times[0]||t>=endT) return null; return notes[Math.min(notes.length-1,Math.floor((t-times[0])/step))]; };
-  let best=null;
-  for(let lag=0;lag<=1.5;lag+=0.01){ let sc=0;
-    for(const [t,v] of track){ const w=want(t-lag); if(w==null){ if(!isNaN(v)) sc-=0.5; continue; } if(isNaN(v)) continue; sc+=pc(v,w)<=0.6?1:-1; }
-    if(!best||sc>best.sc) best={lag,sc}; }
-  const lag=best.lag, offs=[], hits=notes.map(()=>false);
-  let ctr=lag;
-  notes.forEach((mk,k)=>{ const tk=times[k], prev=k?notes[k-1]:null;
-    for(let i=0;i<n;i++){ const [t,v]=track[i]; if(t<tk+ctr-0.35) continue; if(t>tk+ctr+0.35) break; if(isNaN(v)) continue;
-      const near=prev==null?pc(v,mk)<=1.5:pc(v,mk)<pc(v,prev)&&pc(v,mk)<=1.5; if(!near) continue;
-      let ok=true; for(let j=1;j<=2;j++){ const q=track[i+j]; if(!q||isNaN(q[1])||(prev==null?pc(q[1],mk)>1.5:pc(q[1],mk)>=pc(q[1],prev))){ ok=false; break; } }
-      if(ok){ offs.push(t-tk); hits[k]=true; ctr=ctr*0.5+(t-tk)*0.5; break; } } });
-  const sung=track.filter(x=>x[0]>=times[0]+lag-0.2&&x[0]<=endT+lag), diag={hits,voiced:Math.round(100*sung.filter(x=>!isNaN(x[1])).length/Math.max(1,sung.length)),level:Math.max(0,...sung.map(x=>x[2]||0)),lag:Math.round(lag*1000)};
-  if(offs.length<8) return {ok:false,msg:offs.length?'Only '+offs.length+' of the 15 notes were clear enough.':'The singing could not be followed.',n:offs.length,diag};
+  for(let i=n-1;i>0;i--) x[i]-=x[i-1]; x[0]=0;   // high-pass: keeps the sharp clap, drops most of the piano and voice
+  const hop=Math.round(sr*0.002), m=Math.floor(n/hop), env=new Float32Array(m);
+  for(let i=0;i<m;i++){ let e=0; for(let j=0;j<hop;j++){ const v=x[i*hop+j]; e+=v*v; } env[i]=Math.sqrt(e/hop); }
+  const srt=Array.from(env).sort((a,b)=>a-b), floor=srt[Math.floor(m*0.3)]||0, peak=srt[Math.floor(m*0.998)]||0;
+  if(peak<0.004) return {on:[],level:peak};
+  const hi=floor+0.35*(peak-floor), lo=floor+0.12*(peak-floor), on=[]; let last=-1e9, quiet=0;
+  for(let i=1;i<m;i++){ if(env[i]<lo) quiet++; else if(env[i]>=hi&&quiet>=25&&(i-last)*0.002>0.18){ let k=i; while(k>0&&env[k-1]>=lo&&i-k<15) k--; on.push(t0+k*0.002); last=i; quiet=0; } else if(env[i]>=lo) quiet=0; }
+  return {on,level:peak}; }
+// how late were the claps? first the overall lateness (0 to 1.5 s), then each beat near it (following slow drift)
+function calClapAnalyse(det,times){
+  const on=det.on, diag0={hits:times.map(()=>false),level:det.level,lag:null,claps:on.length};
+  if(det.level<0.004) return {ok:false,msg:'The microphone heard almost nothing.',diag:diag0};
+  if(on.length<6) return {ok:false,msg:'Only '+on.length+' claps were heard.',diag:diag0};
+  let best=null; for(let lag=0;lag<=1.5;lag+=0.005){ let sc=0; for(const tk of times){ const t=tk+lag; if(on.some(x=>Math.abs(x-t)<0.07)) sc++; } if(!best||sc>best.sc) best={lag,sc}; }
+  const step=times.length>1?times[1]-times[0]:0.75, first=on.find(x=>x>=times[0]-0.25);
+  if(first!=null){ let pick=best.lag, bd=1e9; for(let j=-2;j<=2;j++){ const L=best.lag+j*step; if(L<-0.1||L>1.6) continue; const d=Math.abs(first-times[0]-L); if(d<bd){ bd=d; pick=L; } } best.lag=pick; }
+  let ctr=first!=null&&Math.abs(first-times[0]-best.lag)<0.35?first-times[0]:best.lag; const offs=[], hits=times.map(()=>false);
+  times.forEach((tk,k)=>{ let bx=null; for(const x of on){ const d=x-tk-ctr; if(Math.abs(d)<=0.12&&(bx==null||Math.abs(d)<Math.abs(bx-tk-ctr))) bx=x; } if(bx!=null){ offs.push(bx-tk); hits[k]=true; ctr=ctr*0.7+(bx-tk)*0.3; } });
+  const diag={hits,level:det.level,lag:Math.round(best.lag*1000),claps:on.length};
+  if(offs.length<8) return {ok:false,msg:'Only '+offs.length+' of the 15 claps were on the beat.',n:offs.length,diag};
   const srt=offs.slice().sort((a,b)=>a-b), med=srt[srt.length>>1], dev=offs.map(o=>Math.abs(o-med)).sort((a,b)=>a-b)[offs.length>>1];
+  const span=on.filter(x=>x>=times[0]+best.lag-0.3&&x<=times[times.length-1]+best.lag+0.3).length;
+  if(offs.length<0.6*span) return {ok:false,msg:'Many claps were off the beat ('+(span-offs.length)+' extra). Clap once on each note, nothing in between.',n:offs.length,diag};
+  if(dev>0.09) return {ok:false,msg:'The claps were not steady on the beat (they wandered by about '+Math.round(dev*1000)+' ms).',n:offs.length,diag};
   return {ok:true,ms:Math.round(med*1000),spread:Math.round(dev*1000),n:offs.length}; }
 async function calRun(kind,ui){
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
@@ -3141,15 +3135,15 @@ async function calRun(kind,ui){
       if(now>=end){ res(); return; } requestAnimationFrame(step); }; requestAnimationFrame(step); });
   const cal=S.cal; S.cal=null; ui.querySelectorAll('.cal-piano rect').forEach(r=>r.classList.remove('lit'));
   if(!cal||cal.cancel) return null;
-  return calAnalyse(calPitchTrack(cal,ctx.sampleRate),notes,times); }
+  return calClapAnalyse(calOnsets(cal,ctx.sampleRate),times); }
 const calLevelWord=l=>l<0.01?'very quiet':l<0.03?'quiet':l<0.25?'good':'very loud';
-function calMicCheckHtml(){ return '<div class="cal-mic"><span class="cal-mic-lab">Microphone check: sing a note</span><div class="cal-meter"><i></i></div><span class="cal-mic-note">–</span></div>'; }
+function calMicCheckHtml(){ return '<div class="cal-mic"><span class="cal-mic-lab">Microphone check: clap a few times</span><div class="cal-meter"><i></i></div><span class="cal-mic-note">–</span></div>'; }
 function calMicCheck(root){ const box=root.querySelector('.cal-mic'); if(!box||!S.mic) return; const bar=box.querySelector('.cal-meter i'), note=box.querySelector('.cal-mic-note'), buf=new Float32Array(S.mic.an.fftSize); let peak=0;
   const loop=()=>{ if(!box.isConnected||!S.mic) return; S.mic.an.getFloatTimeDomainData(buf); let e=0; for(let i=0;i<buf.length;i++) e+=buf[i]*buf[i]; const rms=Math.sqrt(e/buf.length); peak=Math.max(rms,peak*0.96);
-    bar.style.width=Math.min(100,Math.sqrt(peak/0.3)*100)+'%'; bar.className=peak<0.01?'q':peak<0.03?'m':''; const m=micPitch(); note.textContent=isNaN(m)?(peak<0.01?'too quiet':'–'):noteName(Math.round(m)); requestAnimationFrame(loop); };
+    bar.style.width=Math.min(100,Math.sqrt(peak/0.3)*100)+'%'; bar.className=peak<0.01?'q':peak<0.03?'m':''; note.textContent=peak<0.004?'–':peak<0.01?'too quiet':peak<0.03?'quiet':'heard ✓'; requestAnimationFrame(loop); };
   requestAnimationFrame(loop); }
-function calDiagHtml(r,notes){ const d=r&&r.diag; if(!d) return ''; const nm=m=>noteName(m).replace(/\d+$/,'');
-  return '<div class="cal-diag"><div class="cal-hits">'+notes.map((m,k)=>'<span class="'+(d.hits[k]?'ok':'')+'" title="'+noteName(m)+'">'+nm(m)+'</span>').join('')+'</div><span class="small">Green: notes the app caught. Singing heard '+d.voiced+'% of the time · loudest: '+calLevelWord(d.level)+(d.lag!=null?' · about '+d.lag+' ms late':'')+'.</span></div>'; }
+function calDiagHtml(r,notes){ const d=r&&r.diag; if(!d) return '';
+  return '<div class="cal-diag"><div class="cal-hits">'+notes.map((m,k)=>'<span class="'+(d.hits[k]?'ok':'')+'">'+(k+1)+'</span>').join('')+'</div><span class="small">Green: beats with a clap on time. Claps heard: '+d.claps+' · loudest: '+calLevelWord(d.level)+(d.lag!=null?' · about '+d.lag+' ms late':'')+'.</span></div>'; }
 async function openCalibration(){
   if(S.cal||!$('#calView').hidden) return; stop(); if(S.review) stopReview();
   const notes=calScale(), base=notes[0], v=$('#calView'), body=$('#calBody'), btns=$('#calBtns');
@@ -3164,26 +3158,26 @@ async function openCalibration(){
   v.hidden=false; document.body.style.overflow='hidden';
   if(!S.mic){ const ok=await startMic(); if(ok){ $('#micOn').checked=true; paintMic(); } }
   const scaleTxt='C'+(Math.floor(base/12)-1)+' up to C'+Math.floor(base/12)+' and back down';
-  if(await show('Measure delay','<p class="kv-sub">Two short steps of about 15 seconds. You sing a C major scale ('+scaleTxt+'): first together with the sound, then together with the picture. This sets both the delay compensation and the picture delay. Use the headphones you practise with, so the microphone hears only you.</p>'+calMicCheckHtml(),[{label:'Start measuring',value:'go',primary:true},{label:'Cancel',value:null}],true,true)!=='go'){ close(); return; }
+  if(await show('Measure delay','<p class="kv-sub">Two short steps of about 15 seconds. You clap along with a C major scale ('+scaleTxt+'): first with the sound, then with the picture. This sets both the delay compensation and the picture delay. Use the headphones you practise with, and clap sharply, near the phone.</p>'+calMicCheckHtml(),[{label:'Start measuring',value:'go',primary:true},{label:'Cancel',value:null}],true,true)!=='go'){ close(); return; }
   if(!S.mic){ const ok=await startMic(); if(!ok){ await show('Measure delay','<p class="kv-sub">The microphone is needed for this. Allow it and try again.</p>',[{label:'Close',value:null}]); close(); return; } $('#micOn').checked=true; paintMic(); }
   let A=null, V=null, todo='both';
   const step1=async()=>{ for(;;){
-      if(await show('Step 1 of 2: follow the sound','<p class="kv-sub"><b>Close your eyes and follow only the sound.</b> After 4 clicks the piano plays the scale up and back down. Sing each note together with the piano (“la” is fine).</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go') return false;
+      if(await show('Step 1 of 2: follow the sound','<p class="kv-sub"><b>Close your eyes and follow only the sound.</b> Listen to the 4 clicks without clapping, then the piano plays the scale up and back down: clap exactly on each note you hear.</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go') return false;
       if(S.muteAll) setMuteAll(false);
-      const r=await run('sound','Step 1: listening…','Eyes closed: sing along with the piano.'); if(r==='x'||r==null) return false;
+      const r=await run('sound','Step 1: listening…','Eyes closed: clap on each piano note.'); if(r==='x'||r==null) return false;
       if(r.ok){ A=r; return true; }
-      if(await show('Step 1 did not work','<p class="kv-sub">'+esc(r.msg)+' Sing each note clearly and stay with the piano.</p>'+calDiagHtml(r,notes)+calMicCheckHtml(),[{label:'Redo step 1',value:'again',primary:true},{label:'Cancel',value:null}])!=='again') return false; } };
+      if(await show('Step 1 did not work','<p class="kv-sub">'+esc(r.msg)+' Clap sharply, right on each note you hear.</p>'+calDiagHtml(r,notes)+calMicCheckHtml(),[{label:'Redo step 1',value:'again',primary:true},{label:'Cancel',value:null}])!=='again') return false; } };
   const step2=async()=>{ for(;;){
-      if(await show('Step 2 of 2: follow the picture','<p class="kv-sub"><b>Watch the keys and follow only the picture.</b> There is no sound now. After 4 dots the keys light up one by one, up and back down. Sing each note the moment its key lights up, all the way down to the last C.</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go') return false;
-      const r=await run('picture','Step 2: watching…','Sing each note when its key lights up, up and back down.'); if(r==='x'||r==null) return false;
+      if(await show('Step 2 of 2: follow the picture','<p class="kv-sub"><b>Watch the keys and follow only the picture.</b> There is no sound now. Watch the 4 dots without clapping, then the keys light up one by one, up and back down: clap the moment each key lights up, all the way down to the last C.</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go') return false;
+      const r=await run('picture','Step 2: watching…','Clap the moment each key lights up.'); if(r==='x'||r==null) return false;
       if(r.ok){ V=r; return true; }
-      if(await show('Step 2 did not work','<p class="kv-sub">'+esc(r.msg)+' Start each note as its key lights up, and keep going all the way down.</p>'+calDiagHtml(r,notes)+calMicCheckHtml(),[{label:'Redo step 2',value:'again',primary:true},{label:'Cancel',value:null}])!=='again') return false; } };
+      if(await show('Step 2 did not work','<p class="kv-sub">'+esc(r.msg)+' Clap as each key lights up, and keep going all the way down.</p>'+calDiagHtml(r,notes)+calMicCheckHtml(),[{label:'Redo step 2',value:'again',primary:true},{label:'Cancel',value:null}])!=='again') return false; } };
   for(;;){
     if((todo==='both'||todo==='1')&&!(await step1())){ close(); return; }
     if((todo==='both'||todo==='2')&&!(await step2())){ close(); return; }
     // results
     const dc=Math.max(0,Math.min(1500,Math.round(A.ms/10)*10)), pd=Math.max(0,Math.min(600,dc,Math.round((A.ms-V.ms)/10)*10)), ahead=V.ms<-60;
-    const r=await show('Results','<div class="cal-res"><div><span>Delay compensation</span><b>'+dc+' ms</b><small>'+A.n+' of 15 notes, '+steady(A)+'</small></div><div><span>Picture delay</span><b>'+pd+' ms</b><small>'+V.n+' of 15 notes, '+steady(V)+'</small></div></div>'+(ahead?'<p class="kv-sub warn">In step 2 you sang ahead of the keys ('+(-V.ms)+' ms early), so the picture delay may be off. For a better value, redo step 2 and start each note only when its key lights up.</p>':'')+'<p class="kv-sub">The measured values replace the current ones (they are not added). Now: delay compensation '+Math.round(S.delay*1000)+' ms, picture delay '+Math.round((S.pdelay||0)*1000)+' ms.</p>',
+    const r=await show('Results','<div class="cal-res"><div><span>Delay compensation</span><b>'+dc+' ms</b><small>'+A.n+' of 15 claps, '+steady(A)+'</small></div><div><span>Picture delay</span><b>'+pd+' ms</b><small>'+V.n+' of 15 claps, '+steady(V)+'</small></div></div>'+(ahead?'<p class="kv-sub warn">In step 2 you clapped ahead of the keys ('+(-V.ms)+' ms early), so the picture delay may be off. For a better value, redo step 2 and clap only when each key lights up.</p>':'')+'<p class="kv-sub">The measured values replace the current ones (they are not added). Now: delay compensation '+Math.round(S.delay*1000)+' ms, picture delay '+Math.round((S.pdelay||0)*1000)+' ms.</p>',
       [{label:'Use these',value:'use',primary:true},{label:'Redo step 1',value:'1'},{label:'Redo step 2',value:'2'},{label:'Cancel',value:null}]);
     if(r==='1'||r==='2'){ todo=r; continue; }
     if(r==='use'){ setDelay(dc); setPDelay(pd,true); $('#calText').textContent='Measured: delay compensation '+dc+' ms, picture delay '+pd+' ms.'; setStatus('Delays set: delay compensation '+dc+' ms, picture delay '+pd+' ms.'); }
