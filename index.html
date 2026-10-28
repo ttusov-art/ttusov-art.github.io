@@ -945,7 +945,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fi';
+const APP_VERSION='2026-10-28 fj';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1528,7 +1528,7 @@ function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.e
 // the next button to tap pulses gently, wherever it is
 function setupPulse(){ document.querySelectorAll('.setup-pulse').forEach(e=>e.classList.remove('setup-pulse','next-step'));
   if(!setupActive()) return; const steps=setupSteps(), n=steps.find(x=>!x.done);
-  const el=n?n.pulse&&n.pulse():$('#shareMake'); if(!el) return; el.classList.add('setup-pulse','next-step');
+  const el=n?n.pulse&&n.pulse():S.setup.shared?null:$('#shareMake'); if(!el) return; el.classList.add('setup-pulse','next-step');
   // tucked away? the way to it pulses too: the editor (pencil) button or the closed panel's title
   const add=e=>e&&e.classList.add('setup-pulse','next-step');
   if(el.closest('#edFold')&&$('#edFold').hidden) add($('#edToggle'));
@@ -1545,7 +1545,7 @@ function paintSetup(){ const box=$('#setupBox'); if(!box) return; const own=S.cu
     x.btns.forEach(([lab,fn,tag],j)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=lab; if(j===0) b.className='primary'; if(tag==='beat1') b.dataset.beat1='1'; if(tag&&i===next) b.dataset.sk=tag; b.addEventListener('click',fn); li.querySelector('.st-body .row').appendChild(b); });
     if(x.done){ li.addEventListener('click',()=>{ li.classList.toggle('next'); }); }
     ol.appendChild(li); });
-  if(next<0){ const li=document.createElement('li'); li.className='next'; li.innerHTML='<div class="st-head"><span class="st-n">★</span><span>All set: share it</span></div><div class="st-body"><span class="small">Make the share file for this part and upload it, so the choir gets the song.</span><div class="row"><button type="button" class="primary">Go to sharing</button></div></div>';
+  if(next<0){ const sh=!!S.setup.shared, li=document.createElement('li'); li.className='next'; li.innerHTML='<div class="st-head"><span class="st-n">'+(sh?'✓':'★')+'</span><span>'+(sh?'Share file made':'All set: share it')+'</span></div><div class="st-body"><span class="small">'+(sh?'Last step: upload the file to Dropbox and replace the old one of the same name. The choir\'s link stays the same and their apps offer the update.':'Make the share file for this part and upload it, so the choir gets the song.')+'</span><div class="row"><button type="button"'+(sh?'':' class="primary"')+'>Go to sharing</button></div></div>';
     li.querySelector('button').addEventListener('click',()=>$('#shareMake').scrollIntoView({block:'center',behavior:'smooth'})); ol.appendChild(li); }
   setupPulse(); }
 function setupStart(){ if(!S.cur||S.cur.libId==null){ setStatus('Open a song from the library first.',true); return; } S.setup={...(S.setup||{}),hidden:false}; setupSave(); paintSetup(); $('#leadPanel').open=true; $('#setupBox').scrollIntoView({block:'start',behavior:'smooth'}); }
@@ -1586,7 +1586,8 @@ async function backupLibrary(fixedName,btn0,txt0){
     const zip=await zipBlob(entries,p=>{ txt.textContent='Preparing the backup… '+Math.round(p*100)+'%'; });
     const d=new Date(), name=fixedName||'Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
     const a=document.createElement('a'); a.href=URL.createObjectURL(zip); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },5000); if(sharePart) unpubClear(sharePart);
-    txt.textContent='Saved '+name+' ('+fmtMB(zip.size)+', '+songs.length+' song'+(songs.length>1?'s':'')+') to your downloads.';
+    txt.textContent='Saved '+name+' ('+fmtMB(zip.size)+', '+songs.length+' song'+(songs.length>1?'s':'')+') to your downloads.'+(sharePart?' Now upload it to Dropbox and replace the old file of the same name, so the choir\'s link stays the same.':'');
+    if(sharePart&&setupActive()&&(S.curPart||S.part)===sharePart&&!setupSteps().some(x=>!x.done)){ S.setup.shared=true; setupSave(); paintSetup(); }   // guide finished: stop pulsing
   }catch(err){ txt.textContent='Backup failed: '+((err&&err.message)||'unknown error')+'.'; }
   finally{ btn.disabled=false; }
 }
