@@ -204,6 +204,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .mic{display:inline-flex;align-items:center;gap:8px;font-weight:500}
 .mic input{width:20px;height:20px;accent-color:var(--accent)}
 .mic-btn{gap:6px}
+.you-row{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.you-row b{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.readout .mic-btn{flex:none;position:relative;padding:6px 8px;border-radius:8px}
+.readout .mic-btn svg{width:18px;height:18px}
+.readout .mic-btn .dot{position:absolute;top:3px;right:3px;width:7px;height:7px}
+.readout .mic-btn .dot.live{box-shadow:0 0 0 2px color-mix(in srgb,var(--off) 30%,transparent)}
 .rec-btn{gap:7px;padding:8px 12px;font-weight:700;letter-spacing:.06em;font-size:14px}
 .rec-btn input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .rec-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--muted);box-sizing:border-box}
@@ -497,7 +503,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 
   <section class="panel readout" aria-live="off">
     <div id="rTargetBox" role="button" tabindex="0" title="Press to hear the target note; hold while playing to hear the tune follow the line"><span>Target note</span><b id="rTarget" class="rd-pill rd-hear">–</b></div>
-    <div><span>You</span><b id="rYou">–</b></div>
+    <div class="you-cell"><span>You</span><div class="you-row"><b id="rYou">–</b><label class="btn icon-btn mic-btn guide-on" for="micOn" id="micLbl" title="Sing with microphone: on"><input id="micOn" type="checkbox" checked aria-label="Sing with microphone"><svg class="ic-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/><path d="M8 22h8"/></svg><svg class="ic-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1"/><path d="M19 10v1a7 7 0 0 1-.9 3.4"/><path d="M5 10v1a7 7 0 0 0 11 5.7"/><path d="M12 18v4"/><path d="M8 22h8"/><path d="M3 3l18 18"/></svg><span class="dot" id="micDot"></span></label></div></div>
     <div><span>Off by</span><b id="rCents">–</b></div>
     <div><span>On pitch</span><b id="rScore">–</b></div>
     <div><span>On time</span><b id="rTime">–</b></div>
@@ -613,7 +619,6 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <option value="0.8">80%</option><option value="0.85">85%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option>
     </select></span>
     <span class="mic-grp">
-    <label class="btn icon-btn mic-btn guide-on" for="micOn" id="micLbl" title="Sing with microphone: on"><input id="micOn" type="checkbox" checked aria-label="Sing with microphone"><svg class="ic-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/><path d="M8 22h8"/></svg><svg class="ic-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1"/><path d="M19 10v1a7 7 0 0 1-.9 3.4"/><path d="M5 10v1a7 7 0 0 0 11 5.7"/><path d="M12 18v4"/><path d="M8 22h8"/><path d="M3 3l18 18"/></svg><span class="dot" id="micDot"></span></label>
     <label class="btn rec-btn" for="recOn" title="Record my voice"><input id="recOn" type="checkbox" checked aria-label="Record my voice"><span class="rec-dot" aria-hidden="true"></span><span class="rec-txt" aria-hidden="true">REC</span></label></span>
   </section>
 
@@ -964,7 +969,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fo';
+const APP_VERSION='2026-10-28 fp';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3552,7 +3557,7 @@ function micPitch(){
 S.live=NaN; S.liveShown=null;
 function liveLoop(){ requestAnimationFrame(liveLoop);
   const on=!S.playing&&!!S.mic&&!S.review&&!S.cal&&!document.hidden&&!!S.micBuf;
-  if(!on){ if(!isNaN(S.live)){ S.live=NaN; S.liveShown=null; if(!S.playing){ $('#rYou').textContent=S.mic?'–':'mic off'; $('#rCents').textContent='–'; $('#rCents').className=''; draw(); } } return; }
+  if(!on){ if(!isNaN(S.live)){ S.live=NaN; S.liveShown=null; if(!S.playing){ $('#rYou').textContent='–'; $('#rCents').textContent='–'; $('#rCents').className=''; draw(); } } return; }
   const you=micPitch(); S.live=you;
   const key=(isNaN(you)?'x':Math.round(you*20))+'|'+S.pos.toFixed(2)+'|'+S.win; if(key===S.liveShown) return; S.liveShown=key;   // redraw only when it changes (5 cents)
   const ry=$('#rYou'), rc=$('#rCents'); let tg=targetAt(S.pos); if(isNaN(tg)){ const m=targetNoteNear(S.pos); tg=m==null?NaN:m; }
@@ -3630,7 +3635,7 @@ function step(){
     ry.textContent=noteName(Math.round(you));
     if(!isNaN(tgShow)){ const d=Math.round(centsDiff(you,tgShow)); rc.textContent=(d>0?'+':d<0?'−':'±')+Math.abs(d)+' ¢'; rc.className='c-'+grade(d); }
     else { rc.textContent='–'; rc.className=''; }
-  } else { ry.textContent=S.mic?'–':'mic off'; rc.textContent='–'; rc.className=''; }
+  } else { ry.textContent='–'; rc.textContent='–'; rc.className=''; }
   if(document.hidden) return;
   const st=loopActive()?S.pass:S.stat; $('#rScore').textContent=st.n>20? Math.round(100*st.hit/st.n)+'%':'–';
   const ts=loopActive()?S.timPass:S.timStat; $('#rTime').textContent=ts.n>=2? Math.round(100*ts.good/ts.n)+'%':'–';
