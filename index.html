@@ -564,6 +564,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           <label for="gateIn">Pitch line sensitivity <span class="small" id="gateV">100% (everything)</span></label>
           <input id="gateIn" type="range" min="0" max="100" step="1" value="100" aria-label="Pitch line sensitivity">
           <span class="small">Lower it to drop quiet bits of the line: background singers from other parts are usually quieter than the main voice. Changes can be undone with Undo; Reset to original brings everything back.</span>
+          <div class="row" id="gateDoneRow" hidden><button id="gateDone" type="button" class="primary">Other parts removed ✓</button><span class="small">Tap when only your part is left (remove any leftovers in the editor first).</span></div>
         </div>
           <div class="beat-row" id="beatRow">
             <span class="small">Beats</span>
@@ -575,6 +576,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
             <button id="bDetect" type="button">Detect</button>
             <button id="bTap" type="button" title="Tap along with the beat while the song plays (keyboard: T)">Tap tempo</button>
             <button id="bOne" type="button" title="Make the beat at the playhead the first beat of a bar">Beat 1 here</button>
+            <button id="tempoOk" type="button" class="primary" hidden title="Set-up guide: the clicks sit on the beat and beat 1 is right">Tempo is right ✓</button>
             <button id="bTempo" type="button" title="The song changes tempo at the playhead: start a new tempo section here">New tempo here</button>
             <button id="bTempoMove" type="button" hidden title="Move the nearest tempo change to the playhead (on a beat of the new tempo)">Move tempo change here</button>
             <button id="bTempoDel" type="button" hidden title="Remove the nearest tempo change">Remove tempo change</button>
@@ -945,7 +947,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fj';
+const APP_VERSION='2026-10-28 fk';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1513,13 +1515,13 @@ function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.e
     {k:'lyrics',title:'Add the lyrics',done:S.lyrics.length>0,help:'Tap Import from PDF and choose the lyrics PDF: the column for this part is picked and its lines are used straight away (pick another column in the Lyrics editor if it is the wrong one). No PDF? Paste the lines in the Lyrics editor, one per sung phrase, and tap Use these lines.',
       btns:[['Import from PDF',()=>$('#lyrPdf').click()],['Open the Lyrics editor',()=>{ $('#lyrPanel').open=true; $('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}); setTimeout(()=>$('#lyrText').focus({preventScroll:true}),400); }]],
       go:()=>{ $('#lyrPanel').open=true; }, pulse:()=>lyrTextDiffers&&$('#lyrText').value.trim()&&lyrTextDiffers()?$('#lyrApply'):$('#lyrPdf').parentElement},
-    {k:'cleanup',title:'Remove lines from other parts',done:!!st.cleanup,help:'Other parts singing in the background leave stray bits in the pitch line. Lower Pitch line sensitivity (under the editor buttons) until the stray bits disappear but your part stays. Anything left over: select it in the editor and tap Remove. Then tap Done.',
+    {k:'cleanup',title:'Remove lines from other parts',done:!!st.cleanup,help:'Other parts singing in the background leave stray bits in the pitch line. Lower Pitch line sensitivity (under the editor buttons) until the stray bits disappear but your part stays. Anything left over: select it in the editor and tap Remove. Then tap Other parts removed ✓ under the slider.',
       btns:[['Sensitivity',()=>{ openTools(); scrollC($('#gateIn')); }],['Open the editor',()=>{ setEdFold(true); setEditMode(true); window.scrollTo({top:0,behavior:'smooth'}); }],['Done ✓',()=>setupMark('cleanup'),'done']],
-      go:openTools, pulse:()=>+$('#gateIn').value>=100?$('#gateIn').closest('.field'):gb('done')},
+      go:openTools, pulse:()=>+$('#gateIn').value>=100?$('#gateIn').closest('.field'):$('#gateDone')},
     {k:'smooth',title:'Smooth the pitch line',done:!!st.smooth,help:'Turns the wobbly sung line into clean piano-style notes.',btns:[['Smooth',()=>{ edSmooth(); }]],go:openTools,pulse:()=>$('#edSmooth')},
-    {k:'tempo',title:'Confirm the tempo and beat 1',done:!!st.tempo&&hasBars(),help:'Turn on Click and play: the clicks should sit on the beat (adjust BPM, ◀ ▶ or Tap tempo under the editor buttons if not). Then put the playhead on the first beat of a bar and tap Beat 1 here.'+(hasBars()?' Beat 1 is set'+(S.beat&&S.beat.bar!=null?' at '+fmtT1(S.beat.bar):'')+'.':''),
+    {k:'tempo',title:'Confirm the tempo and beat 1',done:!!st.tempo&&hasBars(),help:'Turn on Click and play: the clicks should sit on the beat (adjust BPM, ◀ ▶ or Tap tempo under the editor buttons if not). Then put the playhead on the first beat of a bar and tap Beat 1 here; Tempo is right ✓ then appears next to it.'+(hasBars()?' Beat 1 is set'+(S.beat&&S.beat.bar!=null?' at '+fmtT1(S.beat.bar):'')+'.':''),
       btns:[['Click on/off',()=>$('#metBtn').click()],['Beat 1 here',()=>markBeatOne(),'beat1'],['Tempo is right ✓',()=>{ if(!hasBars()){ setStatus('Set beat 1 first: playhead on the first beat of a bar, then Beat 1 here.',true); return; } setupMark('tempo'); },'done']],
-      go:openTools, pulse:()=>hasBars()?gb('done'):$('#bOne')},
+      go:openTools, pulse:()=>hasBars()?$('#tempoOk'):$('#bOne')},
     {k:'align',title:'Align to the grid',done:!!st.align,help:'Moves every note start and end onto the beat grid you just checked.',btns:[['Align to grid',()=>{ edAlign(); }]],go:openTools,pulse:()=>$('#edAlign')},
     {k:'timed',title:'Play through: time the lyrics, fix the notes',done:timed&&!!st.timed,help:'Play the song from the start with Time lyrics and place every line where it starts (the automatic places are only a rough guess). Hear a wrong note on the way? Pause, fix it with Edit target line, and carry on. Tap Done when you have been through the whole song.',
       btns:[['Time lyrics',()=>{ if(!S.lyrics.length){ setStatus('Add the lyrics first.',true); return; } setEdFold(true); startTap(); }],['Done ✓',()=>{ if(!timed){ setStatus('Some lyric lines have no time yet.',true); return; } setupMark('timed'); },'done']],
@@ -1527,7 +1529,10 @@ function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.e
   ]; }
 // the next button to tap pulses gently, wherever it is
 function setupPulse(){ document.querySelectorAll('.setup-pulse').forEach(e=>e.classList.remove('setup-pulse','next-step'));
-  if(!setupActive()) return; const steps=setupSteps(), n=steps.find(x=>!x.done);
+  const act=setupActive(), steps=act?setupSteps():[], n=steps.find(x=>!x.done);
+  // the step's "done" button sits right next to its control
+  $('#gateDoneRow').hidden=!(n&&n.k==='cleanup'); $('#tempoOk').hidden=!(n&&n.k==='tempo'&&hasBars());
+  if(!act) return;
   const el=n?n.pulse&&n.pulse():S.setup.shared?null:$('#shareMake'); if(!el) return; el.classList.add('setup-pulse','next-step');
   // tucked away? the way to it pulses too: the editor (pencil) button or the closed panel's title
   const add=e=>e&&e.classList.add('setup-pulse','next-step');
@@ -4230,6 +4235,8 @@ document.addEventListener('keydown',e=>{
 updateSelInfo();
 $('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).then(ok=>{ e.target.value=''; $('#lyrPanel').open=true; if(ok&&setupActive()&&S.lyrics.length) setTimeout(setupGo,600); else setTimeout(()=>$('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}),100); }); });
 $('#lyrPdfCol').addEventListener('change',()=>pdfUseColumn(true));
+$('#gateDone').addEventListener('click',()=>setupMark('cleanup'));
+$('#tempoOk').addEventListener('click',()=>setupMark('tempo'));
 $('#sharePartSel').addEventListener('change',e=>{ setPart(e.target.value); setStatus('Sharing '+e.target.value+': the share file will contain its songs.'); });
 $('#installBtn').addEventListener('click',()=>installHelp(false));
 $('#sheetPrint').addEventListener('click',async()=>{ if(S.playing) stop(); let last='full'; try{ last=localStorage.getItem('pc-printlight')==='1'?'light':'full'; }catch(e){}
