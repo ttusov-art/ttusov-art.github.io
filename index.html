@@ -417,6 +417,13 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   table.sheet .shape canvas{width:100%!important;max-width:75mm;height:auto!important}
   table.sheet .shape{color:#000!important}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /* lighter version: no coloured backgrounds, thin grey lines */
+  body.print-light table.sheet td,body.print-light table.sheet th{background:none!important;background-image:none!important;box-shadow:none!important}
+  body.print-light table.sheet tr td{border-color:#ddd!important}
+  body.print-light table.sheet tr.sec td{border-top:0.5pt solid #bbb!important}
+  body.print-light table.sheet td.lab{color:#777!important}
+  body.print-light table.sheet td.mine{font-weight:600}
+  body.print-light #sheetTitle{font-weight:600}
 }
 </style>
 </head>
@@ -926,7 +933,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 eu';
+const APP_VERSION='2026-10-28 ev';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2452,12 +2459,17 @@ function edOneNote(){
   targetEdited('Made one note: '+noteName(m)+'. Use ▲ / ▼ if it should be a different note.');
 }
 // Smooth: turn the sung line into flat piano-style notes (selection, or whole song)
+// notes outside the song's key cost a little extra, so a slightly off singer lands on the key's note
+// (a clearly sung accidental still wins); minor keys also accept the raised 6th and 7th
+function keyPenalty(){ const k=S.mkey; if(!k||k.tonic==null) return null; const steps=k.mode==='minor'?[0,2,3,5,7,8,10]:[0,2,4,5,7,9,11], soft=k.mode==='minor'?[9,11]:[];
+  const pen=new Float32Array(12); for(let pc=0;pc<12;pc++){ const d=((pc-k.tonic)%12+12)%12; pen[pc]=steps.includes(d)?0:soft.includes(d)?0.15:0.35; } return pen; }
 function smoothNotes(runV,fps){
   // dynamic programming over semitones: stay on a note unless the pitch clearly moves
   let mn=1e9,mx=-1e9; for(const v of runV) if(!isNaN(v)){ if(v<mn) mn=v; if(v>mx) mx=v; }
   const lo=Math.floor(mn)-1, K=Math.ceil(mx)+1-lo+1, L=runV.length, lam=0.12*fps;
   let D=new Float64Array(K), N=new Float64Array(K); const bp=new Uint8Array(L*K); // 1 = came from another note
-  const fc=(v,k)=>isNaN(v)?0:Math.min(2.25,(v-(lo+k))**2);
+  const kp=keyPenalty(), pk=new Float32Array(K); if(kp) for(let k=0;k<K;k++) pk[k]=kp[(((lo+k)%12)+12)%12];
+  const fc=(v,k)=>isNaN(v)?0:Math.min(2.25,(v-(lo+k))**2)+pk[k];
   for(let k=0;k<K;k++) D[k]=fc(runV[0],k);
   const bestFrom=new Int16Array(L);
   for(let i=1;i<L;i++){
@@ -2520,7 +2532,7 @@ function edAlign(){
   S.tM=out; targetEdited('Aligned '+fin.length+' notes '+(r?'in '+fmtT1(r.a)+'–'+fmtT1(r.b):'in the whole song')+' to the nearest quarter beat.'+sh+' Undo brings the old line back.');
 }
 function edSmooth(){
-  if(!S.tT||!S.tM) return; if(!selRange()) setTimeout(()=>setupMark('smooth'),0);
+  if(!S.tT||!S.tM) return; S.smoothKeyMsg=S.mkey?' Notes lean to the key of '+keyName(S.mkey)+'.':' (No key known: set it with the Key button for better notes.)'; if(!selRange()) setTimeout(()=>setupMark('smooth'),0);
   const T=S.tT, M=S.tM, r=selRange(), i0=r?r.i0:0, i1=r?r.i1:T.length-1;
   const ta=r?r.a:-1e9, tb=r?r.b:1e9;
   if(i1-i0<2) return;
@@ -2555,7 +2567,7 @@ function edSmooth(){
     notes+=fin.length;
   }
   pushUndo(); S.tM=out;
-  targetEdited('Smoothed '+(r?fmtT1(r.a)+'–'+fmtT1(r.b):'the whole song')+' into '+notes+' note'+(notes===1?'':'s')+(snapping?', lined up with the beats':'')+'. Undo brings the old line back.');
+  targetEdited('Smoothed '+(r?fmtT1(r.a)+'–'+fmtT1(r.b):'the whole song')+' into '+notes+' note'+(notes===1?'':'s')+(snapping?', lined up with the beats':'')+'.'+(S.smoothKeyMsg||'')+' Undo brings the old line back.');
 }
 function edShift(d){
   const r=selRange(); if(!r) return; if(!voicedIn(r).length) return; pushUndo();
@@ -2932,7 +2944,7 @@ function toggleShape(td,quiet){
     g2.stroke(); };
   box._draw();
 }
-window.addEventListener('beforeprint',()=>document.querySelectorAll('#sheetTable .shape').forEach(b=>b._draw&&b._draw('#000')));
+window.addEventListener('beforeprint',()=>{ const light=document.body.classList.contains('print-light'); document.querySelectorAll('#sheetTable .shape').forEach(b=>b._draw&&b._draw(light?'#888':'#000')); });
 window.addEventListener('afterprint',()=>document.querySelectorAll('#sheetTable .shape').forEach(b=>b._draw&&b._draw()));
 function shapesKey(){ return S.cur&&S.cur.libId!=null?'pc-shapes-'+S.cur.libId:null; }
 function shapesOpen(){ const k=shapesKey(); if(!k) return []; try{ return JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){ return []; } }
@@ -4158,7 +4170,11 @@ updateSelInfo();
 $('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>{ e.target.value=''; $('#lyrPanel').open=true; setTimeout(()=>$('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}),100); }); });
 $('#lyrPdfCol').addEventListener('change',fillFromPdf);
 $('#sharePartSel').addEventListener('change',e=>{ setPart(e.target.value); setStatus('Sharing '+e.target.value+': the share file will contain its songs.'); });
-$('#sheetPrint').addEventListener('click',()=>{ if(S.playing) stop(); window.print(); });
+$('#sheetPrint').addEventListener('click',async()=>{ if(S.playing) stop(); let last='full'; try{ last=localStorage.getItem('pc-printlight')==='1'?'light':'full'; }catch(e){}
+  const r=await dlg({title:'Print the lyrics',html:'<p class="kv-sub">Full colour keeps the coloured sections. The lighter version uses much less ink: white background, thin grey lines and shapes.</p>',
+    buttons:[{label:'Lighter (less ink)',value:'light',primary:last==='light'},{label:'Full colour',value:'full',primary:last!=='light'},{label:'Cancel',value:null}]});
+  if(!r.value) return; const light=r.value==='light'; try{ localStorage.setItem('pc-printlight',light?'1':'0'); }catch(e){}
+  document.body.classList.toggle('print-light',light); setTimeout(()=>window.print(),50); });
 $('#sheetPlay').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 $('#sheetOpen').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; S.sheetSec=null; requestAnimationFrame(()=>sheetFollow(true)); });
 $('#sheetOpen2').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; S.sheetSec=null; requestAnimationFrame(()=>sheetFollow(true)); });
