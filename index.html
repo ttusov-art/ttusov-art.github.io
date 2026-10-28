@@ -118,6 +118,10 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 @media (prefers-reduced-motion:reduce){.next-step{animation:none}}
 .setup-pulse{border-color:var(--accent)!important;outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:1px}
 .gate-field.setup-pulse{border-radius:8px}
+.boot-view{position:fixed;inset:0;z-index:65;display:flex;align-items:center;justify-content:center;background:var(--bg);transition:opacity .3s}
+.boot-view.out{opacity:0;pointer-events:none}
+.boot-card{display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--fg)} .boot-card img{border-radius:18px} .boot-card b{font-family:var(--font-display);font-size:24px}
+.boot-card span{color:var(--muted);font-size:14px;min-height:1.4em;text-align:center}
 .busy-view{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 55%,transparent);padding:16px}
 .busy-card{display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 28px;border-radius:14px;background:var(--surface);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.25);color:var(--fg);font-weight:600;font-size:15px;text-align:center;max-width:300px}
 .busy-spin{width:38px;height:38px;border-radius:50%;border:4px solid var(--accent);border-right-color:transparent;animation:spin .8s linear infinite}
@@ -453,6 +457,8 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 </style>
 </head>
 <body>
+<div class="boot-view" id="bootView" role="status" aria-live="polite"><div class="boot-card"><img src="icon.svg" alt="" width="72" height="72"><b>Part Coach</b><div class="busy-spin"></div><span id="bootText">Getting ready…</span></div></div>
+<script>window.BOOT=[]; setTimeout(()=>{ const b=document.getElementById('bootView'); if(b) b.remove(); },25000);   // safety: never stuck</script>
 <div class="key-view" id="keyView" hidden role="dialog" aria-modal="true" aria-labelledby="kvName">
   <div class="kv-card">
     <div class="kv-head"><h2 id="kvName">Key</h2><button id="kvClose" type="button" aria-label="Close">✕</button></div>
@@ -620,6 +626,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <option value="0.8">80%</option><option value="0.85">85%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option>
     </select></span>
     <span class="mic-grp">
+    <button id="warmBtn" type="button" title="2-minute warm-up in this part’s voice range: scales, arpeggios and sirens">Warm-up</button>
     <label class="btn rec-btn" for="recOn" title="Record my voice"><input id="recOn" type="checkbox" checked aria-label="Record my voice"><span class="rec-dot" aria-hidden="true"></span><span class="rec-txt" aria-hidden="true">REC</span></label></span>
   </section>
 
@@ -703,7 +710,6 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <label class="lbl" for="partSel">Part</label>
       <select id="partSel" class="sel"></select>
     </div>
-    <div class="row warm-row"><button id="warmBtn" type="button">Warm-up (2 min)</button><span class="small">Scales, arpeggios and sirens in this part’s voice range. Sing along with the guide.</span></div>
     <div class="lib-head">
       <span class="small">Separated songs and songs you added are kept here on this device, in the part chosen above.</span>
     </div>
@@ -971,7 +977,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fr';
+const APP_VERSION='2026-10-28 fs';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1072,7 +1078,7 @@ async function pitchLineOf(buf,onProg,rk){
 function songReady(name,label){
   renderSheetBtns(); closeSheet();
   S.lyrTextHist=[]; S.edSnap=null; S.needTiming=false; S.gateBase=null; S.gateLoud=null; { const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } } $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
-  setTimeout(()=>scheduleBeatDetect(false),50); setTimeout(()=>scheduleKeyDetect(false),400);
+  setTimeout(()=>{ S.beatJob=scheduleBeatDetect(false); },50); setTimeout(()=>{ S.keyJob=scheduleKeyDetect(false); },400);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
   S.songOpening=true; updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
@@ -3901,7 +3907,7 @@ function grandGain(buf){ const x=buf.getChannelData(0), sr=buf.sampleRate, w=Mat
   return Math.min(12,0.2/best); }
 function grandNearest(m){ let best=GRAND_NOTES[0]; for(const n of GRAND_NOTES) if(Math.abs(n-m)<Math.abs(best-m)) best=n; return best; }
 function grandPrefetch(quiet){ const lo=Math.max(21,Math.min(S.view.lo,45)-3), hi=Math.min(108,Math.max(S.view.hi,72)+3); let n=0,ok=0;
-  const list=GRAND_NOTES.filter(m=>m>=lo&&m<=hi); list.forEach(m=>grandLoad(m).then(()=>{ ok++; },()=>{}).finally(()=>{ if(++n===list.length&&!quiet&&(S.keySound==='grand'||S.toneSound==='grand')) setStatus(ok===list.length?'Grand piano ready.':'Some piano notes could not be downloaded; the simple piano fills in.',ok<list.length); })); }
+  const list=GRAND_NOTES.filter(m=>m>=lo&&m<=hi); list.forEach(m=>grandLoad(m).then(()=>{ ok++; },()=>{}).finally(()=>{ if(++n===list.length&&!quiet&&(S.keySound==='grand'||S.toneSound==='grand')) setStatus(ok===list.length?'Grand piano ready.':'Some piano notes could not be downloaded; the simple piano fills in.',ok<list.length); })); return Promise.allSettled(list.map(m=>grandLoad(m))); }
 // one sounding note in the chosen sound ('tone', 'piano' or 'grand'), into dest at the given level
 function voiceOn(m,sound,dest,level){
   const c=ensureCtx(); if(c.state==='suspended') c.resume();
@@ -4187,7 +4193,7 @@ paintAdmin();
 $('#sugUrlIn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-sugurl',e.target.value.trim()); }catch(x){} });
 $('#sugCheck').addEventListener('click',()=>{ try{ localStorage.setItem('pc-sugurl',$('#sugUrlIn').value.trim()); }catch(x){} sugFetchInbox(true); });
 window.addEventListener('online',()=>pollSugStatus());
-setTimeout(()=>{ (getShared().length&&!sugKey()?fetchLinks():Promise.resolve()).then(()=>{ pollSugStatus(); sugFetchInbox(false); }); },2500);
+BOOT.push((getShared().length&&!sugKey()?fetchLinks():Promise.resolve()).then(()=>Promise.allSettled([pollSugStatus(),sugFetchInbox(false)])).catch(()=>{}));
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-(S.sugCheckAt||0)>5*60e3&&!S.playing){ S.sugCheckAt=Date.now(); pollSugStatus(); sugFetchInbox(false); } });
 $('#rKeyBox').addEventListener('click',openKeyView);
 $('#rKeyBox').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); openKeyView(); } });
@@ -4610,7 +4616,7 @@ try{ const q=location.search.slice(1), short=/^[a-z0-9-]+$/i.test(q)?q.toLowerCa
   const sharedLib=short?null:new URLSearchParams(location.search).get('lib');
   if(sharedLib){ history.replaceState(null,'',location.pathname+location.hash); setTimeout(()=>openSharedLink(sharedLib,null,null),100); }
   // other remembered links are checked too (the opened one is handled by openSharedLink)
-  if(getShared().length) setTimeout(()=>checkShared(false),300);
+  if(getShared().length) BOOT.push(checkShared(false).catch(()=>{}));
 }catch(e){}
 // opened from a shared link: tell the person whether they already have these songs
 async function openSharedLink(url,slug,partName){
@@ -4720,7 +4726,7 @@ $('#timMarks').addEventListener('change',e=>{ S.timMarks=e.target.value; try{loc
 // default: the recorded grand piano, until someone picks another sound on this device
 S.keySound='grand'; try{ const v=localStorage.getItem('pc-keysound'); if(v==='tone'||v==='piano'||v==='grand') S.keySound=v; }catch(e){} $('#keySound').value=S.keySound;
 S.toneSound='grand'; try{ const v=localStorage.getItem('pc-tonesound'); if(v==='tone'||v==='piano'||v==='grand') S.toneSound=v; }catch(e){} $('#toneSound').value=S.toneSound;
-if(S.toneSound==='grand'||S.keySound==='grand') setTimeout(()=>{ try{ grandPrefetch(true); }catch(e){} },1500);
+if(S.toneSound==='grand'||S.keySound==='grand') BOOT.push(new Promise(r=>setTimeout(()=>{ try{ r(grandPrefetch(true)); }catch(e){ r(); } },600)).catch(()=>{}));
 $('#toneSound').addEventListener('change',e=>{ S.toneSound=e.target.value; try{ localStorage.setItem('pc-tonesound',S.toneSound); }catch(x){} if(S.toneSound==='grand'){ setStatus('Downloading the grand piano…'); grandPrefetch(); } if(S.tone){ stopTone(); startTone(); } });
 $('#keySound').addEventListener('change',e=>{ S.keySound=e.target.value; try{ localStorage.setItem('pc-keysound',S.keySound); }catch(x){} if(S.keySound==='grand'){ setStatus('Downloading the grand piano…'); grandPrefetch(); } });
 // Target box: press to hear the note you should sing now (like a piano key)
@@ -4797,6 +4803,17 @@ async function openWarmup(auto){
     if(!auto) window.scrollTo({top:0,behavior:'smooth'});
     return true;
   }catch(e){ setStatus('Could not make the warm-up: '+((e&&e.message)||'unknown error')+'.',true); return false; } }
+// loading screen: stays until the song is open, the piano and the update check are done and the page runs smoothly
+async function bootFinish(bt){ const v=$('#bootView'); if(!v) return; const sleep=ms=>new Promise(r=>setTimeout(r,ms)), t0=performance.now();
+  try{ if(BOOT.length){ bt(S.toneSound==='grand'||S.keySound==='grand'?'Preparing the piano and checking for updates…':'Checking for updates…');
+      await Promise.race([Promise.allSettled(BOOT),sleep(12000)]); }
+    await sleep(450); if(S.beatJob||S.keyJob){ bt('Reading the song’s beat and key…'); await Promise.race([Promise.allSettled([S.beatJob,S.keyJob]),sleep(15000)]); }
+    bt('Almost ready…');
+    // wait until frames come smoothly: about half a second without a slow frame (at most 4 s)
+    await new Promise(res=>{ let last=performance.now(), calm=0; const lim=performance.now()+4000;
+      const f=now=>{ calm=now-last<60?calm+(now-last):0; last=now; if(calm>=500||now>lim) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); });
+  }catch(e){}
+  v.classList.add('out'); setTimeout(()=>v.remove(),350); S.bootMs=Math.round(performance.now()-t0); }
 // where you were in the song: saved when you pause, leave the app or every few seconds while playing; the last song reopens there
 function savePos(){ try{ if(S.cur&&S.cur.libId!=null&&S.dur) localStorage.setItem('pc-lastpos',JSON.stringify({id:S.cur.libId,pos:+(S.playing?visTime():S.pos).toFixed(2)})); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.hidden) savePos(); });
@@ -4808,8 +4825,11 @@ function restorePos(){ try{ const r=JSON.parse(localStorage.getItem('pc-lastpos'
   size(); draw();
   // reopen the song used last on this device; the warm-up when there is none
   let last=null; try{ last=localStorage.getItem('pc-last'); }catch(e){}
-  if(last!=null){ try{ ensureCtx(); const id=isNaN(+last)?last:+last; if(await openLibSong(id,true)){ const t=restorePos(); if(t!=null) setStatus($('#status').textContent+' Continuing where you stopped, at '+fmtT(t)+'.'); return; } }catch(e){} }
-  await openWarmup(true);
+  const bt=t=>{ const e=$('#bootText'); if(e) e.textContent=t; };
+  let opened=false; bt('Opening your song…');
+  if(last!=null){ try{ ensureCtx(); const id=isNaN(+last)?last:+last; if(await openLibSong(id,true)){ opened=true; const t=restorePos(); if(t!=null) setStatus($('#status').textContent+' Continuing where you stopped, at '+fmtT(t)+'.'); } }catch(e){} }
+  if(!opened){ bt('Preparing the warm-up…'); await openWarmup(true); }
+  await bootFinish(bt);
 })();
 </script>
 <script type="text/plain" id="sepWorkerSrc">
