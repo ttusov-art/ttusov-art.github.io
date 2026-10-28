@@ -4,8 +4,8 @@
   "description": "Practise your choir part: sing along with the target line and see your pitch.",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0a5c52",
-  "theme_color": "#0c7165",
+  "background_color": "#0e1419",
+  "theme_color": "#0e1419",
   "icons": [
     {
       "src": "icon-192.png",
