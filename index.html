@@ -963,7 +963,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fm';
+const APP_VERSION='2026-10-28 fn';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3478,6 +3478,9 @@ async function startMic(){
     let stream=null;
     if(S.micId){ try{ stream=await navigator.mediaDevices.getUserMedia({audio:{...ac,deviceId:{exact:S.micId}}}); }catch(e){ if(e&&e.name==='NotAllowedError') throw e; S.micId=null; try{localStorage.removeItem('pc-mic')}catch(x){} } }
     if(!stream) stream=await navigator.mediaDevices.getUserMedia({audio:ac});
+    // a remembered "Default" or headset microphone means call mode while Bluetooth headphones are connected: forget it
+    if(S.micId){ try{ const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput'&&d.deviceId), d=devs.find(x=>x.deviceId===S.micId);
+      if(devs.some(x=>isBtMic(x.label))&&(S.micId==='default'||S.micId==='communications'||(d&&isBtMic(d.label)))){ S.micId=null; try{localStorage.removeItem('pc-mic')}catch(x){} } }catch(e){} }
     // first use / no choice made: avoid the Bluetooth headset's microphone (it forces call mode), use the phone's own
     let switched=null;
     if(!S.micId){ const alt=await phoneMicFor(stream); if(alt){ try{ const s2=await navigator.mediaDevices.getUserMedia({audio:{...ac,deviceId:{exact:alt.deviceId}}}); stream.getTracks().forEach(t=>t.stop()); stream=s2; switched=alt.label; }catch(e){} } }
@@ -3503,15 +3506,20 @@ async function phoneMicFor(stream){
     return cand.find(d=>/speakerphone|built-?in|internal|iphone|ipad|phone|mikrofon|microphone array/i.test(d.label))||cand[0]||null;
   }catch(e){ return null; }
 }
-function isBtMic(label){ return /bluetooth|headset|hands-?free|airpods|buds|\bbt\b|jabra|bose|sony wh|sony wf|soundcore|beats/i.test(label||''); }
+function isBtMic(label){ if(/earpiece|speakerphone|built-?in/i.test(label||'')) return false; return /bluetooth|headset|hands-?free|airpods|buds|\bbt\b|jabra|bose|sony wh|sony wf|soundcore|beats/i.test(label||''); }
 async function listMics(stream){
   try{
     const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput'&&d.deviceId);
     const sel=$('#micSel'); sel.innerHTML='';
     if(!devs.length||!devs.some(d=>d.label)){ const o=document.createElement('option'); o.textContent='Turn on the microphone to choose one'; o.value=''; sel.appendChild(o); sel.disabled=true; return; }
     sel.disabled=false;
-    const cur=stream?stream.getAudioTracks()[0].getSettings().deviceId:(S.micId||'default');
-    devs.forEach((d,i)=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||('Microphone '+(i+1)); if(d.deviceId===cur) o.selected=true; sel.appendChild(o); });
+    let cur=stream?stream.getAudioTracks()[0].getSettings().deviceId:(S.micId||'default');
+    // Bluetooth headphones connected: leave out the choices that put them into call mode (Default and the headset's own microphone)
+    const btOn=devs.some(d=>isBtMic(d.label)), bad=d=>isBtMic(d.label)||d.deviceId==='default'||d.deviceId==='communications';
+    if(!stream&&btOn&&(!S.micId||bad(devs.find(d=>d.deviceId===S.micId)||{deviceId:S.micId}))){ const p=devs.find(d=>!bad(d)&&/speakerphone|built-?in|internal|phone/i.test(d.label))||devs.find(d=>!bad(d)); if(p) cur=p.deviceId; }   // what turning the microphone on will pick
+    const show=btOn&&devs.some(d=>!bad(d))?devs.filter(d=>!bad(d)||d.deviceId===cur):devs;
+    const nice=d=>/^speakerphone$/i.test(d.label)?'Phone microphone (Speakerphone)'+(btOn?', best with Bluetooth':''):/^headset earpiece$/i.test(d.label)?'Phone microphone (Earpiece)':d.label;
+    show.forEach((d,i)=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=nice(d)||('Microphone '+(i+1)); if(d.deviceId===cur) o.selected=true; sel.appendChild(o); });
     if(devs.length===1) sel.title='Only one microphone is available right now. Connect or disconnect a headset and turn the microphone off and on to refresh the list.';
     const curDev=devs.find(d=>d.deviceId===cur), bt=curDev&&isBtMic(curDev.label);
     $('#micNote').classList.toggle('warn',!!bt);
