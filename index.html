@@ -368,6 +368,13 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .hint-row{flex:1 1 100%;min-width:0;flex-direction:column;align-items:flex-start}
 .ed-lyr{display:flex;flex-direction:column;gap:6px;margin-top:8px;flex:1 1 100%;min-width:0;max-width:100%}
 .ed-lyr .lyr-list{min-width:0;position:relative}
+.setup-steps{margin:4px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.setup-steps li{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.setup-steps li .st-head{display:flex;align-items:center;gap:8px;font-weight:600}
+.setup-steps li .st-n{flex:none;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;background:var(--line);color:var(--muted)}
+.setup-steps li.done{opacity:.6} .setup-steps li.done .st-n{background:var(--accent);color:#fff}
+.setup-steps li.next{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)} .setup-steps li.next .st-n{background:var(--accent);color:#fff}
+.setup-steps li .row{gap:6px} .setup-steps li:not(.next) .st-body{display:none}
 .fold>summary .unpub-dot{color:#b45309;font-weight:600}
 .lyr-pending{font-size:13px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,#f59e0b 16%,var(--surface));border:1px solid color-mix(in srgb,#f59e0b 45%,var(--line));color:var(--fg)}
 .lyr-body textarea{font:inherit;font-size:15px;line-height:1.5;width:100%;min-height:140px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);resize:vertical}
@@ -733,6 +740,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="small" id="lockText"></span>
     </div>
     <div id="adminTools" hidden>
+    <div class="share-box setup-box" id="setupBox" hidden>
+      <b>Set up this song: <span id="setupName"></span></b>
+      <span class="small">Work through the steps in order; the next one is highlighted. Steps tick themselves off when the app sees them done.</span>
+      <ol class="setup-steps" id="setupSteps"></ol>
+      <div class="row"><button id="setupHide" type="button" class="link-btn">Hide the guide for this song</button></div>
+    </div>
     <div class="share-box">
       <b>Organise songs (<span id="admPart"></span>)</b>
       <span class="small">▲ ▼ change the running order (also used for playback and shared with members). Move or copy a song to another part.</span>
@@ -793,6 +806,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <div class="row">
         <button id="edReset" type="button">Reset to original</button>
         <button id="edRefind" type="button" title="Read the vocals again with this part's voice range">Find pitch line again</button>
+        <button id="setupShow" type="button" title="Show the step-by-step set-up guide for the open song">Set-up guide</button>
           <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
           <button id="edAlign" type="button" title="Move every note start and end to the nearest quarter of a beat (first moving the line if it is consistently early or late)">Align to grid</button>
       </div>
@@ -876,7 +890,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 eo';
+const APP_VERSION='2026-10-28 ep';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -976,7 +990,7 @@ async function pitchLineOf(buf,onProg,rk){
 }
 function songReady(name,label){
   renderSheetBtns(); closeSheet();
-  S.lyrTextHist=[]; S.needTiming=false; $('#lyrCheckNote').hidden=true; S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
+  S.lyrTextHist=[]; S.needTiming=false; $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>scheduleBeatDetect(false),50); setTimeout(()=>scheduleKeyDetect(false),400);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
@@ -1421,10 +1435,35 @@ function unpubMark(part,name,note){ if(!part||!name||!isOwnerPart(part)) return;
   note=note||'your own edits'; const had=e.notes.includes(note); if(!had||note!=='your own edits'){ if(!had) e.notes.push(note); u[part]=l; try{ localStorage.setItem('pc-unpub',JSON.stringify(u)); }catch(x){} } paintUnpub(); }
 function unpubClear(part){ const u=unpubGet(); if(u[part]){ delete u[part]; try{ localStorage.setItem('pc-unpub',JSON.stringify(u)); }catch(e){} } paintUnpub(); }
 function paintUnpub(){ const u=unpubGet(), mine=Object.keys(u).filter(p=>S.parts.includes(p)&&u[p].length), here=u[S.part]||[], el=$('#unpubNote'); if(!el) return;
-  $('#unpubDot').hidden=!mine.length||!sugKey();
+  $('#unpubDot').hidden=!mine.length||!sugKey(); $('#unpubDot').textContent='· changes to share: '+mine.join(', ');
   if(!here.length){ el.hidden=true; return; } el.hidden=false;
   const songLi=e=>{ const n=e.notes.slice(0,6); return '<li><b>'+esc(e.name)+'</b>'+(n.length?': '+n.map(esc).join('; ')+(e.notes.length>6?'; and '+(e.notes.length-6)+' more':''):'')+'</li>'; };
   el.innerHTML='<b>Not published yet</b> in '+esc(S.part)+' (changed since your last share file):<ul style="margin:6px 0 6px 18px;padding:0">'+here.map(songLi).join('')+'</ul>Make the share file and upload it so the choir gets the changes.'+(mine.length>1?' Other parts with changes: '+mine.filter(p=>p!==S.part).map(esc).join(', ')+'.':''); }
+// ----- set-up guide for a newly separated song (moderator): lyrics → smooth → align → tempo & beat 1 → time lyrics → clean up -----
+S.setup=null;
+function setupSave(){ if(S.cur&&S.cur.libId!=null&&S.setup) libUpdate(S.cur.libId,{setup:{...S.setup}}).catch(()=>{}); }
+function setupMark(k){ if(!S.setup||S.setup[k]) return; S.setup[k]=true; setupSave(); paintSetup(); }
+function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.every(l=>l.t!=null);
+  return [
+    {k:'lyrics',title:'Add the lyrics',done:S.lyrics.length>0,help:'Paste the lyrics in the Lyrics editor (one line per sung phrase) and tap Use these lines, or import them from a PDF.',btns:[['Open the Lyrics editor',()=>{ $('#lyrPanel').open=true; $('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}); setTimeout(()=>$('#lyrText').focus({preventScroll:true}),400); }]]},
+    {k:'smooth',title:'Smooth the pitch line',done:!!st.smooth,help:'Turns the wobbly sung line into clean piano-style notes.',btns:[['Smooth',()=>{ edSmooth(); }]]},
+    {k:'align',title:'Align to the grid',done:!!st.align,help:'Moves every note start and end onto the beat grid. Check the tempo first if the grid looks wrong (next step), then align again.',btns:[['Align to grid',()=>{ edAlign(); }]]},
+    {k:'tempo',title:'Confirm the tempo and beat 1',done:!!st.tempo&&hasBars(),help:'Turn on Click and play: the clicks should sit on the beat (adjust BPM, ◀ ▶ or Tap tempo below if not). Then put the playhead on the first beat of a bar and tap Beat 1 here.',btns:[['Click on/off',()=>$('#metBtn').click()],['Beat 1 here',()=>markBeatOne()],['Tempo is right ✓',()=>{ if(!hasBars()){ setStatus('Set beat 1 first: playhead on the first beat of a bar, then Beat 1 here.',true); return; } setupMark('tempo'); }]]},
+    {k:'timed',title:'Time all the lyrics',done:timed&&!!st.timed,help:'Lines placed automatically are only a rough guess. Go through them with Time lyrics and place every line where it starts; the step ticks off when you stop timing with all lines timed.',btns:[['Time lyrics',()=>{ if(!S.lyrics.length){ setStatus('Add the lyrics first.',true); return; } setEdFold(true); startTap(); }],['Done ✓',()=>{ if(!timed){ setStatus('Some lyric lines have no time yet.',true); return; } setupMark('timed'); }]]},
+    {k:'cleanup',title:'Remove lines from other parts',done:!!st.cleanup,help:'Other parts singing in the background can leave stray bits in the pitch line. Play through, select those bits in the editor and tap Remove.',btns:[['Open the editor',()=>{ setEdFold(true); setEditMode(true); window.scrollTo({top:0,behavior:'smooth'}); }],['Done ✓',()=>setupMark('cleanup')]]}
+  ]; }
+function paintSetup(){ const box=$('#setupBox'); if(!box) return; const own=S.cur&&S.cur.libId!=null&&isOwnerPart(S.curPart||S.part);
+  if(!own||!S.setup||S.setup.hidden){ box.hidden=true; return; } box.hidden=false; $('#setupName').textContent=curSongName()||'this song';
+  const steps=setupSteps(), next=steps.findIndex(x=>!x.done), ol=$('#setupSteps'); ol.innerHTML='';
+  steps.forEach((x,i)=>{ const li=document.createElement('li'); li.className=x.done?'done':i===next?'next':'';
+    li.innerHTML='<div class="st-head"><span class="st-n">'+(x.done?'✓':i+1)+'</span><span></span></div><div class="st-body"><span class="small"></span><div class="row"></div></div>';
+    li.querySelector('.st-head span:last-child').textContent=x.title; li.querySelector('.st-body .small').textContent=x.help;
+    x.btns.forEach(([lab,fn],j)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=lab; if(j===0) b.className='primary'; b.addEventListener('click',fn); li.querySelector('.st-body .row').appendChild(b); });
+    if(x.done){ li.addEventListener('click',()=>{ li.classList.toggle('next'); }); }
+    ol.appendChild(li); });
+  if(next<0){ const li=document.createElement('li'); li.className='next'; li.innerHTML='<div class="st-head"><span class="st-n">★</span><span>All set: share it</span></div><div class="st-body"><span class="small">Make the share file for this part and upload it, so the choir gets the song.</span><div class="row"><button type="button" class="primary">Go to sharing</button></div></div>';
+    li.querySelector('button').addEventListener('click',()=>$('#shareMake').scrollIntoView({block:'center',behavior:'smooth'})); ol.appendChild(li); } }
+function setupStart(){ if(!S.cur||S.cur.libId==null){ setStatus('Open a song from the library first.',true); return; } S.setup={...(S.setup||{}),hidden:false}; setupSave(); paintSetup(); $('#leadPanel').open=true; $('#setupBox').scrollIntoView({block:'start',behavior:'smooth'}); }
 const curSongName=()=>{ const m=libMetaCache&&S.cur&&libMetaCache.find(x=>x.id===S.cur.libId); return m?m.name:null; };
 function ownerParts(){ try{ return JSON.parse(localStorage.getItem('pc-owner-parts')||'[]'); }catch(e){ return []; } }
 function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
@@ -1719,7 +1758,7 @@ async function separateSong(file){
       try{
         const pcm=await toInt16(voc,LIB_SR);
         const id=await libPut({name,part:S.part,created:Date.now(),dur:voc.duration,sr:LIB_SR,pcm:pcm.buffer,contour:pl.mm,hop:pl.hop,t0:pl.t0});
-        S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; note=' Saved in the library.';
+        S.cur={libId:id,fromFile:false}; $('#addLib').hidden=true; note=' Saved in the library.'; S.setup={}; setupSave();
         try{ const bb=await encodeMp3(back,96,p=>sepUI('Saving the backing track to the library… '+Math.round(p*100)+'%',1)); S.curBacks=[{name:name+' backing',blob:bb,sep:true}]; S.curBackSel=0; await libSetBacks(id,S.curBacks,0); S.curBackBlob=bb; renderBackPick(); note=' Vocals and backing saved in the library.'; }
         catch(e){ note=' Vocals saved in the library (the backing could not be saved).'; }
         await renderLib();
@@ -1727,7 +1766,8 @@ async function separateSong(file){
     }
     S.sep.last={voc,name};
     sepUI('Done in '+fmtLeft((performance.now()-t0)/1000)+'.'+note,1); $('#sepCancel').hidden=true;
-    setStatus('Ready. The separated vocals are the guide and the rest of the song is the backing. Press Play.');
+    setStatus('Ready. The separated vocals are the guide and the rest of the song is the backing.'+(S.setup?' Next: add the lyrics (see Set up this song in Admin).':' Press Play.'));
+    if(S.setup){ paintSetup(); setTimeout(()=>{ const b=$('#setupBox'); if(b&&!b.hidden) b.scrollIntoView({block:'start',behavior:'smooth'}); },300); }
   }catch(err){
     if(my!==S.sep.token) return;
     if(S.sep.worker){ S.sep.worker.terminate(); S.sep.worker=null; }
@@ -1923,7 +1963,7 @@ function tapTempo(){
   beatEdited(); setStatus('Tap tempo: '+bpm.toFixed(1)+' BPM from '+n+' taps. Keep tapping to refine it. Your first tap counts as beat 1 (change it with Beat 1 here).');
 }
 function markBeatOne(){ if(!S.beat) return; const t=curT(), s=segAt(t), k=Math.round((t-s.off)/s.P); s.ref.bar=s.off+k*s.P; S.beat.bpb=beatsPerBar(); beatEdited(); setStatus('Beat 1 set at '+fmtT1(s.ref.bar)+'. Bars of '+beatsPerBar()+' beats run from here'+(S.beat.changes&&S.beat.changes.length?' through this tempo section.':' through the song.')); }
-function beatEdited(){ if(!S.beat) return; S.beat.auto=false; saveBeat(); renderBeatInfo(); draw(); }
+function beatEdited(){ if(!S.beat) return; S.beat.auto=false; saveBeat(); renderBeatInfo(); draw(); paintSetup(); }
 function setBpm(bpm){
   if(!S.beat||!(bpm>=30&&bpm<=240)) return;
   const now=curT(), s=segAt(now);
@@ -2205,12 +2245,13 @@ async function sugFetchInbox(manual){
 function paintSugBtn(){ const b=$('#sugBtn'), n=S.inbox.length; b.hidden=!n||!sugKey(); b.textContent='Suggestions ('+n+')'; }
 async function openInbox(){
   const lib=await libMeta(), byU={}; lib.forEach(s=>{ if(s.uid) byU[s.uid]=s; });
-  const items=S.inbox.map(it=>{ const has=!!byU[it.songUid], d=new Date(it.received);
+  const blockedBy=it=>S.inbox.find(o=>o!==it&&o.songUid===it.songUid&&o.received<it.received);   // an older suggestion for the same song comes first
+  const items=S.inbox.map(it=>{ const has=!!byU[it.songUid], d=new Date(it.received), older=blockedBy(it);
     return '<div class="dlg-item"><div><b>'+esc(it.songName)+'</b> <span class="small">'+esc(it.part)+'</span><br><span class="small">'+d.toLocaleDateString()+' · '+esc(diffText({notes:it.notes,lyrics:it.lyrics}))+'</span>'+
-      (has?'':'<br><span class="small">This song is not on this device.</span>')+'</div><div class="row"><button type="button" class="primary" data-rev="'+esc(it.id)+'"'+(has?'':' disabled')+'>Review</button><button type="button" data-rej="'+esc(it.id)+'">Decline</button></div></div>'; }).join('');
-  const r=await dlg({title:'Suggestions from the choir',html:items||'<p class="kv-sub">No suggestions waiting.</p>',buttons:[{label:'Close',value:null}],
+      (has?'':'<br><span class="small">This song is not on this device.</span>')+(older?'<br><span class="small">Waiting: review the older suggestion for this song first (from '+new Date(older.received).toLocaleDateString()+').</span>':'')+'</div><div class="row"><button type="button" class="primary" data-rev="'+esc(it.id)+'"'+(has&&!older?'':' disabled')+'>Review</button><button type="button" data-rej="'+esc(it.id)+'"'+(older?' disabled':'')+'>Decline</button></div></div>'; }).join('');
+  const r=await dlg({title:'Suggestions from the choir',html:(items?'<p class="kv-sub">Oldest first. Suggestions for the same song are reviewed in the order they came in.</p>'+items:'')||'<p class="kv-sub">No suggestions waiting.</p>',buttons:[{label:'Close',value:null}],
     onOpen:(b,done)=>{ b.querySelectorAll('[data-rev]').forEach(x=>x.addEventListener('click',()=>done('rev:'+x.dataset.rev))); b.querySelectorAll('[data-rej]').forEach(x=>x.addEventListener('click',()=>done('rej:'+x.dataset.rej))); }});
-  const v=r.value||''; const id=v.slice(4), it=S.inbox.find(x=>x.id===id); if(!it) return;
+  const v=r.value||''; const id=v.slice(4), it=S.inbox.find(x=>x.id===id); if(!it||blockedBy(it)) return;
   if(v.startsWith('rej:')){ await sugSetStatus(it,'rejected'); setStatus('Suggestion for '+it.songName+' declined.'); openInbox(); }
   else startReview(it,byU[it.songUid].id);
 }
@@ -2388,7 +2429,7 @@ function edShiftLine(dir){
   S.tM=out; targetEdited((r?'Selection':'Whole line')+' moved '+(dir<0?'earlier':'later')+' by '+(S.beat?'a quarter beat':'0.05 s')+'. Undo brings it back.');
 }
 function edAlign(){
-  if(!S.tT||!S.tM) return; if(!S.beat){ setStatus('This song has no beat grid yet. Detect it or use Tap tempo first.',true); return; }
+  if(!S.tT||!S.tM) return; if(S.beat&&!selRange()) setTimeout(()=>setupMark('align'),0); if(!S.beat){ setStatus('This song has no beat grid yet. Detect it or use Tap tempo first.',true); return; }
   const T=S.tT, M=S.tM, r=selRange(), i0=r?r.i0:0, i1=r?r.i1:T.length-1; if(i1-i0<2) return;
   const dt=Math.max(0.002,(T[i1]-T[i0])/(i1-i0)), snap=t=>gridAt(t,4);
   const ta=r?r.a:-1e9, tb=r?r.b:1e9;
@@ -2411,7 +2452,7 @@ function edAlign(){
   S.tM=out; targetEdited('Aligned '+fin.length+' notes '+(r?'in '+fmtT1(r.a)+'–'+fmtT1(r.b):'in the whole song')+' to the nearest quarter beat.'+sh+' Undo brings the old line back.');
 }
 function edSmooth(){
-  if(!S.tT||!S.tM) return;
+  if(!S.tT||!S.tM) return; if(!selRange()) setTimeout(()=>setupMark('smooth'),0);
   const T=S.tT, M=S.tM, r=selRange(), i0=r?r.i0:0, i1=r?r.i1:T.length-1;
   const ta=r?r.a:-1e9, tb=r?r.b:1e9;
   if(i1-i0<2) return;
@@ -2604,7 +2645,7 @@ function lyricToPlayhead(){
   const L=S.lyrics[i], old=L.t; L.t=t; S.undo.push({lyr:i,t:old}); if(S.undo.length>30) S.undo.shift(); updateSelInfo();
   lyrChanged(); setStatus('“'+L.text+'” moved from '+fmtT1(old)+' to '+fmtT1(t)+'. Undo brings it back.');
 }
-function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); paintSuggest(); lyrPendingCheck(false); }
+function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); paintSuggest(); lyrPendingCheck(false); paintSetup(); }
 // ----- lyrics from a PDF table: one column per part, rows in singing order -----
 async function loadPdfJs(){
   if(window.pdfjsLib) return window.pdfjsLib;
@@ -2920,7 +2961,7 @@ function startTap(){
   try{ const c=ensureCtx(); if(c.state!=='running') c.resume(); }catch(e){}   // wake the audio now, so the first play starts without a delay
   requestAnimationFrame(()=>{ const y=$('#lyrBar').getBoundingClientRect().top+window.scrollY-6; window.scrollTo({top:Math.max(0,y),behavior:'smooth'}); });
 }
-function stopTap(){ if(!S.tap) return; S.tap=null; $('#edLyrBox').hidden=true; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrTapBtns').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
+function stopTap(){ if(!S.tap) return; S.tap=null; if(S.lyrics.length&&S.lyrics.every(l=>l.t!=null)) setTimeout(()=>setupMark('timed'),0); $('#edLyrBox').hidden=true; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrTapBtns').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
 function tapNow(){
   if(!S.tap||S.review||S.tap.i>=S.lyrics.length) return;
   // playing: allow for reaction time; paused: the playhead was placed by hand, use it as it is
@@ -4079,6 +4120,8 @@ $('#restoreBacksOn').checked=restoreBacks();
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
 $('#edSplit').addEventListener('click',splitAtPlayhead);
+$('#setupShow').addEventListener('click',setupStart);
+$('#setupHide').addEventListener('click',()=>{ if(S.setup){ S.setup.hidden=true; setupSave(); paintSetup(); setStatus('Set-up guide hidden. Admin → Pitch line → Set-up guide brings it back.'); } });
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
