@@ -116,6 +116,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 @keyframes nextPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 0%,transparent)}}
 .next-step{animation:nextPulse 1.6s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.next-step{animation:none}}
+.setup-pulse{border-color:var(--accent)!important;outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:1px}
+.gate-field.setup-pulse{border-radius:8px}
 .busy-view{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 55%,transparent);padding:16px}
 .busy-card{display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 28px;border-radius:14px;background:var(--surface);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.25);color:var(--fg);font-weight:600;font-size:15px;text-align:center;max-width:300px}
 .busy-spin{width:38px;height:38px;border-radius:50%;border:4px solid var(--accent);border-right-color:transparent;animation:spin .8s linear infinite}
@@ -714,7 +716,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       </div>
     <div class="share-box admin-tools" id="lyrTools" hidden>
         <b>Lyrics tools (moderator)</b>
-        <span class="small">Lines always snap to the beat grid. After importing a PDF, pick the column in the Lyrics editor.</span>
+        <span class="small">Lines always snap to the beat grid. A PDF's lines for this part are used straight away; if it picked the wrong part, choose another column in the Lyrics editor.</span>
         <div class="row">
           <span class="btn">Import from PDF<input id="lyrPdf" type="file" accept="application/pdf,.pdf" aria-label="Import lyrics from a PDF with one column per part"></span>
           <button id="lyrAuto" type="button">Place lines automatically</button>
@@ -943,7 +945,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fg';
+const APP_VERSION='2026-10-28 fh';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1501,27 +1503,51 @@ function setupSave(){ if(S.cur&&S.cur.libId!=null&&S.setup) libUpdate(S.cur.libI
 function beatOneConfirm(t){ const txt='✓ Beat 1 set at '+fmtT1(t); S.beatOneMsg=txt;
   document.querySelectorAll('#bOne,[data-beat1]').forEach(b=>{ const old=b.dataset.lbl||b.textContent; b.dataset.lbl=old; b.textContent=txt; b.classList.add('confirmed'); clearTimeout(b._t); b._t=setTimeout(()=>{ b.textContent=b.dataset.lbl; b.classList.remove('confirmed'); },2500); });
   try{ navigator.vibrate&&navigator.vibrate(30); }catch(e){} }
-function setupMark(k){ if(!S.setup||S.setup[k]) return; S.setup[k]=true; setupSave(); paintSetup(); }
-function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.every(l=>l.t!=null);
+function setupMark(k){ if(!S.setup||S.setup[k]) return; const was=setupSteps().findIndex(x=>!x.done); S.setup[k]=true; setupSave(); paintSetup();
+  const st=setupSteps(); if(was>=0&&st[was].k===k&&st[was].done) setTimeout(setupGo,350); }   // the step just finished: go on to the next one
+function setupActive(){ return !!(S.setup&&!S.setup.hidden&&S.cur&&S.cur.libId!=null&&isOwnerPart(S.curPart||S.part)); }
+const scrollC=el=>{ if(el) setTimeout(()=>el.scrollIntoView({block:'center',behavior:'smooth'}),150); };
+function openTools(){ setEdFold(true); }
+function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.every(l=>l.t!=null), gb=k=>document.querySelector('#setupSteps [data-sk="'+k+'"]');
   return [
-    {k:'lyrics',title:'Add the lyrics',done:S.lyrics.length>0,help:'Paste the lyrics in the Lyrics editor (one line per sung phrase) and tap Use these lines, or import them from a PDF.',btns:[['Open the Lyrics editor',()=>{ $('#lyrPanel').open=true; $('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}); setTimeout(()=>$('#lyrText').focus({preventScroll:true}),400); }]]},
-    {k:'smooth',title:'Smooth the pitch line',done:!!st.smooth,help:'Turns the wobbly sung line into clean piano-style notes.',btns:[['Smooth',()=>{ edSmooth(); }]]},
-    {k:'align',title:'Align to the grid',done:!!st.align,help:'Moves every note start and end onto the beat grid. Check the tempo first if the grid looks wrong (next step), then align again.',btns:[['Align to grid',()=>{ edAlign(); }]]},
-    {k:'tempo',title:'Confirm the tempo and beat 1',done:!!st.tempo&&hasBars(),help:'Turn on Click and play: the clicks should sit on the beat (adjust BPM, ◀ ▶ or Tap tempo under the editor buttons if not). Then put the playhead on the first beat of a bar and tap Beat 1 here.'+(hasBars()?' Beat 1 is set'+(S.beat&&S.beat.bar!=null?' at '+fmtT1(S.beat.bar):'')+'.':''),btns:[['Click on/off',()=>$('#metBtn').click()],['Beat 1 here',()=>markBeatOne(),'beat1'],['Tempo is right ✓',()=>{ if(!hasBars()){ setStatus('Set beat 1 first: playhead on the first beat of a bar, then Beat 1 here.',true); return; } setupMark('tempo'); }]]},
-    {k:'timed',title:'Time all the lyrics',done:timed&&!!st.timed,help:'Lines placed automatically are only a rough guess. Go through them with Time lyrics and place every line where it starts; the step ticks off when you stop timing with all lines timed.',btns:[['Time lyrics',()=>{ if(!S.lyrics.length){ setStatus('Add the lyrics first.',true); return; } setEdFold(true); startTap(); }],['Done ✓',()=>{ if(!timed){ setStatus('Some lyric lines have no time yet.',true); return; } setupMark('timed'); }]]},
-    {k:'cleanup',title:'Remove lines from other parts',done:!!st.cleanup,help:'Other parts singing in the background can leave stray bits in the pitch line. First try Pitch line sensitivity (under the editor buttons): lower it until the stray bits disappear but your part stays. Then play through, select anything left over in the editor and tap Remove.',btns:[['Sensitivity',()=>{ setEdFold(true); setTimeout(()=>$('#gateIn').scrollIntoView({block:'center',behavior:'smooth'}),100); }],['Open the editor',()=>{ setEdFold(true); setEditMode(true); window.scrollTo({top:0,behavior:'smooth'}); }],['Done ✓',()=>setupMark('cleanup')]]}
+    {k:'lyrics',title:'Add the lyrics',done:S.lyrics.length>0,help:'Tap Import from PDF and choose the lyrics PDF: the column for this part is picked and its lines are used straight away (pick another column in the Lyrics editor if it is the wrong one). No PDF? Paste the lines in the Lyrics editor, one per sung phrase, and tap Use these lines.',
+      btns:[['Import from PDF',()=>$('#lyrPdf').click()],['Open the Lyrics editor',()=>{ $('#lyrPanel').open=true; $('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}); setTimeout(()=>$('#lyrText').focus({preventScroll:true}),400); }]],
+      go:()=>{ $('#lyrPanel').open=true; }, pulse:()=>lyrTextDiffers&&$('#lyrText').value.trim()&&lyrTextDiffers()?$('#lyrApply'):$('#lyrPdf').parentElement},
+    {k:'cleanup',title:'Remove lines from other parts',done:!!st.cleanup,help:'Other parts singing in the background leave stray bits in the pitch line. Lower Pitch line sensitivity (under the editor buttons) until the stray bits disappear but your part stays. Anything left over: select it in the editor and tap Remove. Then tap Done.',
+      btns:[['Sensitivity',()=>{ openTools(); scrollC($('#gateIn')); }],['Open the editor',()=>{ setEdFold(true); setEditMode(true); window.scrollTo({top:0,behavior:'smooth'}); }],['Done ✓',()=>setupMark('cleanup'),'done']],
+      go:openTools, pulse:()=>+$('#gateIn').value>=100?$('#gateIn').closest('.field'):gb('done')},
+    {k:'smooth',title:'Smooth the pitch line',done:!!st.smooth,help:'Turns the wobbly sung line into clean piano-style notes.',btns:[['Smooth',()=>{ edSmooth(); }]],go:openTools,pulse:()=>$('#edSmooth')},
+    {k:'tempo',title:'Confirm the tempo and beat 1',done:!!st.tempo&&hasBars(),help:'Turn on Click and play: the clicks should sit on the beat (adjust BPM, ◀ ▶ or Tap tempo under the editor buttons if not). Then put the playhead on the first beat of a bar and tap Beat 1 here.'+(hasBars()?' Beat 1 is set'+(S.beat&&S.beat.bar!=null?' at '+fmtT1(S.beat.bar):'')+'.':''),
+      btns:[['Click on/off',()=>$('#metBtn').click()],['Beat 1 here',()=>markBeatOne(),'beat1'],['Tempo is right ✓',()=>{ if(!hasBars()){ setStatus('Set beat 1 first: playhead on the first beat of a bar, then Beat 1 here.',true); return; } setupMark('tempo'); },'done']],
+      go:openTools, pulse:()=>hasBars()?gb('done'):$('#bOne')},
+    {k:'align',title:'Align to the grid',done:!!st.align,help:'Moves every note start and end onto the beat grid you just checked.',btns:[['Align to grid',()=>{ edAlign(); }]],go:openTools,pulse:()=>$('#edAlign')},
+    {k:'timed',title:'Play through: time the lyrics, fix the notes',done:timed&&!!st.timed,help:'Play the song from the start with Time lyrics and place every line where it starts (the automatic places are only a rough guess). Hear a wrong note on the way? Pause, fix it with Edit target line, and carry on. Tap Done when you have been through the whole song.',
+      btns:[['Time lyrics',()=>{ if(!S.lyrics.length){ setStatus('Add the lyrics first.',true); return; } setEdFold(true); startTap(); }],['Done ✓',()=>{ if(!timed){ setStatus('Some lyric lines have no time yet.',true); return; } setupMark('timed'); },'done']],
+      go:openTools, pulse:()=>S.tap?null:timed&&st.tapped?gb('done'):$('#edTimeBtn')}
   ]; }
+// the next button to tap pulses gently, wherever it is
+function setupPulse(){ document.querySelectorAll('.setup-pulse').forEach(e=>e.classList.remove('setup-pulse','next-step'));
+  if(!setupActive()) return; const steps=setupSteps(), n=steps.find(x=>!x.done);
+  const el=n?n.pulse&&n.pulse():$('#shareMake'); if(!el) return; el.classList.add('setup-pulse','next-step');
+  // tucked away? the way to it pulses too: the editor (pencil) button or the closed panel's title
+  const add=e=>e&&e.classList.add('setup-pulse','next-step');
+  if(el.closest('#edFold')&&$('#edFold').hidden) add($('#edToggle'));
+  const d=el.closest('details'); if(d&&!d.open) add(d.querySelector('summary')); }
+// show the next step's controls and bring its pulsing button into view
+function setupGo(){ if(!setupActive()) return; const n=setupSteps().find(x=>!x.done); if(n&&n.go) n.go(); setupPulse();
+  const el=document.querySelector('.setup-pulse'); if(el&&el.offsetParent) scrollC(el); else if(!n){ $('#leadPanel').open=true; scrollC($('#shareMake')); } }
 function paintSetup(){ const box=$('#setupBox'); if(!box) return; const own=S.cur&&S.cur.libId!=null&&isOwnerPart(S.curPart||S.part);
-  if(!own||!S.setup||S.setup.hidden){ box.hidden=true; return; } box.hidden=false; $('#setupName').textContent=curSongName()||'this song';
+  if(!own||!S.setup||S.setup.hidden){ box.hidden=true; setupPulse(); return; } box.hidden=false; $('#setupName').textContent=curSongName()||'this song';
   const steps=setupSteps(), next=steps.findIndex(x=>!x.done), ol=$('#setupSteps'); ol.innerHTML='';
   steps.forEach((x,i)=>{ const li=document.createElement('li'); li.className=x.done?'done':i===next?'next':'';
     li.innerHTML='<div class="st-head"><span class="st-n">'+(x.done?'✓':i+1)+'</span><span></span></div><div class="st-body"><span class="small"></span><div class="row"></div></div>';
     li.querySelector('.st-head span:last-child').textContent=x.title; li.querySelector('.st-body .small').textContent=x.help;
-    x.btns.forEach(([lab,fn,tag],j)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=lab; if(j===0) b.className='primary'; if(tag==='beat1') b.dataset.beat1='1'; b.addEventListener('click',fn); li.querySelector('.st-body .row').appendChild(b); });
+    x.btns.forEach(([lab,fn,tag],j)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=lab; if(j===0) b.className='primary'; if(tag==='beat1') b.dataset.beat1='1'; if(tag&&i===next) b.dataset.sk=tag; b.addEventListener('click',fn); li.querySelector('.st-body .row').appendChild(b); });
     if(x.done){ li.addEventListener('click',()=>{ li.classList.toggle('next'); }); }
     ol.appendChild(li); });
   if(next<0){ const li=document.createElement('li'); li.className='next'; li.innerHTML='<div class="st-head"><span class="st-n">★</span><span>All set: share it</span></div><div class="st-body"><span class="small">Make the share file for this part and upload it, so the choir gets the song.</span><div class="row"><button type="button" class="primary">Go to sharing</button></div></div>';
-    li.querySelector('button').addEventListener('click',()=>$('#shareMake').scrollIntoView({block:'center',behavior:'smooth'})); ol.appendChild(li); } }
+    li.querySelector('button').addEventListener('click',()=>$('#shareMake').scrollIntoView({block:'center',behavior:'smooth'})); ol.appendChild(li); }
+  setupPulse(); }
 function setupStart(){ if(!S.cur||S.cur.libId==null){ setStatus('Open a song from the library first.',true); return; } S.setup={...(S.setup||{}),hidden:false}; setupSave(); paintSetup(); $('#leadPanel').open=true; $('#setupBox').scrollIntoView({block:'start',behavior:'smooth'}); }
 const curSongName=()=>{ const m=libMetaCache&&S.cur&&libMetaCache.find(x=>x.id===S.cur.libId); return m?m.name:null; };
 function ownerParts(){ try{ return JSON.parse(localStorage.getItem('pc-owner-parts')||'[]'); }catch(e){ return []; } }
@@ -3005,11 +3031,16 @@ async function importLyricsPdf(file){
     S.sheet=sheet; if(S.cur&&S.cur.libId!=null) libUpdate(S.cur.libId,{sheet}).catch(()=>{}); renderSheetBtns();
     S.pdfCols=cols; const sel=$('#lyrPdfCol'); sel.innerHTML='';
     cols.forEach((c,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=c.name+' ('+c.lines.length+' lines)'; sel.appendChild(o); });
-    const k=bestColumn(cols,S.curPart||S.part); sel.value=String(k<0?0:k); $('#lyrPdfRow').hidden=false; fillFromPdf();
-    setStatus('Found '+cols.length+' parts in the PDF. Pick the column, check the lines, then tap Use these lines. The whole table is kept: tap Lyrics sheet to see it.');
+    const k=bestColumn(cols,S.curPart||S.part); sel.value=String(k<0?0:k); $('#lyrPdfRow').hidden=false; pdfUseColumn(false);
+    return true;
   }catch(e){ setStatus('Could not read the lyrics PDF: '+((e&&e.message)||'unknown error')+'.',true); }
 }
 function fillFromPdf(){ const c=S.pdfCols&&S.pdfCols[+$('#lyrPdfCol').value]; if(c) $('#lyrText').value=c.lines.join('\n'); }
+// a column from the PDF goes straight into use; picking another column replaces it (its rough places are redone)
+function pdfUseColumn(again){ const c=S.pdfCols&&S.pdfCols[+$('#lyrPdfCol').value]; if(!c) return; fillFromPdf();
+  if(again&&S.lyrics.length) S.lyrics=S.lyrics.map(l=>({text:l.text,t:null}));
+  applyLyricText(); lyrPendingCheck(false);
+  setStatus(S.lyrics.length+' lines from “'+c.name+'” are in use'+(S.lyrics.some(l=>l.t!=null)?' and placed roughly':'')+'. Wrong part? Pick another column in the Lyrics editor. The whole table is kept: tap Lyrics sheet to see it.'); }
 function applyLyricText(){
   const lines=$('#lyrText').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   const old=S.lyrics, hadTimes=old.some(l=>l.t!=null);
@@ -3064,7 +3095,7 @@ function autoPlace(silent){
   setStatus((silent?'Lines placed automatically on the sung phrases. ':'')+'Play the song to check them, then fix any line with Tap to time or the − / + buttons.');
 }
 // tap-to-time
-function startTap(){
+function startTap(){ if(setupActive()&&!S.setup.tapped){ S.setup.tapped=true; setupSave(); } setTimeout(setupPulse,0);
   edSnapTake();
   if(lyrTextDiffers()){ applyLyricText(); setStatus('Your text changes are now used.'); }   // typed lines are used before timing
   $('#lyrCheckNote').hidden=true; timingTried();
@@ -3080,7 +3111,7 @@ function startTap(){
   try{ const c=ensureCtx(); if(c.state!=='running') c.resume(); }catch(e){}   // wake the audio now, so the first play starts without a delay
   requestAnimationFrame(()=>{ const y=$('#lyrBar').getBoundingClientRect().top+window.scrollY-6; window.scrollTo({top:Math.max(0,y),behavior:'smooth'}); });
 }
-function stopTap(){ if(!S.tap) return; S.tap=null; if(S.lyrics.length&&S.lyrics.every(l=>l.t!=null)) setTimeout(()=>setupMark('timed'),0); $('#edLyrBox').hidden=true; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrTapBtns').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
+function stopTap(){ if(!S.tap) return; S.tap=null; setTimeout(setupPulse,0); $('#edLyrBox').hidden=true; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrTapBtns').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
 function tapNow(){
   if(!S.tap||S.review||S.tap.i>=S.lyrics.length) return;
   // playing: allow for reaction time; paused: the playhead was placed by hand, use it as it is
@@ -4019,7 +4050,7 @@ async function closeEditor(fromPencil){
   if(S.editMode) setEditMode(false); if(S.tap) stopTap(); if(fromPencil) setEdFold(false);
 }
 // the pencil next to Voice / Backing / Tone / Click shows or hides the editor buttons
-function setEdFold(on){ $('#edFold').hidden=!on; $('#edLyrBox').hidden=!on||!S.tap; if(document.getElementById('pitchTools')) paintAdminTools(); $('#edToggle').setAttribute('aria-expanded',String(on)); }
+function setEdFold(on){ setTimeout(setupPulse,0); $('#edFold').hidden=!on; $('#edLyrBox').hidden=!on||!S.tap; if(document.getElementById('pitchTools')) paintAdminTools(); $('#edToggle').setAttribute('aria-expanded',String(on)); }
 $('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; if(!open&&(S.editMode||S.tap)){ closeEditor(true); return; } setEdFold(open); });   // closing the pencil also ends editing
 $('#edClearSel').addEventListener('click',()=>{ S.sel=null; updateSelInfo(); draw(); });
 $('#edTimeBtn').addEventListener('click',()=>{ if(S.tap){ closeEditor(false); return; } if(S.editMode) setEditMode(false); startTap(); });
@@ -4194,8 +4225,8 @@ document.addEventListener('keydown',e=>{
   if(done){ e.preventDefault(); e.stopPropagation(); if(tg==='BUTTON') document.activeElement.blur(); }
 },true);
 updateSelInfo();
-$('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>{ e.target.value=''; $('#lyrPanel').open=true; setTimeout(()=>$('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}),100); }); });
-$('#lyrPdfCol').addEventListener('change',fillFromPdf);
+$('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).then(ok=>{ e.target.value=''; $('#lyrPanel').open=true; if(ok&&setupActive()&&S.lyrics.length) setTimeout(setupGo,600); else setTimeout(()=>$('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}),100); }); });
+$('#lyrPdfCol').addEventListener('change',()=>pdfUseColumn(true));
 $('#sharePartSel').addEventListener('change',e=>{ setPart(e.target.value); setStatus('Sharing '+e.target.value+': the share file will contain its songs.'); });
 $('#installBtn').addEventListener('click',()=>installHelp(false));
 $('#sheetPrint').addEventListener('click',async()=>{ if(S.playing) stop(); let last='full'; try{ last=localStorage.getItem('pc-printlight')==='1'?'light':'full'; }catch(e){}
@@ -4237,7 +4268,7 @@ function lyrPendingCheck(show){ const d=lyrTextDiffers(), el=$('#lyrPending'), u
 $('#lyrTextUndo').addEventListener('click',()=>{ if(lyrTextDiffers()){ $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrPendingCheck(false); setStatus('Text changes undone.'); return; }
   const h=S.lyrTextHist&&S.lyrTextHist.pop(); if(!h) return; S.lyrics=h; $('#lyrText').value=h.map(l=>l.text).join('\n'); $('#lyrCheckNote').hidden=true; S.needTiming=false; lyrChanged(); setStatus('The lyric lines are back as they were.'); });
 $('#lyrText').addEventListener('focusout',()=>setTimeout(()=>{ if(document.activeElement!==$('#lyrText')) lyrPendingCheck(true); },250));
-$('#lyrText').addEventListener('input',()=>lyrPendingCheck(false));
+$('#lyrText').addEventListener('input',()=>{ lyrPendingCheck(false); setupPulse(); });
 $('#lyrAuto').addEventListener('click',()=>autoPlace(false));
 $('#lyrTap').addEventListener('click',()=>S.tap?closeEditor(false):startTap());   // stopping the timing asks about edits not sent yet
 $('#lyrClear').addEventListener('click',e=>{ const b=e.currentTarget; if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Tap again to remove'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Remove lyrics'; },4000); return; } delete b.dataset.armed; b.textContent='Remove lyrics'; stopTap(); S.lyrics=[]; renderLyrics(true); saveLyrics(); draw(); setStatus('Lyrics removed.'); });
@@ -4246,6 +4277,7 @@ $('#lyrPlace').addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPro
 document.addEventListener('keydown',e=>{ if(S.tap&&e.key==='ArrowRight'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); tapSkip(); return; } if(S.tap&&e.key==='ArrowLeft'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); tapBack(); return; } if(S.tap&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); tapUndo(); return; } if(S.tap&&e.code==='Space'&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); tapNow(); } });
 try{ if(localStorage.getItem('pc-lyr')==='0'){ S.lyrShow=false; $('#lyrShow').checked=false; } }catch(x){}
 try{ const o=localStorage.getItem('pc-lyr-open'); if(o==='1') $('#lyrPanel').open=true; }catch(x){}
+document.addEventListener('toggle',()=>setupPulse(),true);   // a panel opened or closed: move the set-up pulse
 $('#lyrPanel').addEventListener('toggle',e=>{ try{localStorage.setItem('pc-lyr-open',e.target.open?'1':'0')}catch(x){} });
 renderLyrics(true);
 { const ib=$('#edInfoBtn'), set=on=>{ $('#selInfo').hidden=!on; ib.textContent=on?'Hide info':'Show info'; ib.setAttribute('aria-expanded',String(on)); };
@@ -4284,7 +4316,7 @@ $('#restLink').addEventListener('click',async()=>{ const url=shareLinks()[S.part
   busyShow('Downloading '+S.part+' from Dropbox…'); try{ const du=directUrl(url), rf=await remoteFile(du); if(rf){ restoreDone(await restoreLibrary(rf,t,false,true)); } else { const blob=await fetchBlob(du,(got,total)=>{ t.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); },false); if(!blob){ t.textContent='The file could not be downloaded. Download it from Dropbox yourself and use Restore from a share file.'; return; } restoreDone(await restoreLibrary(new File([blob],'share.zip'),t,false,true)); } }
   catch(err){ t.textContent='Restore failed: '+((err&&err.message)||'unknown error')+'.'; } finally{ await busyHide(null); } });
 $('#edRedo').addEventListener('click',edRedo);
-{ let gt=null; $('#gateIn').addEventListener('input',e=>{ const v=+e.target.value; $('#gateV').textContent=gateLabel(v); clearTimeout(gt); gt=setTimeout(()=>applyGate(v),60); }); }
+{ let gt=null; $('#gateIn').addEventListener('input',e=>{ const v=+e.target.value; $('#gateV').textContent=gateLabel(v); clearTimeout(gt); gt=setTimeout(()=>{ applyGate(v); setupPulse(); },60); }); }
 $('#setupShow').addEventListener('click',setupStart);
 $('#setupHide').addEventListener('click',()=>{ if(S.setup){ S.setup.hidden=true; setupSave(); paintSetup(); setStatus('Set-up guide hidden. The Set-up guide button in the moderator tools under the editor buttons (pencil) brings it back.'); } });
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
