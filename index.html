@@ -366,6 +366,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-edit>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
 .lyr-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .hint-row{flex:1 1 100%;min-width:0;flex-direction:column;align-items:flex-start}
+.share-part-row{align-items:center} .share-part-row .sel{flex:1 1 160px;min-width:0}
 .gate-field{display:flex;flex-direction:column;gap:4px;margin-top:8px} .gate-field input{width:100%}
 .lane-foot .admin-tools{flex:1 1 100%;min-width:0;margin-top:8px;font-size:14px;color:var(--fg)}
 .ed-lyr{display:flex;flex-direction:column;gap:6px;margin-top:8px;flex:1 1 100%;min-width:0;max-width:100%}
@@ -403,6 +404,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 @media print{
   @page{size:A4;margin:12mm}
   body>*:not(#sheetView){display:none!important}
+  :root{color-scheme:light!important}
   html,body{background:#fff!important;overflow:visible!important;height:auto!important}
   #sheetView{position:static!important;display:block!important;background:#fff!important;color:#000!important}
   #sheetView .sheet-bar>*:not(#sheetTitle){display:none!important}
@@ -412,6 +414,8 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   table.sheet{color:#000} table.sheet th{position:static!important;background:#fff!important;color:#333!important}
   table.sheet tr{break-inside:avoid} table.sheet td.now{box-shadow:none!important;background-image:none!important;font-weight:inherit!important}
   table.sheet .shape-dot{display:none!important}
+  table.sheet .shape canvas{width:100%!important;max-width:75mm;height:auto!important}
+  table.sheet .shape{color:#000!important}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
@@ -852,10 +856,11 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <div class="share-box">
       <b>Share with your choir</b>
       <span class="lyr-pending" id="unpubNote" hidden></span>
-      <span class="small">Each part is shared on its own. The file contains only the songs of the part chosen above (<b id="sharePart"></b>).</span>
+      <span class="small">Each part is shared on its own. The file contains only the songs of one part (now: <b id="sharePart"></b>); choose it below.</span>
       <span class="small">1. Tap Make share file. 2. Upload “<span id="shareFile"></span>” to Dropbox and copy its share link. 3. Paste the link here and tap Share link. Anyone who opens that link is offered the songs of this part.</span>
       <span class="small">You can change the file name below; the app remembers it for each part.</span>
       <span class="small"><b>Updating later:</b> tap Make share file again and upload it to the same Dropbox folder with exactly the same name, so it replaces the old file and the link stays the same. Choir members' apps then download only the new songs and changed edits, not the audio they already have.</span>
+      <div class="row share-part-row"><label class="small" for="sharePartSel">Part to share</label><select id="sharePartSel" class="sel"></select></div>
       <div class="row">
         <input id="shareName" type="text" autocomplete="off" spellcheck="false" aria-label="File name for the share file">
         <button id="shareMake" type="button">Make share file</button>
@@ -921,7 +926,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 et';
+const APP_VERSION='2026-10-28 eu';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1628,6 +1633,7 @@ function renderParts(songs){
   const sel=$('#partSel'); sel.innerHTML=''; S.parts.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n+' ('+songs.filter(x=>partOf(x)===n).length+')'; sel.appendChild(o); }); sel.value=S.part;
   $('#partDel').disabled=S.parts.length<2||songs.some(x=>partOf(x)===S.part); $('#partRange').value=rangeKey(S.part); renderParts._last=true;
   $('#shortEx').textContent=shortUrlFor(S.part); $('#sharePart').textContent=S.part; $('#shareFile').textContent=shareFileName(); if(document.activeElement!==$('#shareName')) $('#shareName').value=shareFileName().replace(/\.zip$/i,'');
+  { const sp=$('#sharePartSel'); if(sp){ sp.innerHTML=''; S.parts.forEach(n=>{ const o=document.createElement('option'); o.value=n; { const k=songs.filter(x=>partOf(x)===n).length; o.textContent=n+' ('+k+' song'+(k===1?'':'s')+')'; } sp.appendChild(o); }); sp.value=S.part; } }
   paintUnpub(); const ln=shareLinks()[S.part]||''; if(document.activeElement!==$('#shareIn')) $('#shareIn').value=ln; $('#shareText').textContent='';
 }
 async function newPart(){ const n=cleanPartName(prompt('Name of the new part (for example Alto 1):','')); if(!n) return; if(S.parts.includes(n)){ setPart(n); return; } setPart(n); setStatus('New part '+n+'. Songs you separate or add now go into it.'); }
@@ -2916,13 +2922,18 @@ function toggleShape(td,quiet){
   let lo=Math.min(...v.map(p=>p[1])), hi=Math.max(...v.map(p=>p[1])); const pad=Math.max(1,(4-(hi-lo))/2); lo-=pad; hi+=pad;
   const cv=document.createElement('canvas'), W=Math.max(80,td.clientWidth-12), H=Math.round(Math.max(34,Math.min(70,(hi-lo)*6))), dpr=devicePixelRatio||1;
   cv.width=W*dpr; cv.height=H*dpr; cv.style.width=W+'px'; cv.style.height=H+'px'; box.appendChild(cv); td.appendChild(box);
-  const g2=cv.getContext('2d'); g2.scale(dpr,dpr); g2.strokeStyle=getComputedStyle(td).color; g2.globalAlpha=0.8; g2.lineWidth=1.5; g2.lineJoin='round'; g2.lineCap='round';
+  const g2=cv.getContext('2d');
   const X=t=>2+(t-tStart)/(tEnd-tStart)*(W-4), Y=m=>2+(hi-m)/(hi-lo)*(H-4);
   box._map={X,Y,tStart,tEnd}; const dot=document.createElement('i'); dot.className='shape-dot'; dot.hidden=true; box.appendChild(dot);
-  g2.beginPath(); let pen=false, pv=null;
-  for(const [t,m] of pts){ if(t<tStart||t>tEnd) continue; if(isNaN(m)){ pen=false; continue; } if(pen&&pv&&t-pv>0.15) pen=false; if(pen) g2.lineTo(X(t),Y(m)); else { g2.moveTo(X(t),Y(m)); pen=true; } pv=t; }
-  g2.stroke();
+  // drawn again in black for printing (in dark mode the screen colour is light and would not show on paper)
+  box._draw=ink=>{ g2.setTransform(dpr,0,0,dpr,0,0); g2.clearRect(0,0,W,H); g2.strokeStyle=ink||getComputedStyle(td).color; g2.globalAlpha=ink?1:0.8; g2.lineWidth=ink?1.8:1.5; g2.lineJoin='round'; g2.lineCap='round';
+    g2.beginPath(); let pen=false, pv=null;
+    for(const [t,m] of pts){ if(t<tStart||t>tEnd) continue; if(isNaN(m)){ pen=false; continue; } if(pen&&pv&&t-pv>0.15) pen=false; if(pen) g2.lineTo(X(t),Y(m)); else { g2.moveTo(X(t),Y(m)); pen=true; } pv=t; }
+    g2.stroke(); };
+  box._draw();
 }
+window.addEventListener('beforeprint',()=>document.querySelectorAll('#sheetTable .shape').forEach(b=>b._draw&&b._draw('#000')));
+window.addEventListener('afterprint',()=>document.querySelectorAll('#sheetTable .shape').forEach(b=>b._draw&&b._draw()));
 function shapesKey(){ return S.cur&&S.cur.libId!=null?'pc-shapes-'+S.cur.libId:null; }
 function shapesOpen(){ const k=shapesKey(); if(!k) return []; try{ return JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){ return []; } }
 function saveShapes(){ const k=shapesKey(); if(!k) return; const r=[...document.querySelectorAll('#sheetTable td.tap')].filter(td=>td.querySelector('.shape')).map(td=>+td.dataset.r); try{ if(r.length) localStorage.setItem(k,JSON.stringify(r)); else localStorage.removeItem(k); }catch(e){} }
@@ -4146,6 +4157,7 @@ document.addEventListener('keydown',e=>{
 updateSelInfo();
 $('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>{ e.target.value=''; $('#lyrPanel').open=true; setTimeout(()=>$('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}),100); }); });
 $('#lyrPdfCol').addEventListener('change',fillFromPdf);
+$('#sharePartSel').addEventListener('change',e=>{ setPart(e.target.value); setStatus('Sharing '+e.target.value+': the share file will contain its songs.'); });
 $('#sheetPrint').addEventListener('click',()=>{ if(S.playing) stop(); window.print(); });
 $('#sheetPlay').addEventListener('click',()=>(S.playing||S.review)?stop():play());
 $('#sheetOpen').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; S.sheetSec=null; requestAnimationFrame(()=>sheetFollow(true)); });
