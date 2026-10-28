@@ -815,7 +815,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     </div>
     <div class="share-box">
       <b>Restore the library</b>
-      <span class="small">Brings back songs from a share file, for example after the app's storage was cleared or on a new device. Songs that are missing or older here are restored; newer ones here are kept.</span>
+      <span class="small">Brings the songs back exactly as they are in the share file: after edits you want to throw away, after the app's storage was cleared, or on a new device. Songs in the file replace the same songs here; songs that are not in the file stay.</span>
       <div class="row"><button id="restLink" type="button" class="primary">Restore <span class="rest-part"></span> from its Dropbox link</button><span class="btn">Restore from a share file<input id="restFile" type="file" accept=".zip,application/zip" aria-label="Choose a Part Coach share file"></span></div>
       <span class="small" id="restText"></span>
     </div>
@@ -921,7 +921,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 es';
+const APP_VERSION='2026-10-28 et';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1390,7 +1390,9 @@ async function deleteBacking(btn){
   else { await libSetBacks(S.cur.libId,[],-1); stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); renderBackPick(); }
   renderLib(); setStatus('Deleted '+gone+' from this song.');
 }
-async function libUpdate(id,patch){ const s=await libGet(id); if(!s) return; Object.assign(s,patch); await libPut(s); }
+// saves to one song run one after another, so two quick saves (say lyrics and pitch line) can't overwrite each other
+let libUpdQ=Promise.resolve();
+function libUpdate(id,patch){ const run=libUpdQ.then(async()=>{ const s=await libGet(id); if(!s) return; Object.assign(s,patch); await libPut(s); }); libUpdQ=run.catch(()=>{}); return run; }
 async function encodeMp3(buf,kbps,onProg,mono=true){
   if(!window.lamejs) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js');
   const sr=buf.sampleRate, n=buf.length; let chs;
@@ -1548,7 +1550,7 @@ function neededBytes(z,man,byUid){
     const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!(!restoreBacks()&&wasDeleted(cur,b))&&!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
   return need;
 }
-async function restoreLibrary(file,out,askBig){
+async function restoreLibrary(file,out,askBig,force){   // force: every song in the file replaces the one here (the moderator's restore)
   const txt=out||$('#status'); txt.textContent='Reading '+(out&&out.id==='status'?'the update':(file.name||'the library'))+'…';
   try{
     const z=await openZip(file), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
@@ -1569,7 +1571,7 @@ async function restoreLibrary(file,out,askBig){
       i++; txt.textContent='Restoring song '+i+' of '+man.songs.length+'…';
       const cur=byUid[m.uid];
       if(!cur&&shared&&skipDeleted(m,man)) continue;   // you deleted it and restoring is off
-      if(cur&&!wantsBacksBack(cur,m)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
+      if(cur&&!force&&!wantsBacksBack(cur,m)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
         if(shared&&!cur.base){ // shared before this version: remember the shared version now (from the file if you edited it since)
           const same=(cur.updated||cur.created)===(m.updated||m.created), c0=same?toF32(cur.contour):(m.files.contour?new Float32Array(await (await z.get(m.files.contour)).arrayBuffer()):null);
           if(c0){ cur.base={updated:m.updated||m.created,contour:Float32Array.from(c0),lyrics:(same?cur.lyrics:m.lyrics||[]).map(l=>({t:l.t,text:l.text}))}; await libPutRaw(cur); } }
@@ -1583,9 +1585,9 @@ async function restoreLibrary(file,out,askBig){
       const co=await rd(m.files.contourOrig); if(co) rec.contourOrig=new Float32Array(co);
       const tt=await rd(m.files.tt); if(tt) rec.tt=new Float32Array(tt);
       rec.backs=[]; const old=cur?backsOf(cur):[];
-      for(const b of (m.backs||[])){ if(!restoreBacks()&&wasDeleted(cur,b)) continue; const keep=old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size)); if(keep){ rec.backs.push({name:b.name,sep:!!b.sep,blob:keep.blob}); continue; } const bl=await z.get(b.file); if(bl) rec.backs.push({name:b.name,sep:!!b.sep,blob:new Blob([await bl.arrayBuffer()],{type:b.type||'audio/mpeg'})}); }
+      for(const b of (m.backs||[])){ if(!force&&!restoreBacks()&&wasDeleted(cur,b)) continue; const keep=old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size)); if(keep){ rec.backs.push({name:b.name,sep:!!b.sep,blob:keep.blob}); continue; } const bl=await z.get(b.file); if(bl) rec.backs.push({name:b.name,sep:!!b.sep,blob:new Blob([await bl.arrayBuffer()],{type:b.type||'audio/mpeg'})}); }
       rec.backSel=rec.backs.length?Math.max(0,Math.min(rec.backs.length-1,m.backSel||0)):-1;
-      if(cur&&cur.delBacks&&!restoreBacks()) rec.delBacks=cur.delBacks;   // keep remembering what you deleted
+      if(cur&&cur.delBacks&&!restoreBacks()&&!force) rec.delBacks=cur.delBacks;   // keep remembering what you deleted
       if(cur) rec.id=cur.id;
       if(shared&&rec.contour) rec.base={updated:rec.updated,contour:Float32Array.from(rec.contour),lyrics:rec.lyrics.map(l=>({t:l.t,text:l.text}))};   // the shared version: suggestions are made against it
       await libPutRaw(rec); if(shared) markPublished(m.uid); if(cur){ updated++; updIds.push(cur.id); } else { added++; const dl=delSongs(); if(dl.includes(m.uid)) setDelSongs(dl.filter(u=>u!==m.uid)); }
@@ -4215,10 +4217,15 @@ $('#restoreBacksOn').checked=restoreBacks();
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
 $('#edSplit').addEventListener('click',splitAtPlayhead);
-$('#restFile').addEventListener('change',async e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; busyShow('Restoring the library…'); try{ await restoreLibrary(f,$('#restText')); } finally{ e.target.value=''; await busyHide(null); } });
+async function restoreAsk(what){ const r=await dlg({title:'Restore '+what+'?',html:'<p class="kv-sub">Every song in the share file replaces the same song on this device, exactly as it was shared: pitch line, lyrics, timing, beat grid and backings. Changes you made here since then are lost. Songs that are not in the file stay as they are.</p>',
+  buttons:[{label:'Restore and replace',value:'go',primary:true},{label:'Cancel',value:null}]}); return r.value==='go'; }
+function restoreDone(part){ if(part&&typeof part==='string') unpubClear(part); }
+$('#restFile').addEventListener('change',async e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; if(!(await restoreAsk('from this file'))){ e.target.value=''; return; }
+  busyShow('Restoring the library…'); try{ restoreDone(await restoreLibrary(f,$('#restText'),false,true)); } finally{ e.target.value=''; await busyHide(null); } });
 $('#restLink').addEventListener('click',async()=>{ const url=shareLinks()[S.part]; const t=$('#restText');
   if(!url){ t.textContent='No Dropbox link is saved for '+S.part+' yet: paste it under Share with your choir, or use Restore from a share file.'; return; }
-  busyShow('Downloading '+S.part+' from Dropbox…'); try{ const du=directUrl(url), rf=await remoteFile(du); if(rf){ await restoreLibrary(rf,t); } else { const blob=await fetchBlob(du,(got,total)=>{ t.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); },false); if(!blob){ t.textContent='The file could not be downloaded. Download it from Dropbox yourself and use Restore from a share file.'; return; } await restoreLibrary(new File([blob],'share.zip'),t); } }
+  if(!(await restoreAsk(S.part+' from Dropbox'))) return;
+  busyShow('Downloading '+S.part+' from Dropbox…'); try{ const du=directUrl(url), rf=await remoteFile(du); if(rf){ restoreDone(await restoreLibrary(rf,t,false,true)); } else { const blob=await fetchBlob(du,(got,total)=>{ t.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); },false); if(!blob){ t.textContent='The file could not be downloaded. Download it from Dropbox yourself and use Restore from a share file.'; return; } restoreDone(await restoreLibrary(new File([blob],'share.zip'),t,false,true)); } }
   catch(err){ t.textContent='Restore failed: '+((err&&err.message)||'unknown error')+'.'; } finally{ await busyHide(null); } });
 $('#edRedo').addEventListener('click',edRedo);
 { let gt=null; $('#gateIn').addEventListener('input',e=>{ const v=+e.target.value; $('#gateV').textContent=gateLabel(v); clearTimeout(gt); gt=setTimeout(()=>applyGate(v),60); }); }
