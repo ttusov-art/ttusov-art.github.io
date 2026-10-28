@@ -384,6 +384,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-edit>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
 .lyr-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .hint-row{flex:1 1 100%;min-width:0;flex-direction:column;align-items:flex-start}
+.warm-row{align-items:center;gap:8px;margin-bottom:6px} .warm-row .small{flex:1 1 160px}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
 .ed-row .member-tip{flex:1 1 100%}
@@ -498,7 +499,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 <div class="wrap">
   <header>
     <div class="hd-left"><h1>Part Coach<sup id="verMark" title="App version"></sup></h1><button id="muteAll" type="button" class="mute-btn" aria-pressed="false" aria-label="Mute all sound" title="Mute all sound (key: M)"><svg class="ic-on" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="ic-off" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span class="mute-lbl">Muted</span></button></div>
-    <div class="song" id="songName">Demo: “Ode to Joy” melody</div>
+    <div class="song" id="songName">Warm-up</div>
   </header>
 
   <section class="panel readout" aria-live="off">
@@ -602,7 +603,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     </div>
   </section>
 
-  <div class="status" id="status">Use headphones, so the microphone hears only you. Press Play to try the demo.</div>
+  <div class="status" id="status">Use headphones, so the microphone hears only you. Press Play to start the warm-up.</div>
   <section class="panel transport">
     <button id="prevSong" type="button" class="icon-btn" aria-label="Previous song in this part" title="Previous song in this part"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 5l-9 7 9 7z" fill="currentColor"/><path d="M6 5v14"/></svg></button>
     <button class="primary icon-btn play-btn" id="play" type="button" aria-label="Play" title="Play (Space)"><span id="playLbl"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg></span></button>
@@ -702,6 +703,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <label class="lbl" for="partSel">Part</label>
       <select id="partSel" class="sel"></select>
     </div>
+    <div class="row warm-row"><button id="warmBtn" type="button">Warm-up (2 min)</button><span class="small">Scales, arpeggios and sirens in this part’s voice range. Sing along with the guide.</span></div>
     <div class="lib-head">
       <span class="small">Separated songs and songs you added are kept here on this device, in the part chosen above.</span>
     </div>
@@ -969,7 +971,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fq';
+const APP_VERSION='2026-10-28 fr';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4167,7 +4169,7 @@ function memberTips(){ return !sugKey()&&!!sugUrl(); }
 function paintMemberTips(){ const on=memberTips(); document.querySelectorAll('.member-tip').forEach(e=>e.hidden=!on); if(!on) $('#endTip').hidden=true; }
 function endTipOff(){ try{ return localStorage.getItem('pc-endtip-off')==='1'||sugList().length>0; }catch(e){ return false; } }
 // a song played to the end: a quiet moment for the tip (once per opened song; never after a first suggestion or Don't show again)
-function endTipMaybe(){ if(!memberTips()||endTipOff()||S.endTipShown===(curSongName()||"?")) return; S.endTipShown=curSongName()||"?"; $('#endTip').hidden=false;
+function endTipMaybe(){ if(!memberTips()||(S.cur&&S.cur.warmup)||endTipOff()||S.endTipShown===(curSongName()||"?")) return; S.endTipShown=curSongName()||"?"; $('#endTip').hidden=false;
   const t=$('#edToggle'); t.classList.add('next-step'); clearTimeout(t._tip); t._tip=setTimeout(()=>t.classList.remove('next-step'),8000); }
 function endTipHide(){ $('#endTip').hidden=true; const t=$('#edToggle'); clearTimeout(t._tip); t.classList.remove('next-step'); }
 function paintAdmin(){ const ok=!!sugKey(); $('#adminLock').hidden=ok; $('#adminTools').hidden=!ok; $('#lockUrlRow').hidden=!!sugUrl(); paintAdminTools(); paintMemberTips(); }
@@ -4276,6 +4278,7 @@ $('#lyrPdfCol').addEventListener('change',()=>pdfUseColumn(true));
 $('#gateDone').addEventListener('click',()=>setupMark('cleanup'));
 $('#tempoOk').addEventListener('click',()=>setupMark('tempo'));
 $('#playDone').addEventListener('click',()=>setupMark('timed'));
+$('#warmBtn').addEventListener('click',()=>openWarmup(false));
 $('#endTipX').addEventListener('click',endTipHide);
 $('#endTipOff').addEventListener('click',()=>{ try{ localStorage.setItem('pc-endtip-off','1'); }catch(e){} endTipHide(); });
 $('#endTipGo').addEventListener('click',()=>{ endTipHide(); setEdFold(true); const t=$('#edToggle'); t.scrollIntoView({block:'center',behavior:'smooth'}); [t,$('#editBtn'),$('#edTimeBtn')].forEach(b=>{ b.classList.add('next-step'); setTimeout(()=>b.classList.remove('next-step'),6000); }); });
@@ -4753,22 +4756,47 @@ document.addEventListener('visibilitychange',async()=>{
   if(S.playing&&!S.wake){ try{ if(navigator.wakeLock) S.wake=await navigator.wakeLock.request('screen'); }catch(e){} }
 });
 
-// ===== demo =====
-async function makeDemo(){
-  const sr=22050, beat=0.625, lead=1.0;
-  const line=[[64,1],[64,1],[65,1],[67,1],[67,1],[65,1],[64,1],[62,1],[60,1],[60,1],[62,1],[64,1]];
-  const mel=[...line,[64,1.5],[62,.5],[62,2],...line,[62,1.5],[60,.5],[60,2]].map(([m,b])=>[m-12,b]);
-  const total=lead+32*beat+1.4, oc=new OfflineAudioContext(1,Math.ceil(total*sr),sr);
-  const vib=oc.createOscillator(); vib.frequency.value=5.4; const vg=oc.createGain(); vg.gain.value=20; vib.connect(vg); vib.start(0);
-  const vf=oc.createBiquadFilter(); vf.type='lowpass'; vf.frequency.value=1600; const bus=oc.createGain(); bus.gain.value=0.3; vf.connect(bus).connect(oc.destination);
-  const tt=[], mm=[]; let t=lead;
-  for(const [m,b] of mel){ const d=b*beat, st=t, en=t+d-0.09;
-    const o=oc.createOscillator(); o.type='sawtooth'; o.frequency.value=m2f(m); vg.connect(o.detune);
+// ===== warm-up (made by the app: 5-note scales, arpeggios, sirens) =====
+function warmupPlan(rk){ const o=rk==='high'?12:0, P=[]; // items: {m, b (beats), to (glide target)} ; rest: {rest:b}
+  const lines=[];
+  const rep=(text,notes)=>{ lines.push({text,at:P.length}); notes.forEach(n=>P.push(n)); };
+  for(const k of [0,1,2,3,4,5,4,2,0]){ const r=48+o+k, sc=[0,2,4,5,7,5,4,2,0];
+    rep('“ma” · scale from '+noteName(r),sc.map((d,i)=>({m:r+d,b:i===8?2:1})).concat([{rest:2}])); }
+  P.push({rest:4});
+  for(const k of [0,1,2,3,2,0]){ const r=45+o+k, ar=[0,4,7,12,7,4,0], bb=[1,1,1,2,1,1,2];
+    rep('“mi” · arpeggio from '+noteName(r),ar.map((d,i)=>({m:r+d,b:bb[i]})).concat([{rest:3}])); }
+  P.push({rest:4});
+  for(let n=0;n<2;n++){ const r=48+o; rep('“oo” · siren: slide up and down',[{m:r,b:8,to:r+12},{m:r+12,b:8,to:r},{rest:4}]); }
+  return {P,lines}; }
+async function makeWarmup(rk){
+  const sr=22050, beat=0.5, lead=2.0, {P,lines}=warmupPlan(rk);
+  const total=lead+P.reduce((a,x)=>a+(x.rest||x.b),0)*beat+1, oc=new OfflineAudioContext(1,Math.ceil(total*sr),sr);
+  const vib=oc.createOscillator(); vib.frequency.value=5.4; const vg=oc.createGain(); vg.gain.value=14; vib.connect(vg); vib.start(0);
+  const vf=oc.createBiquadFilter(); vf.type='lowpass'; vf.frequency.value=1500; const bus=oc.createGain(); bus.gain.value=0.3; vf.connect(bus).connect(oc.destination);
+  const seg=[], lyr=[]; let t=lead;
+  P.forEach((x,i)=>{ const L=lines.find(l=>l.at===i); if(L) lyr.push({text:L.text,t:+t.toFixed(3)});
+    if(x.rest){ t+=x.rest*beat; return; }
+    const d=x.b*beat, st=t, en=t+d-(x.to!=null?0.02:0.08);
+    const osc=oc.createOscillator(); osc.type='sawtooth'; osc.frequency.setValueAtTime(m2f(x.m),st); if(x.to!=null) osc.frequency.exponentialRampToValueAtTime(m2f(x.to),en); vg.connect(osc.detune);
     const gn=oc.createGain(); gn.gain.setValueAtTime(0,st); gn.gain.linearRampToValueAtTime(1,st+0.05); gn.gain.setValueAtTime(1,en-0.06); gn.gain.linearRampToValueAtTime(0,en);
-    o.connect(gn).connect(vf); o.start(st); o.stop(en+0.01); t+=d; }
-  for(let x=0;x<total;x+=0.01){ tt.push(x); let v=NaN, s=lead; for(const [m,b] of mel){ const d=b*beat; if(x>=s+0.03&&x<s+d-0.1){ v=m; break; } s+=d; } mm.push(v); }
-  return {buf:await oc.startRendering(),tt:Float32Array.from(tt),mm:Float32Array.from(mm)};
+    osc.connect(gn).connect(vf); osc.start(st); osc.stop(en+0.01); seg.push({st,en,m:x.m,to:x.to}); t+=d; });
+  const tt=[], mm=[]; let j=0;
+  for(let x=0;x<total;x+=0.01){ tt.push(+x.toFixed(2)); while(j<seg.length-1&&x>=seg[j].en) j++; const g=seg[j]; let v=NaN;
+    if(g&&x>=g.st+0.03&&x<g.en-0.04) v=g.to!=null?g.m+(g.to-g.m)*(x-g.st)/(g.en-g.st):g.m; mm.push(v); }
+  return {buf:await oc.startRendering(),tt:Float32Array.from(tt),mm:Float32Array.from(mm),lyrics:lyr,lead,bpm:1/beat*60};
 }
+async function openWarmup(auto){
+  try{ stop(); if(S.tap) stopTap(); if(S.editMode) setEditMode(false); ensureCtx(); const rk=rangeKey(S.part);
+    if(!auto) setStatus('Making the warm-up…');
+    const w=await makeWarmup(rk);
+    S.guideBuf=w.buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
+    S.cur={libId:null,fromFile:false,warmup:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=true;
+    S.beat={bpm:w.bpm,offset:w.lead,auto:false,bar:w.lead,bpb:4}; S.beatTok++; S.pendingKey=null; S.lyrics=w.lyrics; S.openRec=null;
+    setTarget(w.tt,w.mm); songReady('Warm-up ('+(rk==='high'?'high':'low')+' voice)','Warm-up');
+    setStatus((auto?'':'Warm-up ready. ')+'About 2 minutes: 5-note scales on “ma”, arpeggios on “mi”, then sirens on “oo”, each a little higher. Press Play and sing along. Tip: turn on Tone for a piano guide.');
+    if(!auto) window.scrollTo({top:0,behavior:'smooth'});
+    return true;
+  }catch(e){ setStatus('Could not make the warm-up: '+((e&&e.message)||'unknown error')+'.',true); return false; } }
 // where you were in the song: saved when you pause, leave the app or every few seconds while playing; the last song reopens there
 function savePos(){ try{ if(S.cur&&S.cur.libId!=null&&S.dur) localStorage.setItem('pc-lastpos',JSON.stringify({id:S.cur.libId,pos:+(S.playing?visTime():S.pos).toFixed(2)})); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.hidden) savePos(); });
@@ -4778,10 +4806,10 @@ function restorePos(){ try{ const r=JSON.parse(localStorage.getItem('pc-lastpos'
   const t=+r.pos; if(!(t>1&&t<S.dur-1)) return null; S.pos=t; updateTime(); draw(); return t; }catch(e){ return null; } }
 (async()=>{
   size(); draw();
-  // reopen the song used last on this device; the demo only when there is none
+  // reopen the song used last on this device; the warm-up when there is none
   let last=null; try{ last=localStorage.getItem('pc-last'); }catch(e){}
   if(last!=null){ try{ ensureCtx(); const id=isNaN(+last)?last:+last; if(await openLibSong(id,true)){ const t=restorePos(); if(t!=null) setStatus($('#status').textContent+' Continuing where you stopped, at '+fmtT(t)+'.'); return; } }catch(e){} }
-  try{ ensureCtx(); const d=await makeDemo(); S.guideBuf=d.buf; normalize(); setTarget(d.tt,d.mm); updateDur(); updateTime(); draw(); scheduleBeatDetect(false); scheduleKeyDetect(false); }catch(e){}
+  await openWarmup(true);
 })();
 </script>
 <script type="text/plain" id="sepWorkerSrc">
