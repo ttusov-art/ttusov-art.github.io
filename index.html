@@ -943,7 +943,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fb';
+const APP_VERSION='2026-10-28 fc';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1356,8 +1356,8 @@ const newUid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 let libMetaCache=null, libMetaP=null, libMetaGen=0;
 const metaOf=x=>({id:x.id,uid:x.uid,name:x.name,part:x.part,dur:x.dur,created:x.created,updated:x.updated,ord:x.ord,nb:backsOf(x).length});
 // the light copy is also kept in localStorage, so opening the app does not have to read every song's audio just to list the names
-function metaKeep(){ clearTimeout(metaKeep.t); metaKeep.t=setTimeout(()=>{ try{ if(libMetaCache) localStorage.setItem('pc-libmeta',JSON.stringify(libMetaCache)); }catch(e){} },50); }
-function metaFromStore(){ try{ const m=JSON.parse(localStorage.getItem('pc-libmeta')||'null'); return Array.isArray(m)?m:null; }catch(e){ return null; } }
+function metaKeep(){ try{ if(libMetaCache) localStorage.setItem('pc-libmeta2',JSON.stringify(libMetaCache)); }catch(e){} }   // written right away: an app closed a moment later must not start with an old list
+function metaFromStore(){ try{ const m=JSON.parse(localStorage.getItem('pc-libmeta2')||'null'); return Array.isArray(m)?m:null; }catch(e){ return null; } }
 function libMeta(){ if(libMetaCache) return Promise.resolve(libMetaCache);
   if(!libMetaP&&libMeta.first!==false){ libMeta.first=false; const m=metaFromStore();
     if(m){ libMetaCache=m; const gen=libMetaGen;   // check quietly (keys only, no audio) that the saved list still matches the library
@@ -1619,6 +1619,7 @@ async function restoreLibrary(file,out,askBig,force){   // force: every song in 
       const ordered=man.order.map(u=>byU[u]).filter(Boolean), rest=mine.filter(x=>!ordered.includes(x));
       const next=rest.concat(ordered); if(next.some((x,k)=>x.ord!==k)){ reordered=next.some((x,k)=>x!==mine[k]); await saveSongOrder(next); } }   // only a real change of order is reported
     if(man.part&&out){ S.part=man.part; partsSave(); }
+    metaChanged(); await libMeta();
     await renderLib();
     if(S.cur&&updIds.includes(S.cur.libId)){ if(S.playing) stop(); const ed=S.editMode; await openLibSong(S.cur.libId,true); if(ed) setEditMode(true); }   // the open song was replaced: show the new version (never save the old one over it)
     const parts=[]; if(added) parts.push(added+' added'); if(updated) parts.push(updated+' updated'); if(reordered&&!added) parts.push('song order updated'); if(skipped) parts.push(skipped+' already up to date');
