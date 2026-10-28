@@ -875,7 +875,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 em';
+const APP_VERSION='2026-10-28 en';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3102,8 +3102,15 @@ function calOnsets(cal,sr){
   for(let i=0;i<m;i++){ let e=0; for(let j=0;j<hop;j++){ const v=x[i*hop+j]; e+=v*v; } env[i]=Math.sqrt(e/hop); }
   const srt=Array.from(env).sort((a,b)=>a-b), floor=srt[Math.floor(m*0.3)]||0, peak=srt[Math.floor(m*0.998)]||0;
   if(peak<0.004) return {on:[],level:peak};
-  const hi=floor+0.35*(peak-floor), lo=floor+0.12*(peak-floor), on=[]; let last=-1e9, quiet=0;
-  for(let i=1;i<m;i++){ if(env[i]<lo) quiet++; else if(env[i]>=hi&&quiet>=25&&(i-last)*0.002>0.18){ let k=i; while(k>0&&env[k-1]>=lo&&i-k<15) k--; on.push(t0+k*0.002); last=i; quiet=0; } else if(env[i]>=lo) quiet=0; }
+  // clap candidates: sharp rises above what came just before (40 ms); compared with the typical clap, not the single loudest
+  // sound, so one very loud clap or a bump of the phone does not hide the others
+  const W=20, cand=[];
+  for(let i=W;i<m-1;i++){ let mn=1e9; for(let j=i-W;j<i;j++) if(env[j]<mn) mn=env[j]; const r=env[i]-mn;
+    if(r>floor*3+0.002&&r>=env[i-1]-mn&&env[i]>=env[i+1]){ const c=cand[cand.length-1]; const t=i*0.002;
+      if(c&&t-c.t<0.18){ if(r>c.r){ c.r=r; c.t=t; c.i=i; } } else cand.push({t,r,i}); } }
+  if(!cand.length) return {on:[],level:peak};
+  const top=cand.map(c=>c.r).sort((a,b)=>b-a).slice(0,15), typ=top[top.length>>1], on=[];
+  for(const c of cand){ if(c.r<typ*0.25) continue; let k=c.i; const half=env[k]*0.3; while(k>0&&env[k-1]>half&&c.i-k<15) k--; on.push(t0+k*0.002); }
   return {on,level:peak}; }
 // how late were the claps? first the overall lateness (0 to 1.5 s), then each beat near it (following slow drift)
 function calClapAnalyse(det,times){
@@ -3168,7 +3175,7 @@ async function openCalibration(){
       if(r.ok){ A=r; return true; }
       if(await show('Step 1 did not work','<p class="kv-sub">'+esc(r.msg)+' Clap sharply, right on each note you hear.</p>'+calDiagHtml(r,notes)+calMicCheckHtml(),[{label:'Redo step 1',value:'again',primary:true},{label:'Cancel',value:null}])!=='again') return false; } };
   const step2=async()=>{ for(;;){
-      if(await show('Step 2 of 2: follow the picture','<p class="kv-sub"><b>Watch the keys and follow only the picture.</b> There is no sound now. Watch the 4 dots without clapping, then the keys light up one by one, up and back down: clap the moment each key lights up, all the way down to the last C.</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go') return false;
+      if(await show('Step 2 of 2: follow the picture','<p class="kv-sub"><b>Watch the keys and follow only the picture.</b> Put the phone down where you can see it, so both hands are free. There is no sound now. Watch the 4 dots without clapping, then the keys light up one by one, up and back down: clap the moment each key lights up, all the way down to the last C.</p>',[{label:'OK, start',value:'go',primary:true},{label:'Cancel',value:null}],true)!=='go') return false;
       const r=await run('picture','Step 2: watching…','Clap the moment each key lights up.'); if(r==='x'||r==null) return false;
       if(r.ok){ V=r; return true; }
       if(await show('Step 2 did not work','<p class="kv-sub">'+esc(r.msg)+' Clap as each key lights up, and keep going all the way down.</p>'+calDiagHtml(r,notes)+calMicCheckHtml(),[{label:'Redo step 2',value:'again',primary:true},{label:'Cancel',value:null}])!=='again') return false; } };
