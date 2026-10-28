@@ -245,7 +245,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 #sheetMore{padding:8px 10px}
 .sheet-bar #sheetTitle{order:1}.sheet-bar #sheetMore{order:2}.sheet-bar #sheetPrint{order:2}.sheet-bar #sheetClose{order:3}.sheet-bar .sheet-type{order:4;flex-basis:100%}.sheet-bar .sheet-parts{order:5}.sheet-bar .sheet-hintrow{order:6}
 .sheet-bar.compact{padding-top:calc(8px + env(safe-area-inset-top,0px));padding-bottom:8px}
-.sheet-bar.compact #sheetTitle,.sheet-bar.compact .sheet-type,.sheet-bar.compact .sheet-parts,.sheet-bar.compact #sheetHint{display:none}
+.sheet-bar.compact #sheetPrint,.sheet-bar.compact #sheetTitle,.sheet-bar.compact .sheet-type,.sheet-bar.compact .sheet-parts,.sheet-bar.compact #sheetHint{display:none}
 .sheet-bar.compact .sheet-hintrow{flex:1 1 auto;flex-basis:auto;order:-1}
 .sheet-bar.compact #sheetMore svg{transform:rotate(180deg)}
 .sheet-parts{display:flex;flex-wrap:wrap;gap:6px;flex-basis:100%}
@@ -377,6 +377,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-edit>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
 .lyr-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .hint-row{flex:1 1 100%;min-width:0;flex-direction:column;align-items:flex-start}
+.end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.end-tip .row{gap:6px;align-items:center}
+.ed-row .member-tip{flex:1 1 100%}
 .hint-install{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px}
 .share-part-row{align-items:center} .share-part-row .sel{flex:1 1 160px;min-width:0}
 .gate-field{display:flex;flex-direction:column;gap:4px;margin-top:8px} .gate-field input{width:100%}
@@ -548,7 +551,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         </span>
         <button id="edToggle" type="button" class="icon-btn ed-toggle" aria-expanded="false" aria-controls="edFold" aria-label="Editor" title="Editor: edit the pitch line or time the lyrics"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
       </div>
-      <div class="row ed-row" id="edFold" hidden><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></div>
+      <div class="row ed-row" id="edFold" hidden><span class="small member-tip">Fix a wrong note with Edit target line, or the lyric timing with Time lyrics, then tap Suggest my edits. The moderator checks it and the whole choir gets the better version.</span><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button><button id="playDone" type="button" class="primary" hidden title="Set-up guide: every line is timed and the notes are fixed">Play-through done ✓</button></div>
       <div class="ed-lyr" id="edLyrBox" hidden><div class="lyr-list" id="lyrList" hidden></div><span class="small" id="lyrHint"></span></div>
     <div class="share-box admin-tools" id="pitchTools" hidden>
         <b>Pitch line and beat grid (moderator)</b>
@@ -585,7 +588,8 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
             <span class="small" id="beatInfo"></span>
           </div>
       </div>
-      <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast. Found a wrong note or a lyric out of time? Fix it with Edit target line or the lyrics editor and tap Suggest my edits. Every fix makes practice better for the whole choir.</span><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
+      <div class="end-tip" id="endTip" hidden role="status"><span class="small">Heard a wrong note or a lyric out of time? Fix it with the pencil <b>✎</b> above (words: in the Lyrics editor), then tap Suggest my edits. Every fix helps the whole choir.</span><div class="row"><button id="endTipGo" type="button" class="primary">Show me</button><button id="endTipOff" type="button" class="link-btn">Don't show again</button><button id="endTipX" type="button" class="link-btn" aria-label="Close the tip">Close</button></div></div>
+      <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
     </div>
   </section>
 
@@ -703,6 +707,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <summary>Lyrics editor</summary>
     <div class="lyr-body">
       <span class="small">Paste or type the lyrics with one line per sung phrase. Blank lines are ignored.</span>
+      <span class="small member-tip">Fixed a word or a line? Tap Suggest my edits so the whole choir gets it.</span>
       <textarea id="lyrText" placeholder="First line of the song&#10;Second line&#10;…"></textarea>
       <span class="lyr-pending" id="lyrPending" role="status" hidden>Your text changes are not used yet. Tap <b>Use these lines</b> to apply them.</span>
       <div class="row">
@@ -947,7 +952,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fk';
+const APP_VERSION='2026-10-28 fl';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1120,7 +1125,7 @@ function targetAt(t){
 // ===== playback =====
 function visTime(){ const t=songTime(); return (S.playing||S.review)?Math.max(0,t-(S.pdelay||0)*(S.review?S.review.rate:S.rate)):t; }
 function songTime(){ if(S.review) return S.review.song0+(S.ctx.currentTime-S.review.at)*S.review.rate; return S.playing? S.pos0+(S.ctx.currentTime-S.startAt)*S.rate : S.pos; }
-async function play(){
+async function play(){ if(!$('#endTip').hidden) endTipHide();
   if(S.playing) return;
   if(!S.guideBuf&&!S.backBuf){ setStatus('Load a song first.',true); return; }
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
@@ -1523,15 +1528,15 @@ function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.e
       btns:[['Click on/off',()=>$('#metBtn').click()],['Beat 1 here',()=>markBeatOne(),'beat1'],['Tempo is right ✓',()=>{ if(!hasBars()){ setStatus('Set beat 1 first: playhead on the first beat of a bar, then Beat 1 here.',true); return; } setupMark('tempo'); },'done']],
       go:openTools, pulse:()=>hasBars()?$('#tempoOk'):$('#bOne')},
     {k:'align',title:'Align to the grid',done:!!st.align,help:'Moves every note start and end onto the beat grid you just checked.',btns:[['Align to grid',()=>{ edAlign(); }]],go:openTools,pulse:()=>$('#edAlign')},
-    {k:'timed',title:'Play through: time the lyrics, fix the notes',done:timed&&!!st.timed,help:'Play the song from the start with Time lyrics and place every line where it starts (the automatic places are only a rough guess). Hear a wrong note on the way? Pause, fix it with Edit target line, and carry on. Tap Done when you have been through the whole song.',
+    {k:'timed',title:'Play through: time the lyrics, fix the notes',done:timed&&!!st.timed,help:'Play the song from the start with Time lyrics and place every line where it starts (the automatic places are only a rough guess). Hear a wrong note on the way? Pause, fix it with Edit target line, and carry on. When you have been through the whole song, tap Play-through done ✓ next to Time lyrics.',
       btns:[['Time lyrics',()=>{ if(!S.lyrics.length){ setStatus('Add the lyrics first.',true); return; } setEdFold(true); startTap(); }],['Done ✓',()=>{ if(!timed){ setStatus('Some lyric lines have no time yet.',true); return; } setupMark('timed'); },'done']],
-      go:openTools, pulse:()=>S.tap?null:timed&&st.tapped?gb('done'):$('#edTimeBtn')}
+      go:openTools, pulse:()=>S.tap?null:timed&&st.tapped?$('#playDone'):$('#edTimeBtn')}
   ]; }
 // the next button to tap pulses gently, wherever it is
 function setupPulse(){ document.querySelectorAll('.setup-pulse').forEach(e=>e.classList.remove('setup-pulse','next-step'));
   const act=setupActive(), steps=act?setupSteps():[], n=steps.find(x=>!x.done);
   // the step's "done" button sits right next to its control
-  $('#gateDoneRow').hidden=!(n&&n.k==='cleanup'); $('#tempoOk').hidden=!(n&&n.k==='tempo'&&hasBars());
+  $('#gateDoneRow').hidden=!(n&&n.k==='cleanup'); $('#tempoOk').hidden=!(n&&n.k==='tempo'&&hasBars()); $('#playDone').hidden=!(n&&n.k==='timed'&&S.setup.tapped&&!S.tap&&S.lyrics.length&&S.lyrics.every(l=>l.t!=null));
   if(!act) return;
   const el=n?n.pulse&&n.pulse():S.setup.shared?null:$('#shareMake'); if(!el) return; el.classList.add('setup-pulse','next-step');
   // tucked away? the way to it pulses too: the editor (pencil) button or the closed panel's title
@@ -2670,7 +2675,7 @@ function selectFragmentAt(t){
 function setEditMode(on){
   if(on){ timingTried(); edSnapTake(); }
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast. Found a wrong note or a lyric out of time? Fix it with Edit target line or the lyrics editor and tap Suggest my edits. Every fix makes practice better for the whole choir.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
   if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
@@ -3582,7 +3587,7 @@ function step(){
   if(!S.playing) return;
   const now=songTime();
   if(loopActive()&&now>=S.loop.b){ loopRestart(); return; }
-  if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); if(S.pmode==='part'||S.pmode==='partloop'||S.pmode==='shuffle') playNextSong(); return; }
+  if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); endTipMaybe(); if(S.pmode==='part'||S.pmode==='partloop'||S.pmode==='shuffle') playNextSong(); return; }
   let you=NaN; updateTone(now); metSchedule(now); if(S.targetHold){ const v=targetAt(now); keyFollow(isNaN(v)?null:Math.round(v)); }
   if(S.mic){
     const raw=micPitch();
@@ -4132,7 +4137,15 @@ $('#sgDone').addEventListener('click',sugFinish);
 $('#sgStop').addEventListener('click',sugCancel);
 $('#sugUrlIn').value=sugUrl();
 // Admin opens only with the right review key (checked with the inbox once, then remembered on this device)
-function paintAdmin(){ const ok=!!sugKey(); $('#adminLock').hidden=ok; $('#adminTools').hidden=!ok; $('#lockUrlRow').hidden=!!sugUrl(); paintAdminTools(); }
+// members: encourage fixes, without getting in the way of practice
+function memberTips(){ return !sugKey()&&!!sugUrl(); }
+function paintMemberTips(){ const on=memberTips(); document.querySelectorAll('.member-tip').forEach(e=>e.hidden=!on); if(!on) $('#endTip').hidden=true; }
+function endTipOff(){ try{ return localStorage.getItem('pc-endtip-off')==='1'||sugList().length>0; }catch(e){ return false; } }
+// a song played to the end: a quiet moment for the tip (once per opened song; never after a first suggestion or Don't show again)
+function endTipMaybe(){ if(!memberTips()||endTipOff()||S.endTipShown===(curSongName()||"?")) return; S.endTipShown=curSongName()||"?"; $('#endTip').hidden=false;
+  const t=$('#edToggle'); t.classList.add('next-step'); clearTimeout(t._tip); t._tip=setTimeout(()=>t.classList.remove('next-step'),8000); }
+function endTipHide(){ $('#endTip').hidden=true; const t=$('#edToggle'); clearTimeout(t._tip); t.classList.remove('next-step'); }
+function paintAdmin(){ const ok=!!sugKey(); $('#adminLock').hidden=ok; $('#adminTools').hidden=!ok; $('#lockUrlRow').hidden=!!sugUrl(); paintAdminTools(); paintMemberTips(); }
 // moderator tools that live next to what they work on: lyrics tools in the Lyrics editor, pitch line / beat tools under the editor buttons
 function paintAdminTools(){ const ok=!!sugKey(); $('#lyrTools').hidden=!ok; $('#pitchTools').hidden=!ok||$('#edFold').hidden; }
 async function unlockAdmin(){ const key=$('#sugKeyIn').value, lu=$('#lockUrl').value.trim(), t=$('#lockText');
@@ -4237,6 +4250,10 @@ $('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.fil
 $('#lyrPdfCol').addEventListener('change',()=>pdfUseColumn(true));
 $('#gateDone').addEventListener('click',()=>setupMark('cleanup'));
 $('#tempoOk').addEventListener('click',()=>setupMark('tempo'));
+$('#playDone').addEventListener('click',()=>setupMark('timed'));
+$('#endTipX').addEventListener('click',endTipHide);
+$('#endTipOff').addEventListener('click',()=>{ try{ localStorage.setItem('pc-endtip-off','1'); }catch(e){} endTipHide(); });
+$('#endTipGo').addEventListener('click',()=>{ endTipHide(); setEdFold(true); const t=$('#edToggle'); t.scrollIntoView({block:'center',behavior:'smooth'}); [t,$('#editBtn'),$('#edTimeBtn')].forEach(b=>{ b.classList.add('next-step'); setTimeout(()=>b.classList.remove('next-step'),6000); }); });
 $('#sharePartSel').addEventListener('change',e=>{ setPart(e.target.value); setStatus('Sharing '+e.target.value+': the share file will contain its songs.'); });
 $('#installBtn').addEventListener('click',()=>installHelp(false));
 $('#sheetPrint').addEventListener('click',async()=>{ if(S.playing) stop(); let last='full'; try{ last=localStorage.getItem('pc-printlight')==='1'?'light':'full'; }catch(e){}
@@ -4523,7 +4540,7 @@ function shareUrlFor(link){ return location.origin+location.pathname+'?lib='+enc
 const slugOf=n=>String(n||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'songs';
 const appBase=()=>location.origin+location.pathname;
 const shortUrlFor=part=>appBase()+'?'+slugOf(part);
-async function fetchLinks(){ try{ const r=await fetch('links.json',{cache:'no-store'}); if(!r.ok) return null; const j=await r.json(); if(j&&typeof j._suggest==='string'&&/^https:\/\//.test(j._suggest)&&!sugKey()){ try{ localStorage.setItem('pc-sugurl',j._suggest.trim()); }catch(e){} } return j&&typeof j==='object'?j:null; }catch(e){ return null; } }
+async function fetchLinks(){ try{ const r=await fetch('links.json',{cache:'no-store'}); if(!r.ok) return null; const j=await r.json(); if(j&&typeof j._suggest==='string'&&/^https:\/\//.test(j._suggest)&&!sugKey()){ try{ localStorage.setItem('pc-sugurl',j._suggest.trim()); }catch(e){} paintMemberTips(); } return j&&typeof j==='object'?j:null; }catch(e){ return null; } }
 function makeLinksJson(){
   const L=shareLinks(), out={}; Object.keys(L).forEach(part=>{ if(L[part]) out[slugOf(part)]={part,url:L[part]}; }); if(sugUrl()) out._suggest=sugUrl();
   const t=$('#shareText'); if(!Object.keys(out).length){ t.textContent='Paste the Dropbox link of at least one part and tap Share link first.'; return; }
