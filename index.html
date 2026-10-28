@@ -232,7 +232,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .sheet-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line);background:var(--surface)}
 .sheet-bar b{font-family:var(--font-display);font-size:18px;flex:1 1 auto;min-width:0}
 #sheetMore{padding:8px 10px}
-.sheet-bar #sheetTitle{order:1}.sheet-bar #sheetMore{order:2}.sheet-bar #sheetClose{order:3}.sheet-bar .sheet-type{order:4;flex-basis:100%}.sheet-bar .sheet-parts{order:5}.sheet-bar .sheet-hintrow{order:6}
+.sheet-bar #sheetTitle{order:1}.sheet-bar #sheetMore{order:2}.sheet-bar #sheetPrint{order:2}.sheet-bar #sheetClose{order:3}.sheet-bar .sheet-type{order:4;flex-basis:100%}.sheet-bar .sheet-parts{order:5}.sheet-bar .sheet-hintrow{order:6}
 .sheet-bar.compact{padding-top:calc(8px + env(safe-area-inset-top,0px));padding-bottom:8px}
 .sheet-bar.compact #sheetTitle,.sheet-bar.compact .sheet-type,.sheet-bar.compact .sheet-parts,.sheet-bar.compact #sheetHint{display:none}
 .sheet-bar.compact .sheet-hintrow{flex:1 1 auto;flex-basis:auto;order:-1}
@@ -400,6 +400,20 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 .result h2{font-family:var(--font-display);font-size:18px;margin:0}
 .tips{margin:0;padding-left:18px;color:var(--muted);font-size:13px;max-width:75ch}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+@media print{
+  @page{size:A4;margin:12mm}
+  body>*:not(#sheetView){display:none!important}
+  html,body{background:#fff!important;overflow:visible!important;height:auto!important}
+  #sheetView{position:static!important;display:block!important;background:#fff!important;color:#000!important}
+  #sheetView .sheet-bar>*:not(#sheetTitle){display:none!important}
+  #sheetView .sheet-bar{border:0!important;padding:0 0 6mm!important;position:static!important;background:#fff!important}
+  #sheetTitle{font-size:18pt;color:#000}
+  .sheet-body{overflow:visible!important;padding:0!important;height:auto!important}
+  table.sheet{color:#000} table.sheet th{position:static!important;background:#fff!important;color:#333!important}
+  table.sheet tr{break-inside:avoid} table.sheet td.now{box-shadow:none!important;background-image:none!important;font-weight:inherit!important}
+  table.sheet .shape-dot{display:none!important}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 </style>
 </head>
 <body>
@@ -439,6 +453,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       </select>
     </span>
     <button id="sheetMore" type="button" aria-expanded="true" aria-label="Hide the sheet options" title="Hide the sheet options"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
+    <button id="sheetPrint" type="button" title="Print the lyrics sheet on A4 paper (or save it as a PDF)">Print</button>
     <button id="sheetClose" type="button">Close</button>
     <div class="sheet-parts" id="sheetParts" role="group" aria-label="Parts to show"></div>
     <span class="sheet-hintrow"><span class="small" id="sheetHint">Tap a line of your part to see the shape of its melody.</span><span class="sheet-acts"><button id="shapesAll" type="button" aria-pressed="false" title="Show or hide the melody shape of every line"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15c3 0 3-6 6-6s3 8 6 8 3-5 6-5"/></svg><span id="shapesAllLbl">Show all shapes</span></button><button id="sheetPlay" type="button" class="primary" aria-label="Play" title="Play / pause"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg></button></span></span>
@@ -493,7 +508,8 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <button id="edOctDown" type="button">Octave ▼</button>
       <button id="edDel" type="button">Remove</button>
       <button id="edLoop" type="button" hidden style="display:none">Loop this</button>
-      <button id="edUndo" type="button">Undo</button>
+      <button id="edUndo" type="button" title="Undo (Ctrl+Z)">Undo</button>
+      <button id="edRedo" type="button" title="Redo (Ctrl+Shift+Z or Ctrl+Y)" disabled>Redo</button>
       <button id="edClearSel" type="button" disabled>Clear selection</button>
       <button id="edSuggest" type="button" class="primary" hidden title="Send your edits of this song to the moderator">Suggest my edits</button><button id="edDiscard" type="button" hidden title="Remove your note changes and go back to the pitch line as shared">Cancel note edits</button><button id="edLyrDiscard" type="button" hidden title="Remove your lyric changes and go back to the lyrics as shared">Cancel lyric edits</button><span class="small" id="sugState"></span>
       <input id="snapOn" type="checkbox" checked hidden aria-hidden="true">
@@ -798,6 +814,12 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <div id="admSongs"></div>
     </div>
     <div class="share-box">
+      <b>Restore the library</b>
+      <span class="small">Brings back songs from a share file, for example after the app's storage was cleared or on a new device. Songs that are missing or older here are restored; newer ones here are kept.</span>
+      <div class="row"><button id="restLink" type="button" class="primary">Restore <span class="rest-part"></span> from its Dropbox link</button><span class="btn">Restore from a share file<input id="restFile" type="file" accept=".zip,application/zip" aria-label="Choose a Part Coach share file"></span></div>
+      <span class="small" id="restText"></span>
+    </div>
+    <div class="share-box">
       <b>Parts</b>
       <span class="small">Add, rename or delete parts (a part can be deleted when it has no songs). The voice range sets where the app looks for notes in <b class="adm-part-name"></b> (separating songs and the microphone) on this device.</span>
       <div class="part-row" style="border:0;padding:0;margin:0">
@@ -899,7 +921,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 er';
+const APP_VERSION='2026-10-28 es';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -999,7 +1021,7 @@ async function pitchLineOf(buf,onProg,rk){
 }
 function songReady(name,label){
   renderSheetBtns(); closeSheet();
-  S.lyrTextHist=[]; S.needTiming=false; S.gateBase=null; S.gateLoud=null; { const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } } $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
+  S.lyrTextHist=[]; S.edSnap=null; S.needTiming=false; S.gateBase=null; S.gateLoud=null; { const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } } $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>scheduleBeatDetect(false),50); setTimeout(()=>scheduleKeyDetect(false),400);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
@@ -1633,7 +1655,7 @@ async function renderLib(){
     list.appendChild(row);
   }
 }
-function renderAdmSongs(songs){ const box=$('#admSongs'); if(!box) return; $('#admPart').textContent=S.part; document.querySelectorAll('.adm-part-name').forEach(e=>e.textContent=S.part); box.innerHTML='';
+function renderAdmSongs(songs){ const box=$('#admSongs'); if(!box) return; $('#admPart').textContent=S.part; document.querySelectorAll('.adm-part-name,.rest-part').forEach(e=>e.textContent=S.part); box.innerHTML='';
   if(!songs.length){ box.innerHTML='<span class="small">No songs in this part yet.</span>'; return; }
   for(const [k,s] of songs.entries()){ const row=document.createElement('div'); row.className='song-row';
     row.innerHTML='<div class="take-info"><b></b></div>'; row.querySelector('b').textContent=s.name;
@@ -2334,7 +2356,7 @@ function sugAccept(c){
     if(c.k==='add'){ let at=0; if(c.after!=null){ const A=findLyr(c.after,null,c.i-1); at=A?S.lyrics.indexOf(A)+1:(c.t!=null?S.lyrics.filter(l=>l.t!=null&&l.t<c.t).length:S.lyrics.length); } S.lyrics.splice(at,0,{text:c.text,t:c.t==null?null:c.t}); }
     else { const L=sugLyric(c); if(!L){ setStatus('That lyric line is not in your lyrics any more, so this change was skipped.',true); c.state='rej'; return; }
       if(c.k==='del') S.lyrics.splice(S.lyrics.indexOf(L),1); else { if(c.k==='text') L.text=c.text; if(c.t!==undefined&&(c.k==='time'||c.t!==c.old)) L.t=c.t; } }
-    S.undo.push({lyrAll:snap}); if(S.undo.length>30) S.undo.shift(); c.state='acc'; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); } }
+    undoPush({lyrAll:snap}); c.state='acc'; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); } }
 function sugNextOpen(){ const s=S.sug, i=s.changes.findIndex((x,i)=>i>s.k&&!x.state), j=i>=0?i:s.changes.findIndex(x=>!x.state); if(j>=0) sugGo(j); else { renderSugBar(); draw(); } }
 async function sugFinish(){ const s=S.sug; if(!s) return; if(S.playing) stop();
   const acc=s.changes.filter(c=>c.state==='acc').length, rej=s.changes.filter(c=>c.state==='rej').length, open=s.changes.length-acc-rej;
@@ -2384,7 +2406,15 @@ function updateSelInfo(){ { const c=document.getElementById('edClearSel'); if(c)
   const fm=fillNote(r,v);
   el.innerHTML=`Selected <b>${fmtT1(r.a)}–${fmtT1(r.b)}</b> · ${m!=null?'mostly <b>'+noteName(m)+'</b>':'no sung pitch'}`+(fm!=null?` · Fill makes the whole selection <b>${noteName(fm)}</b>`:'')+' · or tap a key on the left to set the note. Drag the edges to change the selection.';
 }
-function pushUndo(){ S.undo.push(Float32Array.from(S.tM)); if(S.undo.length>30) S.undo.shift(); }
+function undoPush(x){ S.undo.push(x); if(S.undo.length>30) S.undo.shift(); S.redo=[]; paintRedo(); }   // a new edit: nothing to redo any more
+function pushUndo(){ undoPush(Float32Array.from(S.tM)); }
+S.redo=[];
+function paintRedo(){ const b=document.getElementById('edRedo'); if(b) b.disabled=!S.redo.length; }
+// apply one undo/redo step and give back the step that reverses it
+function swapStep(u,word){ if(u&&u.lyrAll){ const back={lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}; S.lyrics=u.lyrAll; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); updateSelInfo(); setStatus('Lyric change '+word+'.'); return back; }
+  if(u&&u.lyr!=null){ const back={lyr:u.lyr,t:S.lyrics[u.lyr]?S.lyrics[u.lyr].t:null}; if(S.lyrics[u.lyr]) S.lyrics[u.lyr].t=u.t; lyrChanged(); updateSelInfo(); setStatus('Lyric move '+word+'.'); return back; }
+  const back=Float32Array.from(S.tM); S.tM=u; targetEdited(word==='undone'?'Undone.':'Redone.'); return back; }
+function edRedo(){ if(!S.redo.length) return; const u=S.redo.pop(); const back=swapStep(u,'redone'); S.undo.push(back); if(S.undo.length>30) S.undo.shift(); paintRedo(); updateSelInfo(); }
 let edSaveTimer=null;
 function targetEdited(msg){ S.ovwImg=null; paintSuggest();
   if(!S.gating&&S.gateBase){ S.gateBase=null; const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } }   // another edit: the slider starts again from the line as it is now
@@ -2525,7 +2555,7 @@ function edShift(d){
   targetEdited();
 }
 function edRemove(){ const r=selRange(); if(!r) return; pushUndo(); for(let i=r.i0;i<=r.i1;i++) S.tM[i]=NaN; targetEdited('Removed the target in the selection.'); }
-function edUndo(){ if(!S.undo.length) return; const u=S.undo.pop(); if(u&&u.lyrAll){ S.lyrics=u.lyrAll; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); updateSelInfo(); setStatus('Lyric change undone.'); return; } if(u&&u.lyr!=null){ if(S.lyrics[u.lyr]) S.lyrics[u.lyr].t=u.t; lyrChanged(); updateSelInfo(); setStatus('Lyric move undone.'); return; } S.tM=u; targetEdited('Undone.'); }
+function edUndo(){ if(!S.undo.length) return; const u=S.undo.pop(); const back=swapStep(u,'undone'); S.redo.push(back); paintRedo(); updateSelInfo(); }
 function resetLabel(){ return selRange()?'Reset selection':'Reset to original'; }
 function edReset(btn){
   const r=selRange();
@@ -2559,7 +2589,7 @@ function selectFragmentAt(t){
   S.sel={a:S.tT[a],b:S.tT[b]}; updateSelInfo(); draw();
 }
 function setEditMode(on){
-  if(on) timingTried();
+  if(on){ timingTried(); edSnapTake(); }
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
   $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
   if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime());
@@ -2673,7 +2703,7 @@ function lyricToPlayhead(){
   const playing=S.playing&&!S.review, now=playing?songTime()-((S.pdelay||0)+LYR_LAG)*S.rate:curT(), i=S.lyrics.findIndex(l=>l.t!=null&&l.t>now+0.02);
   if(i<0){ setStatus('There is no timed lyric after the playhead.',true); return; }
   const prev=S.lyrics.slice(0,i).filter(l=>l.t!=null).pop(); let t=lyrT(now); if(prev&&t<=prev.t) t=Math.round((prev.t+0.05)*100)/100;
-  const L=S.lyrics[i], old=L.t; L.t=t; S.undo.push({lyr:i,t:old}); if(S.undo.length>30) S.undo.shift(); updateSelInfo();
+  const L=S.lyrics[i], old=L.t; L.t=t; undoPush({lyr:i,t:old}); updateSelInfo();
   lyrChanged(); setStatus('“'+L.text+'” moved from '+fmtT1(old)+' to '+fmtT1(t)+'. Undo brings it back.');
 }
 function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); paintSuggest(); lyrPendingCheck(false); paintSetup(); }
@@ -2907,6 +2937,11 @@ function sheetFollow(force){ if($('#sheetView').hidden) return; const t=songTime
   if(best&&t>+best.dataset.b+1.5&&!S.playing) best=null;   // well after the line ended (paused): nothing
   if(best===S.sheetNow&&!force) return; if(S.sheetNow) S.sheetNow.classList.remove('now'); S.sheetNow=best;
   if(best){ best.classList.add('now'); const sc=$('.sheet-body'), r=best.getBoundingClientRect(), v=sc.getBoundingClientRect();
+    // a new section starts: if the whole section fits on the screen, bring its start to the top
+    const tr=best.closest('tr'); let st=tr; while(st&&!st.classList.contains('sec')&&st.previousElementSibling) st=st.previousElementSibling;
+    if(st&&st!==S.sheetSec){ S.sheetSec=st; let en=st; for(let n=st.nextElementSibling;n&&!n.classList.contains('sec');n=n.nextElementSibling) if(!n.classList.contains('empty')) en=n;
+      const head=($('#sheetTable thead')||{offsetHeight:0}).offsetHeight, a=st.getBoundingClientRect(), b=en.getBoundingClientRect();
+      if(b.bottom-a.top<=v.height-head-20){ sc.scrollTo({top:sc.scrollTop+(a.top-v.top)-head-4,behavior:force?'auto':'smooth'}); return; } }
     if(force||r.top<v.top+40||r.bottom>v.bottom-40) sc.scrollTo({top:sc.scrollTop+(r.top-v.top)-v.height*0.3,behavior:force?'auto':'smooth'}); } }
 function closeSheet(){ if($('#sheetView').hidden) return; $('#sheetView').hidden=true; document.body.style.overflow=''; }
 function partKey(n){ n=String(n||'').toLowerCase(); const num=(n.match(/\d/)||[''])[0]; const v=/^s|sop/.test(n)?'s':/^a|alt/.test(n)?'a':/^t|ten/.test(n)?'t':/^b|bas|bar/.test(n)?'b':''; return {v,num}; }
@@ -2978,6 +3013,7 @@ function autoPlace(silent){
 }
 // tap-to-time
 function startTap(){
+  edSnapTake();
   if(lyrTextDiffers()){ applyLyricText(); setStatus('Your text changes are now used.'); }   // typed lines are used before timing
   $('#lyrCheckNote').hidden=true; timingTried();
   if(!S.lyrics.length) return;
@@ -3666,20 +3702,22 @@ function draw(){
   }
   drawSug(g,xOf,yOf,w,h,col);
   // lyric line starts along the bottom of the lane
+  const LY=(S.editMode||S.tap)?{tick:0,box:3,txt:17,top:true}:{tick:h-22,box:h-20,txt:h-6,top:false}; S.lyrTop=LY.top;
   if(S.lyrShow&&S.lyrics.length){
     g.font='500 12px '+col('--font-body'); g.textAlign='left'; g.textBaseline='bottom';
     const timed=S.lyrics.filter(l=>l.t!=null); S.lyrHits=[];
+    // while editing or timing the labels sit at the top (away from the overview strip below the graph)
     for(let k=0;k<timed.length;k++){
       const L=timed[k], x=xOf(L.t); if(x>w||x<LABELW-400) continue;
       const drag=S.lyrDrag&&S.lyrics[S.lyrDrag.i]===L, movable=S.tap||S.editMode, tickCol=drag?col('--accent'):movable?col('--loop-edge'):col('--lane-c');
-      if(x>=LABELW){ g.fillStyle=tickCol; g.fillRect(Math.round(x)-(movable?1:0),h-22,movable?2:1,22); }
+      if(x>=LABELW){ g.fillStyle=tickCol; g.fillRect(Math.round(x)-(movable?1:0),LY.tick,movable?2:1,22); }
       const xn=k+1<timed.length?xOf(timed[k+1].t):w, room=Math.max(0,Math.min(w,xn)-x-10);
       if(room<24){ S.lyrHits.push({i:S.lyrics.indexOf(L),x,x1:x+10}); continue; }
       let txt=L.text; while(txt.length>1&&g.measureText(txt).width>room-8) txt=txt.slice(0,-2)+'…';
       const tw=g.measureText(txt).width, x0=Math.max(LABELW+2,x);
-      g.fillStyle=col('--lyr-bg'); g.fillRect(x0+3,h-20,tw+8,17);
-      if(drag){ g.strokeStyle=col('--accent'); g.lineWidth=1.5; g.strokeRect(x0+3.5,h-19.5,tw+7,16); }
-      g.fillStyle=col('--fg'); g.fillText(txt,x0+7,h-6);
+      g.fillStyle=col('--lyr-bg'); g.fillRect(x0+3,LY.box,tw+8,17);
+      if(drag){ g.strokeStyle=col('--accent'); g.lineWidth=1.5; g.strokeRect(x0+3.5,LY.box+0.5,tw+7,16); }
+      g.fillStyle=col('--fg'); g.fillText(txt,x0+7,LY.txt);
       S.lyrHits.push({i:S.lyrics.indexOf(L),x,x1:x0+tw+11});
     }
   }
@@ -3688,8 +3726,8 @@ function draw(){
   if(S.editMode&&!S.tap&&S.lyrShow&&S.lyrics.length&&headX>=LABELW&&S.lyrics.some(l=>l.t!=null&&l.t>now+0.02)){
     g.font='600 12px '+col('--font-body'); const label='⇠ next lyric', cw=g.measureText(label).width+14, cx=Math.round(headX)+5, hits=S.lyrHits||[];
     const clash=cx+cw>w-2||hits.some(hb=>hb.x1>=cx-2&&hb.x-4<=cx+cw);
-    if(!clash){ g.fillStyle=col('--surface'); g.fillRect(cx,h-21,cw,18); g.strokeStyle=col('--accent'); g.lineWidth=1; g.strokeRect(cx+0.5,h-20.5,cw-1,17);
-      g.fillStyle=col('--accent'); g.textAlign='left'; g.textBaseline='bottom'; g.fillText(label,cx+7,h-6); S.lyrChip={x0:cx,x1:cx+cw,y0:h-24,y1:h}; }
+    if(!clash){ const yb=LY.box-1; g.fillStyle=col('--surface'); g.fillRect(cx,yb,cw,18); g.strokeStyle=col('--accent'); g.lineWidth=1; g.strokeRect(cx+0.5,yb+0.5,cw-1,17);
+      g.fillStyle=col('--accent'); g.textAlign='left'; g.textBaseline='bottom'; g.fillText(label,cx+7,LY.txt); S.lyrChip={x0:cx,x1:cx+cw,y0:yb-3,y1:yb+21}; }
   }
   updateLyricBar(now); drawOverview(t0,t1,cs);
   // playhead
@@ -3791,7 +3829,7 @@ function kbMove(){ const v=[...kb.pts.values()];
     const hi=kb.c0-0.5+(mid-kb.top-4)/rh; setViewRange(Math.round(hi)-span,Math.round(hi)); } }
 function lyricHitAt(e){
   if(!(S.tap||S.editMode)||!S.lyrHits||!S.lyrHits.length) return null; const r=canvas.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
-  if(y<r.height-30) return null; let best=null,bd=1e9;
+  if(S.lyrTop?y>30:y<r.height-30) return null; let best=null,bd=1e9;
   for(const hb of S.lyrHits){ if(x>=hb.x-12&&x<=hb.x1){ const d=Math.abs(x-hb.x); if(d<bd){ bd=d; best=hb; } } } return best;
 }
 canvas.addEventListener('pointerdown',e=>{
@@ -3825,7 +3863,7 @@ canvas.addEventListener('pointermove',e=>{ if(drag&&drag.stretch){ const d=drag,
   if(S.lyrDrag){ const d=S.lyrDrag, pps=(canvas.clientWidth-LABELW)/S.win; let t=lyrT(d.t0+(e.clientX-d.x0)/pps); if(t<d.min) t=lyrT(d.min+snapStep()); if(t>d.max) t=lyrT(d.max-snapStep()); if(t>=d.min&&t<=d.max) S.lyrics[d.i].t=t; draw(); return; } if(kb&&kb.pts.has(e.pointerId)){ kb.pts.set(e.pointerId,e.clientY); kbMove(); return; } if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); tapFollow(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(drag.scroll){ pageDrag(drag,e.clientY); return; } if(!drag.isMouse&&!drag.moved&&!drag.long&&!drag.sweep){ const dx=Math.abs(e.clientX-drag.x), dy=Math.abs(e.clientY-drag.y0); if(dy>9&&dy>1.4*dx){ drag.scroll=true; clearTimeout(drag.timer); drag.sy=drag.y0; drag.ys=[]; pageDrag(drag,e.clientY); return; } if(dx<=6) return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.sweep){ sweepSel(drag.sweep,laneTimeAt(e.clientX)); return; } if(drag.samples){ drag.samples.push([performance.now(),e.clientX]); if(drag.samples.length>8) drag.samples.shift(); } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); tapFollow(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
   if(drag&&drag.stretch){ drag=null; touchPts.delete(e.pointerId); updateSelInfo(); draw(); return; }
-  if(S.lyrDrag){ const d=S.lyrDrag; S.lyrDrag=null; const L=S.lyrics[d.i]; if(L.t!==d.t0){ if(S.tap){ S.tap.hist.push({i:d.i,t:d.t0,cleared:[],moved:true,back:S.tap.i}); $('#lyrUndo').disabled=false; } else { S.undo.push({lyr:d.i,t:d.t0}); if(S.undo.length>30) S.undo.shift(); updateSelInfo(); } setStatus('“'+L.text+'” moved to '+fmtT1(L.t)+'.'); } lyrChanged(); return; }
+  if(S.lyrDrag){ const d=S.lyrDrag; S.lyrDrag=null; const L=S.lyrics[d.i]; if(L.t!==d.t0){ if(S.tap){ S.tap.hist.push({i:d.i,t:d.t0,cleared:[],moved:true,back:S.tap.i}); $('#lyrUndo').disabled=false; } else { undoPush({lyr:d.i,t:d.t0}); updateSelInfo(); } setStatus('“'+L.text+'” moved to '+fmtT1(L.t)+'.'); } lyrChanged(); return; }
   if(kb&&kb.pts.has(e.pointerId)){ kb.pts.delete(e.pointerId);
     if(kb.pts.size){ kbStart(); return; }
     const lastNote=S.kbNote; keyNoteOff(); const moved=kb.moved; kb=null; if(moved) saveView(); else if(S.editMode&&S.sel&&lastNote!=null) fillSelWith(lastNote); return; }
@@ -3896,7 +3934,21 @@ try{ if(localStorage.getItem('pc-guide-muted')==='1') setGuideMuted(true); }catc
 $('#editBtn').addEventListener('click',()=>{ if(S.editMode) closeEditor(false); else setEditMode(true); });
 // leaving the editor with edits not sent yet (members' songs from a share link): suggest them, cancel them, or keep editing
 // before leaving the editor or lyric timing: edits not sent yet are suggested or cancelled first; false = keep working
+// the moderator's own songs: what the song looked like when the editor (or timing) was opened
+function edSnapTake(){ if(!S.edSnap&&S.tM&&S.cur&&S.cur.libId!=null&&!S.curBase) S.edSnap={tM:Float32Array.from(S.tM),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}; }
+function edSnapChanged(){ const sn=S.edSnap; if(!sn||!S.tM) return false; if(sn.tM.length!==S.tM.length) return true;
+  for(let i=0;i<sn.tM.length;i++){ const a=sn.tM[i], b=S.tM[i]; if(!((isNaN(a)&&isNaN(b))||a===b)) return true; }
+  return JSON.stringify(sn.lyrics)!==JSON.stringify(S.lyrics.map(l=>({t:l.t,text:l.text}))); }
+async function confirmOwn(what){
+  if(!edSnapChanged()) return true;
+  const r=await dlg({title:'Keep your edits?',html:'<p class="kv-sub">You changed this song since you opened the editor. Keep the changes, or cancel them and go back to how the song was, before '+what+'.</p>',
+    buttons:[{label:'Keep my edits',value:'keep',primary:true},{label:'Cancel my edits',value:'cancel'},{label:'Keep working',value:null}]});
+  if(r.value==='keep') return true;
+  if(r.value==='cancel'){ const sn=S.edSnap; undoPush({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); pushUndo();
+    S.tM=Float32Array.from(sn.tM); S.lyrics=sn.lyrics.map(l=>({t:l.t,text:l.text})); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged(); targetEdited('Your edits were cancelled: the song is back as it was when you opened the editor.'); return true; }
+  return false; }
 async function confirmPending(what){
+  if(!S.curBase) return await confirmOwn(what);
   const cb=S.curBase, d=cb&&S.tM?newDiff(cb,liveOf()):null;
   if(d&&diffCount(d)){
     const r=await dlg({title:'Your edits are not sent yet',html:'<p class="kv-sub">You made '+esc(diffText(d))+' in this song. Send them to the moderator, or cancel them, before '+what+'.</p>',
@@ -3911,6 +3963,7 @@ async function confirmPending(what){
 }
 async function closeEditor(fromPencil){
   if(!(await confirmPending(S.tap&&!S.editMode?'stopping the lyric timing':'closing the editor'))) return;
+  S.edSnap=null;
   if(S.editMode) setEditMode(false); if(S.tap) stopTap(); if(fromPencil) setEdFold(false);
 }
 // the pencil next to Voice / Backing / Tone / Click shows or hides the editor buttons
@@ -3957,7 +4010,7 @@ $('#edDiscard').addEventListener('click',e=>{ const b=e.currentTarget, cb=S.curB
 function discardLyrics(e){ const b=e.currentTarget, cb=S.curBase; if(!cb) return;
   if(!b.dataset.armed){ b.dataset.armed='1'; const lbl=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.textContent='Tap again to cancel your lyric edits'; b.classList.add('danger'); setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=lbl; b.classList.remove('danger'); } },4000); return; }
   delete b.dataset.armed; b.textContent=b.id==='edLyrDiscard'?'Cancel lyric edits':'Cancel my edits'; b.classList.remove('danger');
-  S.undo.push({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); if(S.undo.length>30) S.undo.shift();
+  undoPush({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))});
   S.lyrics=(sentRec(cb).base.lyrics||[]).map(l=>({t:l.t,text:l.text})); S.needTiming=false; $('#lyrCheckNote').hidden=true; $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); lyrChanged();
   setStatus('Your lyric edits were removed: the lyrics are back as the moderator shared them.'); }
 $('#lyrDiscard').addEventListener('click',discardLyrics);
@@ -4057,12 +4110,18 @@ document.addEventListener('keydown',e=>{
   else done=false;
   if(done){ e.preventDefault(); e.stopPropagation(); if(tg==='BUTTON') document.activeElement.blur(); }
 },true);
+// Ctrl+Z for the other Undo buttons: reviewing a suggestion, and the lyric text (when not typing in it)
+document.addEventListener('keydown',e=>{ const mod=e.ctrlKey||e.metaKey; if(!mod||e.key.toLowerCase()!=='z'||e.shiftKey) return;
+  const tg=document.activeElement&&document.activeElement.tagName; if(/INPUT|TEXTAREA|SELECT/.test(tg)) return;
+  if(S.sug&&!$('#sgUndo').disabled){ e.preventDefault(); e.stopImmediatePropagation(); $('#sgUndo').click(); return; }
+  if(!S.editMode&&!S.tap&&!$('#lyrTextUndo').hidden&&$('#lyrPanel').open){ e.preventDefault(); $('#lyrTextUndo').click(); } },true);
 // keyboard in edit mode (laptop): ←/→ pan, Space play/pause, ↑/↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear selection
 document.addEventListener('keydown',e=>{
   if(!S.editMode||S.tap||!$('#sheetView').hidden) return;
   const tg=document.activeElement&&document.activeElement.tagName; if(/INPUT|TEXTAREA|SELECT/.test(tg)) return;
   const k=e.key, mod=e.ctrlKey||e.metaKey; let done=true;
-  if(mod&&k.toLowerCase()==='z') edUndo();
+  if(mod&&(k.toLowerCase()==='y'||(e.shiftKey&&k.toLowerCase()==='z'))) edRedo();
+  else if(mod&&k.toLowerCase()==='z') edUndo();
   else if(e.shiftKey&&!mod&&(k==='ArrowLeft'||k==='ArrowRight')){ // Shift: select from the playhead, half a beat per press
     if(S.playing) stop();
     if(!(S.kbSel&&S.sel===S.kbSel.sel&&Math.abs(S.pos-S.kbSel.pos)<1e-6)) S.kbSel={anchor:stepGrid(S.pos,0),sel:null};
@@ -4085,9 +4144,10 @@ document.addEventListener('keydown',e=>{
 updateSelInfo();
 $('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>{ e.target.value=''; $('#lyrPanel').open=true; setTimeout(()=>$('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}),100); }); });
 $('#lyrPdfCol').addEventListener('change',fillFromPdf);
+$('#sheetPrint').addEventListener('click',()=>{ if(S.playing) stop(); window.print(); });
 $('#sheetPlay').addEventListener('click',()=>(S.playing||S.review)?stop():play());
-$('#sheetOpen').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; requestAnimationFrame(()=>sheetFollow(true)); });
-$('#sheetOpen2').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; requestAnimationFrame(()=>sheetFollow(true)); });
+$('#sheetOpen').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; S.sheetSec=null; requestAnimationFrame(()=>sheetFollow(true)); });
+$('#sheetOpen2').addEventListener('click',()=>{ const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; S.sheetSec=null; requestAnimationFrame(()=>sheetFollow(true)); });
 $('#sheetClose').addEventListener('click',closeSheet);
 function setSheetCompact(on){ const bar=$('.sheet-bar'); bar.classList.toggle('compact',on); const b=$('#sheetMore'); b.setAttribute('aria-expanded',String(!on)); const t=on?'Show the sheet options':'Hide the sheet options'; b.title=t; b.setAttribute('aria-label',t); try{ localStorage.setItem('pc-sheetcompact',on?'1':'0'); }catch(e){} }
 $('#sheetMore').addEventListener('click',()=>setSheetCompact(!$('.sheet-bar').classList.contains('compact')));
@@ -4102,7 +4162,7 @@ $('#lyrBack').addEventListener('pointerdown',e=>e.stopPropagation());
 $('#lyrBack').addEventListener('click',e=>{ e.stopPropagation(); tapBack(); });
 $('#lyrSkip').addEventListener('click',e=>{ e.stopPropagation(); tapSkip(); });
 $('#lyrUndo').addEventListener('click',e=>{ e.stopPropagation(); tapUndo(); });
-$('#sheetOpen3').addEventListener('click',e=>{ e.stopPropagation(); const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; requestAnimationFrame(()=>sheetFollow(true)); });
+$('#sheetOpen3').addEventListener('click',e=>{ e.stopPropagation(); const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; S.sheetSec=null; requestAnimationFrame(()=>sheetFollow(true)); });
 $('#sheetTable').addEventListener('click',e=>{ const td=e.target.closest('td.tap'); if(td) toggleShape(td); });
 $('#sheetTable').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.matches('td.tap')){ e.preventDefault(); toggleShape(e.target); } });
 $('#sheetSmaller').addEventListener('click',()=>setSheetType({fs:sheetType().fs-1}));
@@ -4155,6 +4215,12 @@ $('#restoreBacksOn').checked=restoreBacks();
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
 $('#edSplit').addEventListener('click',splitAtPlayhead);
+$('#restFile').addEventListener('change',async e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; busyShow('Restoring the library…'); try{ await restoreLibrary(f,$('#restText')); } finally{ e.target.value=''; await busyHide(null); } });
+$('#restLink').addEventListener('click',async()=>{ const url=shareLinks()[S.part]; const t=$('#restText');
+  if(!url){ t.textContent='No Dropbox link is saved for '+S.part+' yet: paste it under Share with your choir, or use Restore from a share file.'; return; }
+  busyShow('Downloading '+S.part+' from Dropbox…'); try{ const du=directUrl(url), rf=await remoteFile(du); if(rf){ await restoreLibrary(rf,t); } else { const blob=await fetchBlob(du,(got,total)=>{ t.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); },false); if(!blob){ t.textContent='The file could not be downloaded. Download it from Dropbox yourself and use Restore from a share file.'; return; } await restoreLibrary(new File([blob],'share.zip'),t); } }
+  catch(err){ t.textContent='Restore failed: '+((err&&err.message)||'unknown error')+'.'; } finally{ await busyHide(null); } });
+$('#edRedo').addEventListener('click',edRedo);
 { let gt=null; $('#gateIn').addEventListener('input',e=>{ const v=+e.target.value; $('#gateV').textContent=gateLabel(v); clearTimeout(gt); gt=setTimeout(()=>applyGate(v),60); }); }
 $('#setupShow').addEventListener('click',setupStart);
 $('#setupHide').addEventListener('click',()=>{ if(S.setup){ S.setup.hidden=true; setupSave(); paintSetup(); setStatus('Set-up guide hidden. The Set-up guide button in the moderator tools under the editor buttons (pencil) brings it back.'); } });
