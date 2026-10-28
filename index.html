@@ -366,8 +366,10 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .lyr-edit>summary{padding:14px 16px;cursor:pointer;font-family:var(--font-display);font-weight:700;font-size:18px;list-style-position:inside}
 .lyr-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .hint-row{flex:1 1 100%;min-width:0;flex-direction:column;align-items:flex-start}
+.lane-foot .admin-tools{flex:1 1 100%;min-width:0;margin-top:8px;font-size:14px;color:var(--fg)}
 .ed-lyr{display:flex;flex-direction:column;gap:6px;margin-top:8px;flex:1 1 100%;min-width:0;max-width:100%}
 .ed-lyr .lyr-list{min-width:0;position:relative}
+.ed-lyr .lyr-x,.ed-lyr .lyr-t{cursor:pointer}
 .setup-steps{margin:4px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .setup-steps li{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
 .setup-steps li .st-head{display:flex;align-items:center;gap:8px;font-weight:600}
@@ -375,6 +377,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .setup-steps li.done{opacity:.6} .setup-steps li.done .st-n{background:var(--accent);color:#fff}
 .setup-steps li.next{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)} .setup-steps li.next .st-n{background:var(--accent);color:#fff}
 .setup-steps li .row{gap:6px} .setup-steps li:not(.next) .st-body{display:none}
+button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 .fold>summary .unpub-dot{color:#b45309;font-weight:600}
 .lyr-pending{font-size:13px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,#f59e0b 16%,var(--surface));border:1px solid color-mix(in srgb,#f59e0b 45%,var(--line));color:var(--fg)}
 .lyr-body textarea{font:inherit;font-size:15px;line-height:1.5;width:100%;min-height:140px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);resize:vertical}
@@ -507,6 +510,34 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <div class="row ed-row" id="edFold" hidden><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button></div>
       <div class="ed-lyr" id="edLyrBox" hidden><div class="lyr-list" id="lyrList" hidden></div><span class="small" id="lyrHint"></span></div>
+    <div class="share-box admin-tools" id="pitchTools" hidden>
+        <b>Pitch line and beat grid (moderator)</b>
+        <span class="small">Reset brings back the pitch line as first found (or just the selection while editing). The beat grid sets the tempo used by the click, snapping and Align to grid.</span>
+        <div class="row">
+          <button id="edReset" type="button">Reset to original</button>
+          <button id="edRefind" type="button" title="Read the vocals again with this part's voice range">Find pitch line again</button>
+          <button id="setupShow" type="button" title="Show the step-by-step set-up guide for the open song">Set-up guide</button>
+            <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
+            <button id="edAlign" type="button" title="Move every note start and end to the nearest quarter of a beat (first moving the line if it is consistently early or late)">Align to grid</button>
+        </div>
+          <div class="beat-row" id="beatRow">
+            <span class="small">Beats</span>
+            <input id="bpmIn" type="number" min="30" max="240" step="0.1" aria-label="Tempo in beats per minute"><span class="small">BPM</span>
+            <button id="bShiftL" type="button" title="Move the beat grid earlier" aria-label="Move the beat grid earlier">◀</button>
+            <button id="bShiftR" type="button" title="Move the beat grid later" aria-label="Move the beat grid later">▶</button>
+            <button id="bHalf" type="button" title="Half the tempo">÷2</button>
+            <button id="bDouble" type="button" title="Double the tempo">×2</button>
+            <button id="bDetect" type="button">Detect</button>
+            <button id="bTap" type="button" title="Tap along with the beat while the song plays (keyboard: T)">Tap tempo</button>
+            <button id="bOne" type="button" title="Make the beat at the playhead the first beat of a bar">Beat 1 here</button>
+            <button id="bTempo" type="button" title="The song changes tempo at the playhead: start a new tempo section here">New tempo here</button>
+            <button id="bTempoMove" type="button" hidden title="Move the nearest tempo change to the playhead (on a beat of the new tempo)">Move tempo change here</button>
+            <button id="bTempoDel" type="button" hidden title="Remove the nearest tempo change">Remove tempo change</button>
+            <label class="small" for="bBpb">Beats per bar</label>
+            <select id="bBpb" class="sel" style="width:auto"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option></select>
+            <span class="small" id="beatInfo"></span>
+          </div>
+      </div>
       <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom, two-finger drag to move. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span></div>
     </div>
   </section>
@@ -638,6 +669,15 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <label class="small" for="lyrPdfCol">Column from the PDF</label>
         <select id="lyrPdfCol" class="sel" style="flex:1 1 160px;min-width:0"></select>
       </div>
+    <div class="share-box admin-tools" id="lyrTools" hidden>
+        <b>Lyrics tools (moderator)</b>
+        <span class="small">Lines always snap to the beat grid. After importing a PDF, pick the column in the Lyrics editor.</span>
+        <div class="row">
+          <span class="btn">Import from PDF<input id="lyrPdf" type="file" accept="application/pdf,.pdf" aria-label="Import lyrics from a PDF with one column per part"></span>
+          <button id="lyrAuto" type="button">Place lines automatically</button>
+          <button id="lyrSnapAll" type="button">Snap all lines now</button>
+          <button id="lyrClear" type="button">Remove lyrics</button>
+        </div>
       <input id="lyrSnapOn" type="checkbox" checked hidden aria-hidden="true">
     </div>
   </details>
@@ -800,43 +840,6 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       <span class="small"><b>Short links:</b> with a file called links.json next to index.html on GitHub, each part gets a short link like <span class="share-url" id="shortEx"></span>. Tap Make links.json and upload it to your GitHub repo, again only when you add a part or a Dropbox link changes.</span>
       <div class="row"><button id="linksMake" type="button">Make links.json</button></div>
     </div>
-    <div class="share-box" id="pitchTools">
-      <b>Pitch line and beat grid (for the open song)</b>
-      <span class="small">Reset brings back the pitch line as first found (or just the selection while editing). The beat grid sets the tempo used by the click, snapping and Align to grid.</span>
-      <div class="row">
-        <button id="edReset" type="button">Reset to original</button>
-        <button id="edRefind" type="button" title="Read the vocals again with this part's voice range">Find pitch line again</button>
-        <button id="setupShow" type="button" title="Show the step-by-step set-up guide for the open song">Set-up guide</button>
-          <button id="edSmooth" type="button" title="Turn the line into clean piano-style notes">Smooth</button>
-          <button id="edAlign" type="button" title="Move every note start and end to the nearest quarter of a beat (first moving the line if it is consistently early or late)">Align to grid</button>
-      </div>
-        <div class="beat-row" id="beatRow">
-          <span class="small">Beats</span>
-          <input id="bpmIn" type="number" min="30" max="240" step="0.1" aria-label="Tempo in beats per minute"><span class="small">BPM</span>
-          <button id="bShiftL" type="button" title="Move the beat grid earlier" aria-label="Move the beat grid earlier">◀</button>
-          <button id="bShiftR" type="button" title="Move the beat grid later" aria-label="Move the beat grid later">▶</button>
-          <button id="bHalf" type="button" title="Half the tempo">÷2</button>
-          <button id="bDouble" type="button" title="Double the tempo">×2</button>
-          <button id="bDetect" type="button">Detect</button>
-          <button id="bTap" type="button" title="Tap along with the beat while the song plays (keyboard: T)">Tap tempo</button>
-          <button id="bOne" type="button" title="Make the beat at the playhead the first beat of a bar">Beat 1 here</button>
-          <button id="bTempo" type="button" title="The song changes tempo at the playhead: start a new tempo section here">New tempo here</button>
-          <button id="bTempoMove" type="button" hidden title="Move the nearest tempo change to the playhead (on a beat of the new tempo)">Move tempo change here</button>
-          <button id="bTempoDel" type="button" hidden title="Remove the nearest tempo change">Remove tempo change</button>
-          <label class="small" for="bBpb">Beats per bar</label>
-          <select id="bBpb" class="sel" style="width:auto"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option></select>
-          <span class="small" id="beatInfo"></span>
-        </div>
-    </div>
-    <div class="share-box" id="lyrTools">
-      <b>Lyrics tools (for the open song)</b>
-      <span class="small">Lines always snap to the beat grid. After importing a PDF, pick the column in the Lyrics editor.</span>
-      <div class="row">
-        <span class="btn">Import from PDF<input id="lyrPdf" type="file" accept="application/pdf,.pdf" aria-label="Import lyrics from a PDF with one column per part"></span>
-        <button id="lyrAuto" type="button">Place lines automatically</button>
-        <button id="lyrSnapAll" type="button">Snap all lines now</button>
-        <button id="lyrClear" type="button">Remove lyrics</button>
-      </div>
     </div>
     <div class="share-box" id="sugSetup">
       <b>Suggestions from the choir</b>
@@ -890,7 +893,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 ep';
+const APP_VERSION='2026-10-28 eq';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1442,13 +1445,17 @@ function paintUnpub(){ const u=unpubGet(), mine=Object.keys(u).filter(p=>S.parts
 // ----- set-up guide for a newly separated song (moderator): lyrics → smooth → align → tempo & beat 1 → time lyrics → clean up -----
 S.setup=null;
 function setupSave(){ if(S.cur&&S.cur.libId!=null&&S.setup) libUpdate(S.cur.libId,{setup:{...S.setup}}).catch(()=>{}); }
+// a visible "done" on the Beat 1 buttons (the one in the beat row and the one in the set-up guide)
+function beatOneConfirm(t){ const txt='✓ Beat 1 set at '+fmtT1(t); S.beatOneMsg=txt;
+  document.querySelectorAll('#bOne,[data-beat1]').forEach(b=>{ const old=b.dataset.lbl||b.textContent; b.dataset.lbl=old; b.textContent=txt; b.classList.add('confirmed'); clearTimeout(b._t); b._t=setTimeout(()=>{ b.textContent=b.dataset.lbl; b.classList.remove('confirmed'); },2500); });
+  try{ navigator.vibrate&&navigator.vibrate(30); }catch(e){} }
 function setupMark(k){ if(!S.setup||S.setup[k]) return; S.setup[k]=true; setupSave(); paintSetup(); }
 function setupSteps(){ const st=S.setup||{}, timed=S.lyrics.length>0&&S.lyrics.every(l=>l.t!=null);
   return [
     {k:'lyrics',title:'Add the lyrics',done:S.lyrics.length>0,help:'Paste the lyrics in the Lyrics editor (one line per sung phrase) and tap Use these lines, or import them from a PDF.',btns:[['Open the Lyrics editor',()=>{ $('#lyrPanel').open=true; $('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}); setTimeout(()=>$('#lyrText').focus({preventScroll:true}),400); }]]},
     {k:'smooth',title:'Smooth the pitch line',done:!!st.smooth,help:'Turns the wobbly sung line into clean piano-style notes.',btns:[['Smooth',()=>{ edSmooth(); }]]},
     {k:'align',title:'Align to the grid',done:!!st.align,help:'Moves every note start and end onto the beat grid. Check the tempo first if the grid looks wrong (next step), then align again.',btns:[['Align to grid',()=>{ edAlign(); }]]},
-    {k:'tempo',title:'Confirm the tempo and beat 1',done:!!st.tempo&&hasBars(),help:'Turn on Click and play: the clicks should sit on the beat (adjust BPM, ◀ ▶ or Tap tempo below if not). Then put the playhead on the first beat of a bar and tap Beat 1 here.',btns:[['Click on/off',()=>$('#metBtn').click()],['Beat 1 here',()=>markBeatOne()],['Tempo is right ✓',()=>{ if(!hasBars()){ setStatus('Set beat 1 first: playhead on the first beat of a bar, then Beat 1 here.',true); return; } setupMark('tempo'); }]]},
+    {k:'tempo',title:'Confirm the tempo and beat 1',done:!!st.tempo&&hasBars(),help:'Turn on Click and play: the clicks should sit on the beat (adjust BPM, ◀ ▶ or Tap tempo under the editor buttons if not). Then put the playhead on the first beat of a bar and tap Beat 1 here.'+(hasBars()?' Beat 1 is set'+(S.beat&&S.beat.bar!=null?' at '+fmtT1(S.beat.bar):'')+'.':''),btns:[['Click on/off',()=>$('#metBtn').click()],['Beat 1 here',()=>markBeatOne(),'beat1'],['Tempo is right ✓',()=>{ if(!hasBars()){ setStatus('Set beat 1 first: playhead on the first beat of a bar, then Beat 1 here.',true); return; } setupMark('tempo'); }]]},
     {k:'timed',title:'Time all the lyrics',done:timed&&!!st.timed,help:'Lines placed automatically are only a rough guess. Go through them with Time lyrics and place every line where it starts; the step ticks off when you stop timing with all lines timed.',btns:[['Time lyrics',()=>{ if(!S.lyrics.length){ setStatus('Add the lyrics first.',true); return; } setEdFold(true); startTap(); }],['Done ✓',()=>{ if(!timed){ setStatus('Some lyric lines have no time yet.',true); return; } setupMark('timed'); }]]},
     {k:'cleanup',title:'Remove lines from other parts',done:!!st.cleanup,help:'Other parts singing in the background can leave stray bits in the pitch line. Play through, select those bits in the editor and tap Remove.',btns:[['Open the editor',()=>{ setEdFold(true); setEditMode(true); window.scrollTo({top:0,behavior:'smooth'}); }],['Done ✓',()=>setupMark('cleanup')]]}
   ]; }
@@ -1458,7 +1465,7 @@ function paintSetup(){ const box=$('#setupBox'); if(!box) return; const own=S.cu
   steps.forEach((x,i)=>{ const li=document.createElement('li'); li.className=x.done?'done':i===next?'next':'';
     li.innerHTML='<div class="st-head"><span class="st-n">'+(x.done?'✓':i+1)+'</span><span></span></div><div class="st-body"><span class="small"></span><div class="row"></div></div>';
     li.querySelector('.st-head span:last-child').textContent=x.title; li.querySelector('.st-body .small').textContent=x.help;
-    x.btns.forEach(([lab,fn],j)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=lab; if(j===0) b.className='primary'; b.addEventListener('click',fn); li.querySelector('.st-body .row').appendChild(b); });
+    x.btns.forEach(([lab,fn,tag],j)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=lab; if(j===0) b.className='primary'; if(tag==='beat1') b.dataset.beat1='1'; b.addEventListener('click',fn); li.querySelector('.st-body .row').appendChild(b); });
     if(x.done){ li.addEventListener('click',()=>{ li.classList.toggle('next'); }); }
     ol.appendChild(li); });
   if(next<0){ const li=document.createElement('li'); li.className='next'; li.innerHTML='<div class="st-head"><span class="st-n">★</span><span>All set: share it</span></div><div class="st-body"><span class="small">Make the share file for this part and upload it, so the choir gets the song.</span><div class="row"><button type="button" class="primary">Go to sharing</button></div></div>';
@@ -1962,7 +1969,7 @@ function tapTempo(){
     else { const c=s.ref, k=Math.round((c.t-first)/f.P); let nt=first+k*f.P; const lo=s.i>1?beatSegs()[s.i-1].t0+1:1, hi=s.t1-1; if(nt<lo) nt+=f.P*Math.ceil((lo-nt)/f.P); if(nt<hi) c.t=nt; c.bpm=bpm; if(firstTap||c.bar==null) c.bar=first; } }
   beatEdited(); setStatus('Tap tempo: '+bpm.toFixed(1)+' BPM from '+n+' taps. Keep tapping to refine it. Your first tap counts as beat 1 (change it with Beat 1 here).');
 }
-function markBeatOne(){ if(!S.beat) return; const t=curT(), s=segAt(t), k=Math.round((t-s.off)/s.P); s.ref.bar=s.off+k*s.P; S.beat.bpb=beatsPerBar(); beatEdited(); setStatus('Beat 1 set at '+fmtT1(s.ref.bar)+'. Bars of '+beatsPerBar()+' beats run from here'+(S.beat.changes&&S.beat.changes.length?' through this tempo section.':' through the song.')); }
+function markBeatOne(){ if(!S.beat){ setStatus('This song has no beat grid yet: Detect it or use Tap tempo first.',true); return; } const t=curT(), s=segAt(t), k=Math.round((t-s.off)/s.P); s.ref.bar=s.off+k*s.P; S.beat.bpb=beatsPerBar(); beatEdited(); beatOneConfirm(s.ref.bar); setStatus('Beat 1 set at '+fmtT1(s.ref.bar)+'. Bars of '+beatsPerBar()+' beats run from here'+(S.beat.changes&&S.beat.changes.length?' through this tempo section.':' through the song.')); }
 function beatEdited(){ if(!S.beat) return; S.beat.auto=false; saveBeat(); renderBeatInfo(); draw(); paintSetup(); }
 function setBpm(bpm){
   if(!S.beat||!(bpm>=30&&bpm<=240)) return;
@@ -2615,6 +2622,7 @@ function renderLyrics(fillText){
     const row=document.createElement('div'); row.className='lyr-row'; row.dataset.i=i;
     row.innerHTML=`<span class="lyr-t">${L.t==null?'—':fmtT1(L.t)}</span><span class="lyr-x"></span>`;
     row.querySelector('.lyr-x').textContent=L.text;
+    row.querySelector('.lyr-x').addEventListener('click',()=>tapPick(i)); row.querySelector('.lyr-t').addEventListener('click',()=>tapPick(i));
     const mk=(label,title,fn)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; b.title=title; b.setAttribute('aria-label',title); b.addEventListener('click',fn); row.appendChild(b); };
     mk('−',lyrSnapping()?'Move line one grid step earlier':'Move line 0.2 s earlier',()=>nudgeLine(i,-1));
     mk('+',lyrSnapping()?'Move line one grid step later':'Move line 0.2 s later',()=>nudgeLine(i,1));
@@ -2992,6 +3000,8 @@ function tapFollow(){ if(!S.tap||S.playing) return; const pos=S.pos+0.001; let j
 // lines you added (or whose time you cleared) that have no start time: edits can't be suggested until every one is timed
 function untimedEdits(d){ return d&&d.lyrics?d.lyrics.filter(c=>c.k!=='del'&&c.t==null).length:0; }
 function timingTried(){ if(S.needTiming){ S.needTiming=false; $('#lyrCheckNote').hidden=true; paintSuggest(); } }
+// while timing: tap a line in the table to make it the one Place here times (the playhead stays where it is)
+function tapPick(i){ if(!S.tap||i<0||i>=S.lyrics.length) return; S.tap.i=i; $('#lyrSkip').disabled=false; tapBtns(); S.lyrBarKey=null; updateLyricBar(songTime()); setStatus('Next to place: “'+S.lyrics[i].text+'”. Tap Place here at its start.'); }
 function tapBtns(){ if(!S.tap) return; $('#lyrBack').disabled=S.tap.i<=0; $('#lyrPlace').disabled=S.tap.i>=S.lyrics.length; }
 // Back: step to the previous line and keep every time as it is (the mirror of Skip); tap Place here to re-time it
 function tapBack(){
@@ -3881,7 +3891,7 @@ async function closeEditor(fromPencil){
   if(S.editMode) setEditMode(false); if(S.tap) stopTap(); if(fromPencil) setEdFold(false);
 }
 // the pencil next to Voice / Backing / Tone / Click shows or hides the editor buttons
-function setEdFold(on){ $('#edFold').hidden=!on; $('#edLyrBox').hidden=!on||!S.tap; $('#edToggle').setAttribute('aria-expanded',String(on)); }
+function setEdFold(on){ $('#edFold').hidden=!on; $('#edLyrBox').hidden=!on||!S.tap; if(document.getElementById('pitchTools')) paintAdminTools(); $('#edToggle').setAttribute('aria-expanded',String(on)); }
 $('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; if(!open&&(S.editMode||S.tap)){ closeEditor(true); return; } setEdFold(open); });   // closing the pencil also ends editing
 $('#edClearSel').addEventListener('click',()=>{ S.sel=null; updateSelInfo(); draw(); });
 $('#edTimeBtn').addEventListener('click',()=>{ if(S.tap){ closeEditor(false); return; } if(S.editMode) setEditMode(false); startTap(); });
@@ -3957,7 +3967,9 @@ $('#sgDone').addEventListener('click',sugFinish);
 $('#sgStop').addEventListener('click',sugCancel);
 $('#sugUrlIn').value=sugUrl();
 // Admin opens only with the right review key (checked with the inbox once, then remembered on this device)
-function paintAdmin(){ const ok=!!sugKey(); $('#adminLock').hidden=ok; $('#adminTools').hidden=!ok; $('#lockUrlRow').hidden=!!sugUrl(); }
+function paintAdmin(){ const ok=!!sugKey(); $('#adminLock').hidden=ok; $('#adminTools').hidden=!ok; $('#lockUrlRow').hidden=!!sugUrl(); paintAdminTools(); }
+// moderator tools that live next to what they work on: lyrics tools in the Lyrics editor, pitch line / beat tools under the editor buttons
+function paintAdminTools(){ const ok=!!sugKey(); $('#lyrTools').hidden=!ok; $('#pitchTools').hidden=!ok||$('#edFold').hidden; }
 async function unlockAdmin(){ const key=$('#sugKeyIn').value, lu=$('#lockUrl').value.trim(), t=$('#lockText');
   if(lu){ try{ localStorage.setItem('pc-sugurl',lu); }catch(x){} $('#sugUrlIn').value=lu; }
   const url=sugUrl(); if(!url){ t.textContent='Paste the inbox address first.'; return; } if(!key){ t.textContent='Type your review key.'; return; }
@@ -4121,7 +4133,7 @@ $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('p
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
 $('#edSplit').addEventListener('click',splitAtPlayhead);
 $('#setupShow').addEventListener('click',setupStart);
-$('#setupHide').addEventListener('click',()=>{ if(S.setup){ S.setup.hidden=true; setupSave(); paintSetup(); setStatus('Set-up guide hidden. Admin → Pitch line → Set-up guide brings it back.'); } });
+$('#setupHide').addEventListener('click',()=>{ if(S.setup){ S.setup.hidden=true; setupSave(); paintSetup(); setStatus('Set-up guide hidden. The Set-up guide button in the moderator tools under the editor buttons (pencil) brings it back.'); } });
 $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
