@@ -823,22 +823,19 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <span class="small" id="lockText"></span>
     </div>
     <div id="adminTools" hidden>
-    <div class="share-box setup-box" id="setupBox" hidden>
-      <b>Set up this song: <span id="setupName"></span></b>
-      <span class="small">Work through the steps in order; the next one is highlighted. Steps tick themselves off when the app sees them done.</span>
-      <ol class="setup-steps" id="setupSteps"></ol>
-      <div class="row"><button id="setupHide" type="button" class="link-btn">Hide the guide for this song</button></div>
-    </div>
     <div class="share-box">
-      <b>Organise songs (<span id="admPart"></span>)</b>
-      <span class="small">▲ ▼ change the running order (also used for playback and shared with members). Move or copy a song to another part.</span>
-      <div id="admSongs"></div>
+      <b>Add a new song</b>
+      <span class="small">Choose a song (for example a part MP3). The app separates the voice, finds the pitch line and keeps it in the library, in the part chosen in Song library. If you already have the vocals on their own (or a .ntpsession file), use Add vocals from this device.</span>
+      <div class="row"><span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span><button id="admAddVocals" type="button" title="A vocals-only audio file or a .ntpsession file">Add vocals from this device</button></div>
+    <div class="sep-box" id="sepBox" hidden>
+      <div class="sep-row"><b id="sepName"></b><span class="engine" id="engine" hidden></span></div>
+      <div class="sep-row"><div class="bar"><i id="sepFill"></i></div><span class="small" id="sepText"></span></div>
+      <div class="sep-row">
+        <label class="check" for="keepLib"><input id="keepLib" type="checkbox" checked>Keep in library</label>
+        <button id="sepCancel" type="button">Cancel</button>
+      </div>
+      <span class="small">Keep this page open and the screen on while it works. On a laptop this takes a few minutes; on a phone it can take much longer.</span>
     </div>
-    <div class="share-box">
-      <b>Restore the library</b>
-      <span class="small">Brings the songs back exactly as they are in the share file: after edits you want to throw away, after the app's storage was cleared, or on a new device. Songs in the file replace the same songs here; songs that are not in the file stay.</span>
-      <div class="row"><button id="restLink" type="button" class="primary">Restore <span class="rest-part"></span> from its Dropbox link</button><span class="btn">Restore from a share file<input id="restFile" type="file" accept=".zip,application/zip" aria-label="Choose a Part Coach share file"></span></div>
-      <span class="small" id="restText"></span>
     </div>
     <div class="share-box">
       <b>Parts</b>
@@ -856,19 +853,22 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       </select>
       </div>
     </div>
-    <div class="share-box">
-      <b>Add a new song</b>
-      <span class="small">Choose a song (for example a part MP3). The app separates the voice, finds the pitch line and keeps it in the library, in the part chosen in Song library. If you already have the vocals on their own (or a .ntpsession file), use Add vocals from this device.</span>
-      <div class="row"><span class="btn primary">Separate a new song<input id="sepFile" type="file" aria-label="Choose a song to separate the vocals from"></span><button id="admAddVocals" type="button" title="A vocals-only audio file or a .ntpsession file">Add vocals from this device</button></div>
-    <div class="sep-box" id="sepBox" hidden>
-      <div class="sep-row"><b id="sepName"></b><span class="engine" id="engine" hidden></span></div>
-      <div class="sep-row"><div class="bar"><i id="sepFill"></i></div><span class="small" id="sepText"></span></div>
-      <div class="sep-row">
-        <label class="check" for="keepLib"><input id="keepLib" type="checkbox" checked>Keep in library</label>
-        <button id="sepCancel" type="button">Cancel</button>
-      </div>
-      <span class="small">Keep this page open and the screen on while it works. On a laptop this takes a few minutes; on a phone it can take much longer.</span>
+    <div class="share-box setup-box" id="setupBox" hidden>
+      <b>Set up this song: <span id="setupName"></span></b>
+      <span class="small">Work through the steps in order; the next one is highlighted. Steps tick themselves off when the app sees them done.</span>
+      <ol class="setup-steps" id="setupSteps"></ol>
+      <div class="row"><button id="setupHide" type="button" class="link-btn">Hide the guide for this song</button></div>
     </div>
+    <div class="share-box">
+      <b>Organise songs (<span id="admPart"></span>)</b>
+      <span class="small">▲ ▼ change the running order (also used for playback and shared with members). Move or copy a song to another part.</span>
+      <div id="admSongs"></div>
+    </div>
+    <div class="share-box">
+      <b>Restore the library</b>
+      <span class="small">Brings the songs back exactly as they are in the share file: after edits you want to throw away, after the app's storage was cleared, or on a new device. Songs in the file replace the same songs here; songs that are not in the file stay.</span>
+      <div class="row"><button id="restLink" type="button" class="primary">Restore <span class="rest-part"></span> from its Dropbox link</button><span class="btn">Restore from a share file<input id="restFile" type="file" accept=".zip,application/zip" aria-label="Choose a Part Coach share file"></span></div>
+      <span class="small" id="restText"></span>
     </div>
     <div class="share-box">
       <b>Share with your choir</b>
@@ -943,7 +943,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 fc';
+const APP_VERSION='2026-10-28 fd';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
