@@ -788,6 +788,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         <span class="small">Tap a key on the keyboard left of the pitch lane to hear its note, also while the song plays. Its volume follows the guide tone volume. The recorded grand piano downloads about 1.5 MB the first time (Salamander Grand Piano by Alexander Holm, CC BY 3.0).</span>
       </div>
       <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
+      <div class="field"><div class="row"><button id="installBtn" type="button">Add Part Coach to your home screen</button></div><span class="small">Opens like an app, full screen, with its own icon.</span></div>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
       <div class="field">
         <label for="timMarks">Timing marks on the pitch lane</label>
@@ -941,7 +942,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-28 ex';
+const APP_VERSION='2026-10-28 ey';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4193,6 +4194,8 @@ updateSelInfo();
 $('#lyrPdf').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLyricsPdf(f).finally(()=>{ e.target.value=''; $('#lyrPanel').open=true; setTimeout(()=>$('#lyrPanel').scrollIntoView({block:'start',behavior:'smooth'}),100); }); });
 $('#lyrPdfCol').addEventListener('change',fillFromPdf);
 $('#sharePartSel').addEventListener('change',e=>{ setPart(e.target.value); setStatus('Sharing '+e.target.value+': the share file will contain its songs.'); });
+$('#installBtn').addEventListener('click',()=>installHelp(false));
+if(isStandalone()) $('#installBtn').closest('.field').hidden=true;
 $('#sheetPrint').addEventListener('click',async()=>{ if(S.playing) stop(); let last='full'; try{ last=localStorage.getItem('pc-printlight')==='1'?'light':'full'; }catch(e){}
   const r=await dlg({title:'Print the lyrics',html:'<p class="kv-sub">Full colour keeps the coloured sections. The lighter version uses much less ink: white background, thin grey lines and shapes.</p>',
     buttons:[{label:'Lighter (less ink)',value:'light',primary:last==='light'},{label:'Full colour',value:'full',primary:last!=='light'},{label:'Cancel',value:null}]});
@@ -4417,12 +4420,27 @@ async function addFromLink(upd){
       if(!blob){ out.textContent='Download cancelled. Tap again when you are on Wi-Fi, or to download anyway.'; return; }
       ok=await restoreLibrary(new File([blob],'shared library.zip'),out);
     }
-    if(ok){ setShared(raw,typeof ok==='string'?ok:(upd&&upd.part)||null,upd?upd.slug||null:S.pendingSlug||null); if(!upd){ S.pendingSlug=null; setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>{ if(!(S.updReady&&S.updReady.length)) checkShared(false); },800); } }
+    if(ok){ setShared(raw,typeof ok==='string'?ok:(upd&&upd.part)||null,upd?upd.slug||null:S.pendingSlug||null); if(!upd){ S.pendingSlug=null; installTip(); setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>{ if(!(S.updReady&&S.updReady.length)) checkShared(false); },800); } }
     if(ok&&upd) out.textContent=out.textContent.replace(' Tap Choose song to open one.','').replace(/^Done: /,'Update finished'+(upd.part?' for '+upd.part:'')+': ');
     return ok;
   }catch(e){ out.textContent=(upd?'Could not update':'Could not add the songs')+': '+e.message+'.'; return false; }
   finally{ if(!upd) btn.disabled=false; }
 }
+// ----- Part Coach as an app on the phone's home screen -----
+S.installEvt=null; window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); S.installEvt=e; });
+function isStandalone(){ return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true; }
+async function installHelp(fromTip){
+  if(isStandalone()){ if(!fromTip) setStatus('Part Coach is already open as an app.'); return; }
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  let html, btns=[];
+  if(S.installEvt){ html='<p class="kv-sub">Put Part Coach on your home screen: it opens like an app, full screen, with its own icon.</p>'; btns=[{label:'Add to home screen',value:'go',primary:true}]; }
+  else if(ios) html='<p class="kv-sub">On iPhone and iPad (Safari):</p><ol class="kv-sub" style="margin:6px 0 0 18px;padding:0"><li>Tap the Share button <b>⬆︎</b> at the bottom of Safari.</li><li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>.</li></ol><p class="kv-sub">Do this right here on this page, so the icon opens your part. Then open Part Coach from the icon and add the songs there once more (the icon has its own storage on iPhone).</p>';
+  else html='<p class="kv-sub">Open the browser menu <b>⋮</b> and tap <b>Add to Home screen</b> or <b>Install app</b>. Part Coach then opens like an app, with its own icon.</p>';
+  btns.push({label:fromTip?'Not now':'Close',value:null}); if(fromTip) btns.push({label:"Don't show again",value:'never'});
+  const r=await dlg({title:'Part Coach on your home screen',html,buttons:btns});
+  if(r.value==='go'&&S.installEvt){ S.installEvt.prompt(); try{ await S.installEvt.userChoice; }catch(e){} S.installEvt=null; }
+  if(r.value==='never') try{ localStorage.setItem('pc-installtip','0'); }catch(e){} }
+function installTip(){ if(isStandalone()) return; try{ if(localStorage.getItem('pc-installtip')==='0') return; }catch(e){} setTimeout(()=>installHelp(true),1500); }
 S.lastCheck=0;
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&getShared().length&&Date.now()-S.lastCheck>5*60e3&&!S.playing) checkShared(false); });
 setInterval(()=>{ if(!document.hidden&&getShared().length&&Date.now()-S.lastCheck>15*60e3&&!S.playing) checkShared(false); },60e3);
@@ -4487,7 +4505,8 @@ $('#linkIn').addEventListener('keydown',e=>{ if(e.key==='Enter') addFromLink(); 
 $('#linkCancel').addEventListener('click',()=>{ $('#linkBox').hidden=true; });
 $('#shareGo').addEventListener('click',shareLibrary);
 try{ const q=location.search.slice(1), short=/^[a-z0-9-]+$/i.test(q)?q.toLowerCase():new URLSearchParams(location.search).get('p');
-  if(short){ history.replaceState(null,'',location.pathname+location.hash);
+  if(short&&getShared().some(x=>x.slug===slugOf(short))){ /* already added: the regular update check covers it */ }
+  else if(short){
     fetchLinks().then(lj=>{ const ent=lj&&lj[slugOf(short)];
       if(!ent){ setStatus('This short link ('+short+') is not set up yet. Ask the person who sent it for a new link.',true); return; }
       openSharedLink(ent.url,slugOf(short),ent.part); });
