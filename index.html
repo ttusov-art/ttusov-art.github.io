@@ -154,6 +154,9 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 #kbDown{bottom:4px}
 #ovw{display:block;width:100%;height:34px;touch-action:none;cursor:pointer;border-top:1px solid var(--line);background:var(--label-bg)}
 .sec-btn{padding:7px 10px;gap:6px}
+.sec-btn.has-bm .bm-ic path{fill:var(--accent);stroke:var(--accent)}
+.sec-btn .bm-n{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.pick-menu .pm-secs{color:var(--muted);font-weight:600}
 #kbAuto{position:absolute;left:3px;bottom:34px;width:38px;padding:3px 0;justify-content:center;font-size:11px;font-weight:600;border-radius:6px;background:var(--surface);opacity:.92}
 #lane{display:block;width:100%;touch-action:none;cursor:grab;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .edit-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--accent-soft)}
@@ -625,7 +628,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           </div>
       </div>
       <div class="end-tip" id="endTip" hidden role="status"><span class="small">Heard a wrong note or a lyric out of time? Fix it with the pencil <b>✎</b> above (words: in the Lyrics editor), then tap Suggest my edits. Every fix helps the whole choir.</span><div class="row"><button id="endTipGo" type="button" class="primary">Show me</button><button id="endTipOff" type="button" class="link-btn">Don't show again</button><button id="endTipX" type="button" class="link-btn" aria-label="Close the tip">Close</button></div></div>
-      <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.</span><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
+      <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.</span><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
     </div>
   </section>
 
@@ -639,7 +642,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <button id="sugBtn" type="button" class="upd-btn" hidden>Suggestions</button>
     <button id="updBtn" type="button" class="upd-btn" hidden><span class="upd-dot" aria-hidden="true"></span><span id="updLbl">Update</span></button>
     <span class="time" id="time">0:00 / 0:00</span>
-    <div class="pick-wrap"><button id="secBtn" type="button" class="sec-btn" aria-haspopup="menu" aria-expanded="false" title="Jump to a part of the song"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h13"/></svg><span>Jump</span></button><div class="pick-menu" id="secMenu" role="menu" hidden></div></div>
+    <div class="pick-wrap"><button id="secBtn" type="button" class="sec-btn" aria-haspopup="menu" aria-expanded="false" title="Bookmarks: save a passage or open a saved one (sections of the song inside too)"><svg class="bm-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg><span>Bookmarks</span><span class="bm-n" id="bmCount" hidden></span></button><div class="pick-menu" id="secMenu" role="menu" hidden></div></div>
     <span class="tempo-grp"><label class="small" for="tempo">Tempo</label>
     <select id="tempo" class="sel">
       <option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7">70%</option><option value="0.75">75%</option>
@@ -1021,7 +1024,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gr';
+const APP_VERSION='2026-10-29 gs';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1877,7 +1880,7 @@ async function openLibSongInner(id,auto){
     S.guideBuf=buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
     S.curBacks=backsOf(s).slice(); S.curBackSel=S.curBacks.length?Math.max(0,Math.min(S.curBacks.length-1,s.backSel==null?0:s.backSel)):-1;
     if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
-    S.cur={libId:id,fromFile:false}; S.curUid=s.uid||''; S.curPart=partOf(s); RT.cm=null; S.sheet=s.sheet||null; S.beat=s.beat?{...s.beat}:null; S.pendingKey=s.musicKey?{...s.musicKey}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
+    S.cur={libId:id,fromFile:false}; S.curUid=s.uid||''; setTimeout(paintBmBtn,0); S.curPart=partOf(s); RT.cm=null; S.sheet=s.sheet||null; S.beat=s.beat?{...s.beat}:null; S.pendingKey=s.musicKey?{...s.musicKey}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
     setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } S.openRec=s; songReady(s.name,s.name+' (vocals, from library)');
     setStatus((auto?'Opened your last song, '+s.name+'. ':'')+(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.'));
     try{ localStorage.setItem('pc-last',String(id)); }catch(e){}
@@ -2910,7 +2913,7 @@ function selectFragmentAt(t){
 function setEditMode(on){
   if(on){ timingTried(); edSnapTake(); }
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane or Jump to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
   if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
@@ -4942,7 +4945,7 @@ function startGlide(vel,resume){ // vel in song seconds per second
 }
 // ----- bookmarks: a passage saved with its loop, tempo and zoom, opened with one tap (Jump menu, or ★ list in Choose song) -----
 function bmGet(){ try{ return JSON.parse(localStorage.getItem('pc-bookmarks')||'[]')||[]; }catch(e){ return []; } }
-function bmSave(l){ try{ localStorage.setItem('pc-bookmarks',JSON.stringify(l)); }catch(e){} }
+function bmSave(l){ try{ localStorage.setItem('pc-bookmarks',JSON.stringify(l)); }catch(e){} setTimeout(paintBmBtn,0); }
 const bmMine=bm=>S.cur&&S.cur.libId!=null&&(bm.uid?bm.uid===(S.curUid||''):bm.libId===S.cur.libId);
 const bmMeta=bm=>fmtT(bm.a)+(bm.b!=null?'–'+fmtT(bm.b):'')+(bm.rate&&bm.rate!==1?' · '+Math.round(bm.rate*100)+'%':'');
 function bmName(a){ const i=lyricIndexAt(a+0.3); let L=i>=0?S.lyrics[i]:null; if(!L||L.t==null||a-L.t>4){ const j=nextTimedAfter(i); if(j>=0&&S.lyrics[j].t-a<6) L=S.lyrics[j]; }
@@ -4950,7 +4953,7 @@ function bmName(a){ const i=lyricIndexAt(a+0.3); let L=i>=0?S.lyrics[i]:null; if
 async function bmAdd(){ if(!S.cur||S.cur.libId==null){ setStatus('Open a song from your library first, then bookmark a passage.',true); return; }
   const rec=await libGet(S.cur.libId), L=S.loop, loop=loopActive(), a=loop?L.a:Math.max(0,Math.round(curT()*10)/10);
   const bm={id:newSugId(),uid:rec&&rec.uid||'',libId:S.cur.libId,song:curSongName(),name:bmName(a),a,b:loop?L.b:null,rate:S.rate||1,win:S.win,created:Date.now()};
-  const l=bmGet(); l.push(bm); bmSave(l); setStatus('★ Bookmarked “'+bm.name+'” ('+bmMeta(bm)+'). Open it from Jump, or from Choose song.'); }
+  const l=bmGet(); l.push(bm); bmSave(l); setStatus('★ Bookmarked “'+bm.name+'” ('+bmMeta(bm)+'). Open it from Bookmarks, or from Choose song.'); }
 async function bmOpen(bm){ if(S.playing) stop();
   if(!bmMine(bm)){ const lib=await libMeta(), x=lib.find(s=>bm.uid?s.uid===bm.uid:s.id===bm.libId); if(!x){ setStatus('The song of this bookmark is not on this phone any more.',true); return; } if(!(await openLibSong(x.id))) return; }
   setWin(bm.win||S.win,false);
@@ -4977,17 +4980,25 @@ function openSecMenu(){
   if(S.cur&&S.cur.libId!=null){ const add=document.createElement('button'); add.type='button'; add.setAttribute('role','menuitem'); add.className='pm-bm-add';
     add.innerHTML='<span class="pm-name">'+(loopActive()?'☆ Bookmark this loop':'☆ Bookmark from here')+'</span><span class="pm-meta">'+(loopActive()?fmtT(S.loop.a)+'–'+fmtT(S.loop.b):fmtT(curT()))+'</span>';
     add.addEventListener('click',()=>{ closeSecMenu(); bmAdd(); }); m.appendChild(add);
-    bmGet().filter(bmMine).sort((x,y)=>x.a-y.a).forEach(bm=>bmRow(m,bm,bm.name,closeSecMenu,openSecMenu));
-    if(list.length){ const h=document.createElement('div'); h.className='pm-sep'; m.appendChild(h); } }
+    const mine=bmGet().filter(bmMine).sort((x,y)=>x.a-y.a); mine.forEach(bm=>bmRow(m,bm,bm.name,closeSecMenu,openSecMenu));
+    if(!mine.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent='No bookmarks in this song yet. Loop a passage (and pick a tempo and zoom), then tap Bookmark this loop.'; m.appendChild(e); }
+    if(list.length){ const h=document.createElement('div'); h.className='pm-sep'; m.appendChild(h); }
+    if(list.length&&!S.secOpen){ const t=document.createElement('button'); t.type='button'; t.setAttribute('role','menuitem'); t.className='pm-secs'; t.innerHTML='<span class="pm-name">▸ Sections of the song</span><span class="pm-meta">'+list.length+'</span>';
+      t.addEventListener('click',e=>{ e.stopPropagation(); S.secOpen=true; openSecMenu(); }); m.appendChild(t); paintBmBtn(); return finishSecMenu(m); } }
   if(!list.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent='No sections yet. Add and time lyrics (or import the lyrics PDF) to jump to them here.'; m.appendChild(e); }
   const now=songTime(); let cur=-1; list.forEach((x,i)=>{ if(x.t<=now+0.05) cur=i; });
   list.forEach((x,i)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','menuitem'); if(i===cur) b.className='cur';
     b.innerHTML='<span class="pm-name"></span><span class="pm-meta">'+fmtT(x.t)+'</span>'; b.querySelector('.pm-name').textContent=x.label;
     b.addEventListener('click',()=>{ closeSecMenu(); seek(Math.max(0,x.t-(x.sec?0.6:0.3))); setStatus('Jumped to '+x.label+'.'); }); m.appendChild(b); });
+  if(S.secOpen&&list.length&&S.cur&&S.cur.libId!=null){ const t=document.createElement('button'); t.type='button'; t.className='pm-secs'; t.innerHTML='<span class="pm-name">▾ Hide the sections</span>'; t.addEventListener('click',e=>{ e.stopPropagation(); S.secOpen=false; openSecMenu(); }); m.insertBefore(t,m.querySelector('.pm-sep')?m.querySelector('.pm-sep').nextSibling:m.firstChild); }
+  finishSecMenu(m); }
+function finishSecMenu(m){
   m.style.left='0px'; m.hidden=false; $('#secBtn').setAttribute('aria-expanded','true'); const vw=document.documentElement.clientWidth, rr=m.getBoundingClientRect(); if(rr.right>vw-8) m.style.left=Math.round(Math.max(8-rr.left,vw-8-rr.right))+'px';
   const c=m.querySelector('.cur'); if(c) m.scrollTop=Math.max(0,c.offsetTop-m.clientHeight/2+c.offsetHeight/2);   // scroll the menu only, never the page
 }
-function closeSecMenu(){ $('#secMenu').hidden=true; $('#secBtn').setAttribute('aria-expanded','false'); }
+// the bookmark button: filled when the open song has bookmarks, with their number
+function paintBmBtn(){ const n=bmGet().filter(bmMine).length, b=$('#secBtn'), c=$('#bmCount'); if(!b) return; b.classList.toggle('has-bm',n>0); c.hidden=!n; c.textContent=n; }
+function closeSecMenu(){ S.secOpen=false; $('#secMenu').hidden=true; $('#secBtn').setAttribute('aria-expanded','false'); }
 $('#secBtn').addEventListener('click',e=>{ e.stopPropagation(); $('#secMenu').hidden?openSecMenu():closeSecMenu(); });
 document.addEventListener('click',e=>{ if(!$('#secMenu').hidden&&!e.target.closest('#secMenu')&&!e.target.closest('#secBtn')) closeSecMenu(); });
 let wheelAcc=0, wheelTimer=null;
