@@ -64,7 +64,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .kv-head{display:flex;align-items:center;gap:10px}
 .kv-head h2{margin:0;font-size:24px;flex:1}
 .kv-sub{color:var(--muted);font-size:14px;margin:4px 0 0}
-.kv-size{gap:10px;align-items:center;margin-top:10px} #kvBig.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .kv-oct{display:inline-flex;align-items:center;gap:6px}
+.kv-size{gap:10px;align-items:center;margin:-2px 0 10px} #kvBig.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .kv-oct{display:inline-flex;align-items:center;gap:6px}
 .kv-svg{display:block;width:100%;height:auto;margin:14px 0 10px;touch-action:none;user-select:none;-webkit-user-select:none}
 .kv-w{fill:#d9dee2;stroke:#9aa3a9;stroke-width:1}
 .kv-w.in{fill:#ffffff}
@@ -102,11 +102,11 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .rd-keys{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2 4h20v16H2z M4 6v12h3v-5H6V6z M9 6v7H8v5h4v-5h-1V6z M13 6v7h-1v5h4v-5h-1V6z M17 6v7h-1v5h4V6z' fill-rule='evenodd'/%3E%3C/svg%3E")}
 #rTargetBox:hover .rd-pill,#rKeyBox:hover .rd-pill,#rTargetBox:focus-visible .rd-pill,#rKeyBox:focus-visible .rd-pill{background:color-mix(in srgb,var(--accent) 22%,var(--accent-soft))}
 #rTargetBox.on .rd-pill,#rKeyBox:active .rd-pill{background:var(--accent);color:var(--accent-ink)}
-#rKeyBox{cursor:pointer;user-select:none;-webkit-user-select:none;border-radius:0 8px 8px 0}
+#rKeyBox{cursor:pointer;user-select:none;-webkit-user-select:none;border-radius:0}
 
 .readout b{font-family:var(--font-mono);font-size:clamp(18px,4.2vw,26px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
 .readout span{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
-@media (max-width:560px){.readout{grid-template-columns:repeat(3,minmax(0,1fr))}.readout>div{padding:8px 10px}.readout>div:nth-child(n+4){border-top:1px solid var(--line)}.readout>div:nth-child(4){border-left:0}#rTargetBox{border-radius:8px 0 0 0}#rKeyBox{border-radius:0 0 8px 0}}
+@media (max-width:560px){.readout{grid-template-columns:repeat(3,minmax(0,1fr))}.readout>div{padding:8px 10px}.readout>div:nth-child(n+4){border-top:1px solid var(--line)}.readout>div:nth-child(4){border-left:0}#rTargetBox{border-radius:8px 0 0 0}#rKeyBox{border-radius:0 8px 0 0}}
 .c-good{color:var(--good)}.c-near{color:var(--near)}.c-off{color:var(--off)}
 
 .lane{overflow:hidden;position:relative}
@@ -501,8 +501,8 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   <div class="kv-card">
     <div class="kv-head"><h2 id="kvName">Key</h2><button id="kvClose" type="button" aria-label="Close">✕</button></div>
     <p class="kv-sub" id="kvRel"></p>
-    <div class="kv-size row"><button id="kvBig" type="button" aria-pressed="false" title="Bigger keys: one octave at a time">Bigger keys</button><span class="kv-oct" id="kvOctRow" hidden><button id="kvOctDn" type="button" aria-label="Lower octave">◀</button><span class="small" id="kvOctLab"></span><button id="kvOctUp" type="button" aria-label="Higher octave">▶</button></span></div>
     <div id="kvPiano"></div>
+    <div class="kv-size row"><button id="kvBig" type="button" aria-pressed="false" title="Bigger keys: one octave at a time">Bigger keys</button><span class="kv-oct" id="kvOctRow" hidden><button id="kvOctDn" type="button" aria-label="Lower octave">◀</button><span class="small" id="kvOctLab"></span><button id="kvOctUp" type="button" aria-label="Higher octave">▶</button></span></div>
     <p class="kv-sub" id="kvFrom" style="margin-bottom:10px"></p>
     <div class="kv-row">
       <button id="kvPlay" type="button" class="primary">▶ Play the scale</button>
@@ -550,10 +550,10 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   <section class="panel readout" aria-live="off">
     <div id="rTargetBox" role="button" tabindex="0" title="Press to hear the target note; hold while playing to hear the tune follow the line"><span>Target note</span><b id="rTarget" class="rd-pill rd-hear">–</b></div>
     <div class="you-cell"><span>You</span><div class="you-row"><b id="rYou">–</b><label class="btn icon-btn mic-btn guide-on" for="micOn" id="micLbl" title="Sing with microphone: on"><input id="micOn" type="checkbox" checked aria-label="Sing with microphone"><svg class="ic-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/><path d="M8 22h8"/></svg><svg class="ic-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1"/><path d="M19 10v1a7 7 0 0 1-.9 3.4"/><path d="M5 10v1a7 7 0 0 0 11 5.7"/><path d="M12 18v4"/><path d="M8 22h8"/><path d="M3 3l18 18"/></svg><span class="dot" id="micDot"></span></label></div></div>
+    <div id="rKeyBox" role="button" tabindex="0" title="The key of the song: press to see its notes on a piano"><span>Key</span><b id="rKey" class="rd-pill rd-keys">–</b></div>
     <div><span>Off by</span><b id="rCents">–</b></div>
     <div><span>On pitch</span><b id="rScore">–</b></div>
     <div><span>On time</span><b id="rTime">–</b></div>
-    <div id="rKeyBox" role="button" tabindex="0" title="The key of the song: press to see its notes on a piano"><span>Key</span><b id="rKey" class="rd-pill rd-keys">–</b></div>
   </section>
 
   <section class="panel lane">
@@ -1046,7 +1046,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 hf';
+const APP_VERSION='2026-10-29 hg';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
