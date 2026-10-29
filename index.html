@@ -628,7 +628,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           </div>
       </div>
       <div class="end-tip" id="endTip" hidden role="status"><span class="small">Heard a wrong note or a lyric out of time? Fix it with the pencil <b>✎</b> above (words: in the Lyrics editor), then tap Suggest my edits. Every fix helps the whole choir.</span><div class="row"><button id="endTipGo" type="button" class="primary">Show me</button><button id="endTipOff" type="button" class="link-btn">Don't show again</button><button id="endTipX" type="button" class="link-btn" aria-label="Close the tip">Close</button></div></div>
-      <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.</span><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
+      <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag the A and B tabs at the top to make the loop longer or shorter. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.</span><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
     </div>
   </section>
 
@@ -1024,7 +1024,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gs';
+const APP_VERSION='2026-10-29 gt';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2913,7 +2913,7 @@ function selectFragmentAt(t){
 function setEditMode(on){
   if(on){ timingTried(); edSnapTake(); }
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
+  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag the A and B tabs at the top to make the loop longer or shorter. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
   if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime());
 }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
@@ -3988,8 +3988,13 @@ function draw(){
     const xa=L.a!=null?xOf(L.a):LABELW, xb=L.b!=null?xOf(L.b):w;
     if(L.a!=null&&L.b!=null){ g.fillStyle=col('--loop'); g.fillRect(Math.max(LABELW,xa),0,Math.max(0,Math.min(w,xb)-Math.max(LABELW,xa)),h); }
     g.fillStyle=col('--loop-edge'); g.font='600 11px '+col('--font-mono'); g.textAlign='left'; g.textBaseline='top';
-    if(L.a!=null&&xa>=LABELW&&xa<=w){ g.fillRect(Math.round(xa),0,1.5,h); g.fillText('A',xa+4,4); }
-    if(L.b!=null&&xb>=LABELW&&xb<=w){ g.fillRect(Math.round(xb)-1,0,1.5,h); g.fillText('B',xb+4,4); }
+    // grab handles at the top of the A and B lines: drag them to make the loop longer or shorter
+    const grip=(x,lab)=>{ const hx=Math.round(x); g.fillStyle=col('--loop-edge'); g.fillRect(hx-(lab==='B'?1:0),0,1.5,h);
+      g.beginPath(); if(g.roundRect) g.roundRect(hx-7,2,14,26,5); else g.rect(hx-7,2,14,26); g.fill();
+      g.fillStyle=col('--surface'); g.fillRect(hx-2.5,9,1.2,12); g.fillRect(hx+1.3,9,1.2,12);
+      g.fillStyle=col('--loop-edge'); g.fillText(lab,hx+10,4); };
+    if(L.a!=null&&xa>=LABELW-7&&xa<=w+7) grip(xa,'A');
+    if(L.b!=null&&xb>=LABELW-7&&xb<=w+7) grip(xb,'B');
   }
   // editor: selection and original line
   if(S.editMode&&S.sel){ const a=Math.min(S.sel.a,S.sel.b), b=Math.max(S.sel.a,S.sel.b), xa=Math.max(LABELW,xOf(a)), xb=Math.min(w,xOf(b));
@@ -4196,6 +4201,10 @@ canvas.addEventListener('pointerdown',e=>{
   touchPts.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(touchPts.size===2){ if(drag&&drag.scroll){ drag.scroll=false; drag.moved=true; } pinch={d0:pinchDist(),win0:S.win,mid0:pinchMid(),pos0:S.pos}; if(drag){ clearTimeout(drag.timer); drag.moved=true; drag.pinch=true; if(drag.edit&&drag.sel0!==undefined) S.sel=drag.sel0; } canvas.setPointerCapture(e.pointerId); draw(); return; }
   if(touchPts.size>2) return;
+  if(touchPts.size===1&&(S.loop.a!=null||S.loop.b!=null)){ // grab a loop handle (the tab at the top of the A or B line)
+    const r=canvas.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top, now=visTime(), pps=(canvas.clientWidth-LABELW)/S.win, headX=LABELW+(canvas.clientWidth-LABELW)*0.3, X=t=>headX+(t-now)*pps, tol=e.pointerType==='mouse'?10:20;
+    if(y<=40){ const da=S.loop.a!=null?Math.abs(x-X(S.loop.a)):1e9, db=S.loop.b!=null?Math.abs(x-X(S.loop.b)):1e9, edge=Math.min(da,db)<=tol?(da<=db?'a':'b'):null;
+      if(edge){ e.preventDefault(); touchPts.delete(e.pointerId); drag={loopEdge:edge,a0:S.loop.a,b0:S.loop.b}; canvas.setPointerCapture(e.pointerId); return; } } }
   if(S.editMode&&S.sel&&touchPts.size===1){ // grab a stretch handle (edge of the selection)
     const t=laneTimeAt(e.clientX), pps=(canvas.clientWidth-LABELW)/S.win, a=Math.min(S.sel.a,S.sel.b), b=Math.max(S.sel.a,S.sel.b), tol=(e.pointerType==='mouse'?8:16)/pps;
     const edge=Math.abs(t-a)<=tol?'a':Math.abs(t-b)<=tol?'b':null;
@@ -4209,11 +4218,17 @@ canvas.addEventListener('mousedown',e=>{ if(e.button===1) e.preventDefault(); })
 canvas.addEventListener('auxclick',e=>{ if(e.button===1) e.preventDefault(); });
 // stop the phone's own long-press buzz and menus on the lane (the app's loop-mark buzz still works)
 canvas.addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
-canvas.addEventListener('pointermove',e=>{ if(drag&&drag.stretch){ const d=drag, t=snapT(laneTimeAt(e.clientX)), minL=Math.max(0.05,snapStep(t)||0.1); let a1=d.a0,b1=d.b0;   // edge handle: make the selection bigger or smaller
+canvas.addEventListener('pointermove',e=>{ if(drag&&drag.loopEdge){ const d=drag, t=Math.round(snapT(laneTimeAt(e.clientX))*100)/100;   // loop handle: move A or B (snaps to the grid)
+    if(d.loopEdge==='a') S.loop.a=Math.max(0,Math.min(t,S.loop.b!=null?S.loop.b-0.5:S.dur)); else S.loop.b=Math.min(S.dur,Math.max(t,S.loop.a!=null?S.loop.a+0.5:0));
+    d.moved=true; updateLoopUI(); draw(); return; }
+  if(drag&&drag.stretch){ const d=drag, t=snapT(laneTimeAt(e.clientX)), minL=Math.max(0.05,snapStep(t)||0.1); let a1=d.a0,b1=d.b0;   // edge handle: make the selection bigger or smaller
     if(d.stretch==='a') a1=Math.max(0,Math.min(t,d.b0-minL)); else b1=Math.min(S.dur,Math.max(t,d.a0+minL));
     if(a1!==d.a1||b1!==d.b1){ d.a1=a1; d.b1=b1; S.sel={a:a1,b:b1,m:S.sel&&S.sel.m}; updateSelInfo(); draw(); } return; }
   if(S.lyrDrag){ const d=S.lyrDrag, pps=(canvas.clientWidth-LABELW)/S.win; let t=lyrT(d.t0+(e.clientX-d.x0)/pps); if(t<d.min) t=lyrT(d.min+snapStep()); if(t>d.max) t=lyrT(d.max-snapStep()); if(t>=d.min&&t<=d.max) S.lyrics[d.i].t=t; draw(); return; } if(kb&&kb.pts.has(e.pointerId)){ kb.pts.set(e.pointerId,e.clientY); kbMove(); return; } if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); tapFollow(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(drag.scroll){ pageDrag(drag,e.clientY); return; } if(!drag.isMouse&&!drag.moved&&!drag.long&&!drag.sweep){ const dx=Math.abs(e.clientX-drag.x), dy=Math.abs(e.clientY-drag.y0); if(dy>9&&dy>1.4*dx){ drag.scroll=true; clearTimeout(drag.timer); drag.sy=drag.y0; drag.ys=[]; pageDrag(drag,e.clientY); return; } if(dx<=6) return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.sweep){ sweepSel(drag.sweep,laneTimeAt(e.clientX)); return; } if(drag.samples){ drag.samples.push([performance.now(),e.clientX]); if(drag.samples.length>8) drag.samples.shift(); } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); tapFollow(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
+  if(drag&&drag.loopEdge){ const d=drag; drag=null; touchPts.delete(e.pointerId);
+    if(d.moved&&(S.loop.a!==d.a0||S.loop.b!==d.b0)){ S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); setStatus('Loop '+(S.loop.a!=null?fmtT1(S.loop.a):'start')+' – '+(S.loop.b!=null?fmtT1(S.loop.b):'end')+'.'); }
+    draw(); return; }
   if(drag&&drag.stretch){ drag=null; touchPts.delete(e.pointerId); updateSelInfo(); draw(); return; }
   if(S.lyrDrag){ const d=S.lyrDrag; S.lyrDrag=null; const L=S.lyrics[d.i]; if(L.t!==d.t0){ if(S.tap){ S.tap.hist.push({i:d.i,t:d.t0,cleared:[],moved:true,back:S.tap.i}); $('#lyrUndo').disabled=false; } else { undoPush({lyr:d.i,t:d.t0}); updateSelInfo(); } setStatus('“'+L.text+'” moved to '+fmtT1(L.t)+'.'); } lyrChanged(); return; }
   if(kb&&kb.pts.has(e.pointerId)){ kb.pts.delete(e.pointerId);
