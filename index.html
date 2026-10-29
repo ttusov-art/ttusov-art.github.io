@@ -1013,7 +1013,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gj';
+const APP_VERSION='2026-10-29 gk';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4716,7 +4716,7 @@ async function rememberBases(z,man,byUid){ let n=0;
   if(n&&S.cur&&S.cur.libId!=null) refreshCurBase(); }
 function changesTxt(c){ const p=[]; if(c.added) p.push(c.added+' new song'+(c.added>1?'s':'')); if(c.updated) p.push(c.updated+' changed song'+(c.updated>1?'s':'')); if(c.reordered) p.push('a new song order'); return p.join(' and ')+(c.bytes!=null?' ('+(c.bytes<1048576?'under 1 MB':'about '+Math.round(c.bytes/1048576)+' MB')+')':''); }
 // upd = {url, slug, part} when run from the Update button: progress goes to the message line, no link box
-async function addFromLink(upd){ if(upd&&typeof upd.url!=='string') upd=null;   // a click event is not an update
+async function addFromLink(upd){ if(upd&&typeof upd.url!=='string') upd=null; $('#linkGo').classList.remove('next-step');   // a click event is not an update
   const out=upd?$('#status'):$('#linkText'), btn=$('#linkGo'); let url; const raw=upd?upd.url:$('#linkIn').value.trim();
   try{ url=directUrl(raw); }catch(e){ out.textContent=e.message[0].toUpperCase()+e.message.slice(1)+'.'; return; }
   if(!upd) btn.disabled=true; out.textContent=upd?'Updating'+(upd.part?' '+upd.part:'')+'…':'Checking the shared library…';
@@ -4845,15 +4845,18 @@ async function openSharedLink(url,slug,partName){
     if(mine){ $('#linkIntro').textContent='You already have '+mine+' song'+(mine>1?'s':'')+' in '+partName+'. Tap Update to get any new songs and changes.'; $('#linkGo').textContent='Update'; setShared(url,partName,slug||null); }
     else $('#linkIntro').textContent=(partName?partName+': songs shared with you.':'A song library was shared with you.')+' Tap Add songs to download them into your library on this device.';
     $('#linkText').textContent='(The quick check did not work: '+err+'.)';
-    setStatus((mine?'Updates for ':'Someone shared ')+(partName||'songs')+(mine?' may be ready.':' with you.')+' See the Song section below.'); return; }
+    setStatus((mine?'Updates for ':'Someone shared ')+(partName||'songs')+(mine?' may be ready.':' with you.')+' See the Song section below.'); linkGoHint(); return; }
   const name=partName||c.part||'these songs', have=c.total-c.added;
-  if(!have){ $('#linkIntro').textContent=name+': '+c.total+' song'+(c.total>1?'s':'')+' shared with you. Tap Add songs to download them into your library on this device.'; setStatus('Someone shared '+name+' with you. See the Song section below.'); return; }
+  if(!have){ $('#linkIntro').textContent=name+': '+c.total+' song'+(c.total>1?'s':'')+' shared with you. Tap Add songs to download them into your library on this device.'; setStatus('Someone shared '+name+' with you. See the Song section below.'); linkGoHint(); return; }
   if(!c.added&&!c.updated){ setShared(url,c.part||partName||null,slug||null); S.pendingSlug=null;
     $('#linkBox').hidden=false; $('#linkIntro').textContent='✓ You already have all '+c.total+' song'+(c.total>1?'s':'')+' of '+name+', and they are up to date. New songs and changes will show up as an Update button next to Play.';
     $('#linkGo').hidden=true; $('#linkText').textContent=''; setStatus('You already have everything from this link.'); return; }
   $('#linkIntro').textContent='You already have '+have+' of the '+c.total+' songs of '+name+'. Updates are ready: '+changesTxt(c)+'.'; $('#linkGo').textContent='Update';
-  setStatus('Updates are ready for '+name+'. Tap Update in the Song section.');
+  setStatus('Updates are ready for '+name+'. Tap Update in the Song section.'); linkGoHint();
 }
+// opened from a share link: Add songs (or Update) is the next step, so it pulses and comes into view
+function linkGoHint(){ const b=$('#linkGo'); if(b.hidden) return; b.classList.add('next-step'); const go=()=>b.scrollIntoView({block:'center',behavior:'smooth'});
+  const v=$('#bootView'); if(v){ const t=setInterval(()=>{ if(!document.getElementById('bootView')){ clearInterval(t); go(); } },200); } else setTimeout(go,200); }
 function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
 $('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); chooseSongHintOff(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
 document.addEventListener('click',e=>{ if(!$('#guideMenu').hidden&&!e.target.closest('.pick-wrap')) closeGuideMenu(); });
