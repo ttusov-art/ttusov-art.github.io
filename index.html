@@ -1044,7 +1044,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 hd';
+const APP_VERSION='2026-10-29 he';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2288,7 +2288,7 @@ async function saveKey(){ if(!S.cur||S.cur.libId==null) return; const k=S.mkey?{
 // ----- key view: two octaves with the notes of the key named, the home note marked -----
 S.kvKey=null;
 function openKeyView(){ if(!S.mkey) return; S.kvKey={tonic:S.mkey.tonic,mode:S.mkey.mode}; $('#keyView').hidden=false; renderKeyView(); $('#kvClose').focus({preventScroll:true}); }
-function closeKeyView(){ $('#keyView').hidden=true; kvStop(); }
+function closeKeyView(){ S.kvFingers.forEach(f=>{ if(f.v) voiceOff(f.v,true); }); S.kvFingers.clear();  $('#keyView').hidden=true; kvStop(); }
 function renderKeyView(){
   const k=S.kvKey||S.mkey; if(!k) return; const sp=scaleSpelling(k), r=relKey(k), same=S.mkey&&S.mkey.tonic===k.tonic&&S.mkey.mode===k.mode;
   $('#kvName').textContent=keyName(k);
@@ -2320,11 +2320,15 @@ function kvPlayScale(){
 }
 function kvMark(m){ $('#kvPiano').querySelectorAll('rect.on').forEach(r=>r.classList.remove('on')); if(m==null) return; const r=$('#kvPiano').querySelector('rect[data-m="'+m+'"]'); if(r) r.classList.add('on'); }
 // tap a key to hear it; slide the finger (or mouse) over the keys and the sound follows from key to key
+// every finger plays its own key (chords: press several keys at once); sliding a finger moves its own note from key to key
+S.kvFingers=new Map();
+function kvMarks(){ const on=new Set([...S.kvFingers.values()].map(f=>f.m)); $('#kvPiano').querySelectorAll('rect[data-m]').forEach(r=>r.classList.toggle('on',on.has(+r.dataset.m))); }
 function kvTap(e){ const r0=e.target.closest('rect[data-m]'); if(!r0) return; e.preventDefault(); if(S.kvPlaying) kvStop();
-  let cur=null; const sound=m=>{ if(m===cur) return; S.kvVoices.forEach(v=>voiceOff(v,true)); S.kvVoices=[voiceOn(m+kvShift(),S.keySound,S.limiter,keyVol())]; cur=m; kvMark(m); };
+  const id=e.pointerId, f={m:null,v:null}; S.kvFingers.set(id,f);
+  const sound=m=>{ if(m===f.m) return; if(f.v) voiceOff(f.v,true); f.v=voiceOn(m+kvShift(),S.keySound,S.limiter,keyVol()); f.m=m; kvMarks(); };
   sound(+r0.dataset.m);
-  const move=ev=>{ const el=document.elementFromPoint(ev.clientX,ev.clientY), r=el&&el.closest&&el.closest('#kvPiano rect[data-m]'); if(r) sound(+r.dataset.m); };
-  const up=()=>{ S.kvVoices.forEach(v=>voiceOff(v)); S.kvVoices=[]; kvMark(null); window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); window.removeEventListener('pointercancel',up); };
+  const move=ev=>{ if(ev.pointerId!==id) return; const el=document.elementFromPoint(ev.clientX,ev.clientY), r=el&&el.closest&&el.closest('#kvPiano rect[data-m]'); if(r) sound(+r.dataset.m); };
+  const up=ev=>{ if(ev.pointerId!==id) return; if(f.v) voiceOff(f.v); S.kvFingers.delete(id); kvMarks(); window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); window.removeEventListener('pointercancel',up); };
   window.addEventListener('pointermove',move); window.addEventListener('pointerup',up); window.addEventListener('pointercancel',up); }
 
 // ===== suggestions from choir members (Google Apps Script inbox) =====
