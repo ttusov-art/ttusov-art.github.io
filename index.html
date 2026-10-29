@@ -396,6 +396,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .req-item{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)} .req-item .row{gap:6px}
 .danger-btn{color:var(--off);border-color:color-mix(in srgb,var(--off) 45%,var(--line))}
 .wipe-field{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.pick-list{max-height:48vh;overflow:auto;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.pick-song{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line);cursor:pointer} .pick-song input{width:20px;height:20px;flex:none;accent-color:var(--accent)} .pick-song>span{display:flex;flex-direction:column;min-width:0}
+.pick-all{gap:14px;margin:6px 0}
+.skip-list{display:flex;flex-direction:column;gap:2px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)} .skip-head{color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.skip-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;color:var(--muted)} .skip-row .skip-name{color:var(--fg)}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
 .ed-row .member-tip{flex:1 1 100%}
@@ -722,6 +727,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     </div>
     <div id="songList"></div>
     <span class="small" id="storeText"></span>
+    <div class="skip-list" id="skipList" hidden></div>
     <span class="small" id="libEmpty">No songs in this part yet. Add them with Update or a shared link from your moderator.</span>
     </div>
   </details>
@@ -1007,7 +1013,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gg';
+const APP_VERSION='2026-10-29 gh';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1621,6 +1627,12 @@ function isOwnerPart(part){ return !!sugKey()||ownerParts().includes(part); }
 function delSongs(){ try{ return JSON.parse(localStorage.getItem('pc-del-songs')||'[]'); }catch(e){ return []; } }
 function setDelSongs(l){ try{ localStorage.setItem('pc-del-songs',JSON.stringify(l)); }catch(e){} }
 function forgetSong(s){ if(s&&s.uid&&!isOwnerPart(S.part)){ const l=delSongs(); if(!l.includes(s.uid)){ l.push(s.uid); setDelSongs(l); } } }
+// songs from a share link that you chose not to download (kept as a list, so you can fetch them later from the Song library)
+function skipGet(){ try{ return JSON.parse(localStorage.getItem('pc-skip-songs')||'{}')||{}; }catch(e){ return {}; } }
+function skipSave(o){ try{ localStorage.setItem('pc-skip-songs',JSON.stringify(o)); }catch(e){} }
+const isSkipped=uid=>!!skipGet()[uid];
+function songBytes(z,m,cur){ let n=0; const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) n+=z.size(m.files.pcm)||0;
+  for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) n+=z.size(f)||0; for(const b of (m.backs||[])) n+=z.size(b.file)||0; return n; }
 const skipDeleted=(m,man)=>!restoreBacks()&&!!man.part&&!isOwnerPart(man.part)&&delSongs().includes(m.uid);
 function restoreBacks(){ try{ return localStorage.getItem('pc-restore-backs')!=='0'; }catch(e){ return true; } }
 const wasDeleted=(c,b)=>!!c&&(c.delBacks||[]).some(d=>d.name===b.name&&!!d.sep===!!b.sep&&(d.size==null||b.size==null||d.size===b.size));
@@ -1656,15 +1668,15 @@ async function backupLibrary(fixedName,btn0,txt0){
   }catch(err){ txt.textContent='Backup failed: '+((err&&err.message)||'unknown error')+'.'; }
   finally{ btn.disabled=false; }
 }
-function neededBytes(z,man,byUid){
-  let need=0;
-  for(const m of man.songs){ const cur=byUid[m.uid]; if(!cur&&skipDeleted(m,man)) continue; if(cur&&!wantsBacksBack(cur,m)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
+function neededBytes(z,man,byUid,want){
+  let need=0; want=want||(u=>!isSkipped(u));
+  for(const m of man.songs){ const cur=byUid[m.uid]; if(!cur&&(skipDeleted(m,man)||!want(m.uid))) continue; if(cur&&!wantsBacksBack(cur,m)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
     const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) need+=z.size(m.files.pcm);
     for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) need+=z.size(f);
     const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!(!restoreBacks()&&wasDeleted(cur,b))&&!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
   return need;
 }
-async function restoreLibrary(file,out,askBig,force){   // force: every song in the file replaces the one here (the moderator's restore)
+async function restoreLibrary(file,out,askBig,force,opts){   // force: every song in the file replaces the one here (the moderator's restore)
   const txt=out||$('#status'); txt.textContent='Reading '+(out&&out.id==='status'?'the update':(file.name||'the library'))+'…';
   try{
     const z=await openZip(file), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
@@ -1676,8 +1688,14 @@ async function restoreLibrary(file,out,askBig,force){   // force: every song in 
       if(conf.length){ const ch=await askUnsent(conf);
         if(ch==='later'){ txt.textContent='Update postponed. Send or discard your edits, then tap Update again.'; return false; }
         if(ch==='send'){ for(const c of conf){ try{ await postSuggestion(c,S.cur&&S.cur.libId===c.id?liveOf():null); }catch(e){} } } } }
+    // new songs from a share link: choose which ones to download (the rest are listed under "Not on this phone")
+    let only=opts&&opts.only?opts.only:null, skipNew=[];
+    if(shared&&!force&&!only){ const fresh=man.songs.filter(m=>!byUid[m.uid]&&!skipDeleted(m,man)&&!isSkipped(m.uid));
+      if(fresh.length){ const first=!existing.some(x=>partOf(x)===man.part), pick=await pickSongs(fresh,z,man,first); if(pick===null){ txt.textContent='Nothing downloaded. Tap again when you want to choose your songs.'; return false; }
+        only=new Set(pick); skipNew=fresh.filter(m=>!only.has(m.uid)); } }
+    const want=only?(u=>only.has(u)):null;
     if(askBig){ // how much this will download: only new audio and changed edits
-      const need=neededBytes(z,man,byUid);
+      const need=neededBytes(z,man,byUid,want||undefined);
       if(!(await okToDownload(need))){ txt.textContent='Download cancelled. Tap again when you are on Wi-Fi, or to download anyway.'; return false; }
     }
     let added=0,updated=0,skipped=0,i=0; const updIds=[];
@@ -1685,6 +1703,7 @@ async function restoreLibrary(file,out,askBig,force){   // force: every song in 
       i++; txt.textContent='Restoring song '+i+' of '+man.songs.length+'…';
       const cur=byUid[m.uid];
       if(!cur&&shared&&skipDeleted(m,man)) continue;   // you deleted it and restoring is off
+      if(!cur&&shared&&!force&&(only?!only.has(m.uid):isSkipped(m.uid))) continue;   // not chosen for this phone
       if(cur&&!force&&!wantsBacksBack(cur,m)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
         if(shared&&!cur.base){ // shared before this version: remember the shared version now (from the file if you edited it since)
           const same=(cur.updated||cur.created)===(m.updated||m.created), c0=same?toF32(cur.contour):(m.files.contour?new Float32Array(await (await z.get(m.files.contour)).arrayBuffer()):null);
@@ -1706,6 +1725,11 @@ async function restoreLibrary(file,out,askBig,force){   // force: every song in 
       if(shared&&rec.contour) rec.base={updated:rec.updated,contour:Float32Array.from(rec.contour),lyrics:rec.lyrics.map(l=>({t:l.t,text:l.text}))};   // the shared version: suggestions are made against it
       await libPutRaw(rec); if(shared) markPublished(m.uid); if(cur){ updated++; updIds.push(cur.id); } else { added++; const dl=delSongs(); if(dl.includes(m.uid)) setDelSongs(dl.filter(u=>u!==m.uid)); }
     }
+    if(shared&&!force){ const sk=skipGet(); let ch=false;
+      for(const m of skipNew){ sk[m.uid]={part:m.part||man.part,name:m.name,dur:m.dur,size:songBytes(z,m,null)}; ch=true; }
+      for(const m of man.songs){ if(sk[m.uid]&&byUid[m.uid]===undefined&&only&&only.has(m.uid)){ delete sk[m.uid]; ch=true; } else if(sk[m.uid]&&sk[m.uid].name!==m.name){ sk[m.uid].name=m.name; ch=true; } }
+      for(const u of Object.keys(sk)) if(sk[u].part===man.part&&!man.songs.some(m=>m.uid===u)){ delete sk[u]; ch=true; }   // no longer shared
+      if(ch) skipSave(sk); }
     let reordered=false; if(Array.isArray(man.order)&&man.order.length){ // the sharer's running order
       const all=await libList(), part=man.part, mine=sortSongs(all.filter(x=>partOf(x)===part)), byU={}; mine.forEach(x=>{ if(x.uid) byU[x.uid]=x; });
       const ordered=man.order.map(u=>byU[u]).filter(Boolean), rest=mine.filter(x=>!ordered.includes(x));
@@ -1715,10 +1739,38 @@ async function restoreLibrary(file,out,askBig,force){   // force: every song in 
     await renderLib();
     if(S.cur&&updIds.includes(S.cur.libId)){ if(S.playing) stop(); const ed=S.editMode; await openLibSong(S.cur.libId,true); if(ed) setEditMode(true); }   // the open song was replaced: show the new version (never save the old one over it)
     const parts=[]; if(added) parts.push(added+' added'); if(updated) parts.push(updated+' updated'); if(reordered&&!added) parts.push('song order updated'); if(skipped) parts.push(skipped+' already up to date');
+    if(skipNew.length) parts.push(skipNew.length+' left out (see Not on this phone)');
     txt.textContent=(out?'Done: ':'Restore finished: ')+(parts.join(', ')||'nothing to restore')+'.'+(out&&out.id!=='status'&&(added||updated)?' Tap Choose song to open one.':'');
     return man.part||true;
   }catch(err){ txt.textContent=(out?'Could not add the songs: ':'Restore failed: ')+((err&&err.message)||'unknown error')+'.'; return false; }
 }
+// choose songs from a share link (all ticked); returns the chosen uids, or null when cancelled
+async function pickSongs(fresh,z,man,first){
+  const rows=fresh.map((m,i)=>'<label class="pick-song"><input type="checkbox" checked data-i="'+i+'"><span><b>'+esc(m.name)+'</b><span class="small">'+fmtT(m.dur||0)+' · '+fmtMB(songBytes(z,m,null))+'</span></span></label>').join('');
+  const part=man.part||'this part';
+  const r=await dlg({title:first?'Choose your songs':'New songs in '+part,
+    html:'<p class="kv-sub">'+(first?'Download only the songs you need now; this keeps the app small. ':'The moderator added '+(fresh.length>1?fresh.length+' songs':'a song')+'. ')+'Songs you leave out stay available under <b>Not on this phone</b> in the Song library.</p>'+
+      '<div class="row pick-all"><button type="button" class="link-btn" data-all="1">Select all</button><button type="button" class="link-btn" data-all="0">Select none</button></div><div class="pick-list">'+rows+'</div>',
+    buttons:[{label:'Download',value:'ok',primary:true},{label:'Cancel',value:null}],
+    onOpen:(b)=>{ const btn=$('#dlgBtns button.primary'), boxes=[...b.querySelectorAll('input[type=checkbox]')];
+      const upd=()=>{ const sel=boxes.filter(x=>x.checked), mb=sel.reduce((a,x)=>a+songBytes(z,fresh[+x.dataset.i],null),0); btn.textContent=sel.length?'Download '+sel.length+' song'+(sel.length>1?'s':'')+' ('+fmtMB(mb)+')':'Continue without them'; };
+      boxes.forEach(x=>x.addEventListener('change',upd)); b.querySelectorAll('[data-all]').forEach(x=>x.addEventListener('click',()=>{ boxes.forEach(c=>c.checked=x.dataset.all==='1'); upd(); })); upd(); btn.focus({preventScroll:true}); }});
+  if(r.value!=='ok') return null;
+  return [...r.body.querySelectorAll('input[type=checkbox]')].filter(x=>x.checked).map(x=>fresh[+x.dataset.i].uid); }
+function paintSkipList(){ const box=$('#skipList'); if(!box) return; const sk=skipGet(), mine=Object.entries(sk).filter(([u,x])=>x.part===S.part);
+  box.hidden=!mine.length; if(!mine.length){ box.innerHTML=''; return; }
+  box.innerHTML='<b class="small skip-head">Not on this phone ('+mine.length+')</b>';
+  mine.forEach(([u,x])=>{ const d=document.createElement('div'); d.className='skip-row'; d.innerHTML='<span><span class="skip-name"></span><span class="small"></span></span><button type="button">Download</button>';
+    d.querySelector('.skip-name').textContent=x.name; d.querySelector('.small').textContent=' '+fmtT(x.dur||0)+(x.size?' · '+fmtMB(x.size):''); d.querySelector('button').addEventListener('click',e=>fetchSkipped(u,e.target)); box.appendChild(d); }); }
+async function fetchSkipped(uid,btn){ const it=skipGet()[uid]; if(!it) return; const sh=getShared().find(x=>x.part===it.part)||getShared()[0];
+  if(!sh){ setStatus('The share link for '+it.part+' is not on this phone any more. Open the link from your moderator again.',true); return; }
+  let url; try{ url=directUrl(sh.url); }catch(e){ setStatus(e.message,true); return; }
+  if(btn) btn.disabled=true; const out=$('#status'); out.textContent='Downloading '+it.name+'…';
+  try{ const rf=await remoteFile(url), only=new Set([uid]);
+    if(rf) await restoreLibrary(rf,out,true,false,{only});
+    else { const blob=await fetchBlob(url,(got,total)=>{ out.textContent='Downloading… '+mbTxt(got)+(total?' of '+mbTxt(total):''); },true); if(blob) await restoreLibrary(new File([blob],'shared library.zip'),out,false,false,{only}); } }
+  catch(e){ out.textContent='Could not download '+it.name+': '+((e&&e.message)||'unknown error')+'.'; }
+  finally{ if(btn) btn.disabled=false; paintSkipList(); } }
 // ===== parts (separate libraries, e.g. Soprano 1, Alto 2, Tenor) =====
 S.parts=[]; S.part=null;
 function partsSave(){ try{ localStorage.setItem('pc-parts',JSON.stringify(S.parts)); localStorage.setItem('pc-part',S.part); }catch(e){} }
@@ -1756,7 +1808,7 @@ async function renamePart(){
   partsSave(); renderLib();
 }
 function deletePart(){ if(S.parts.length<2) return; S.parts=S.parts.filter(n=>n!==S.part); S.part=S.parts[0]; partsSave(); renderLib(); }
-async function renderLib(){
+async function renderLib(){ setTimeout(paintSkipList,0);
   showStorage();
   const all=await libMeta(); renderParts(all);
   const songs=sortSongs(all.filter(x=>partOf(x)===S.part)).map(s=>({id:s.id,uid:s.uid,name:s.name,created:s.created,dur:s.dur,nb:s.nb!=null?s.nb:backsOf(s).length}));
@@ -4650,7 +4702,7 @@ async function sharedChanges(url){
   const rf=await remoteFile(directUrl(url)); if(!rf) return null;
   const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
   const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
-  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c){ if(!skipDeleted(m,man)) added++; } else if(wantsBacksBack(c,m)||(memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
+  let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c){ if(!skipDeleted(m,man)&&!isSkipped(m.uid)) added++; } else if(wantsBacksBack(c,m)||(memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
   let reordered=false; if(Array.isArray(man.order)&&man.part){ const mine=sortSongs(local.filter(x=>partOf(x)===man.part)).map(x=>x.uid).filter(u=>man.order.includes(u)), theirs=man.order.filter(u=>mine.includes(u)); reordered=mine.join()!==theirs.join(); }
   if(man.part&&!isOwnerPart(man.part)) await rememberBases(z,man,byUid);
   return {added,updated,reordered,total:man.songs.length,part:man.part||null,bytes:neededBytes(z,man,byUid)};
