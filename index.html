@@ -797,6 +797,10 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         <span class="small">The Click button above the pitch lane plays a click on every beat of the song's beat grid.</span>
       </div>
       <div class="field">
+        <label class="check" for="hsResume"><input id="hsResume" type="checkbox" checked>Headset button can resume playback</label>
+        <span class="small">On: the play/pause button on your headphones both pauses and continues. The phone then keeps showing the Pause symbol on the lock screen even while paused (for up to 10 minutes). Off: the lock screen shows the right symbol, but the headset button can only pause.</span>
+      </div>
+      <div class="field">
         <label class="check" for="restoreBacksOn"><input id="restoreBacksOn" type="checkbox" checked>Restore deleted songs and backings with updates</label>
         <span class="small">On: when the moderator's update arrives, songs and backing tracks you deleted come back. Off: what you deleted stays deleted (saves space on this device).</span>
       </div>
@@ -1024,7 +1028,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gx';
+const APP_VERSION='2026-10-29 gy';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3895,6 +3899,7 @@ function silentWavUrl(){
   for(let i=0;i<n;i++) v.setUint8(44+i,128+((i*7919)%997===0?1:0));
   return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
 }
+function hsResume(){ try{ return localStorage.getItem('pc-hsresume')!=='0'; }catch(e){ return true; } }
 function mediaPos(){ try{ if('mediaSession' in navigator&&navigator.mediaSession.setPositionState&&S.dur>0) navigator.mediaSession.setPositionState({duration:S.dur,playbackRate:S.rate||1,position:Math.max(0,Math.min(S.dur,curT()))}); }catch(e){} }
 function mediaOn(){
   try{
@@ -3938,9 +3943,12 @@ async function mediaSkipRun(){ const sk=S.skip; if(!sk) return; if(sk.busy){ cle
   setStatus((sk.was?'Now playing: ':'Next song: ')+sk.list[k].name+' ('+(k+1)+' of '+sk.list.length+').'); }
 function mediaOff(){
   if(S.skip||S.keepMedia){ mediaMeta(); return; }   // switching songs: keep the controls
-  // paused: the silent track stops too, so the phone shows the Play symbol. The headset button still reaches the app:
-  // the phone may send "pause" for every press while the app's sound engine is on, so play/pause both toggle (below).
-  try{ if(S.keep) S.keep.pause(); if('mediaSession' in navigator){ navigator.mediaSession.playbackState='paused'; mediaPos(); } }catch(e){}
+  // paused. Chrome on Android sends the headset button only to a page whose sound is running, and shows the lock-screen
+  // symbol by the same rule: with "Headset button can resume" on, the silent track keeps running (up to 10 minutes),
+  // otherwise it stops and the lock screen shows Play.
+  try{ if('mediaSession' in navigator){ navigator.mediaSession.playbackState='paused'; mediaPos(); }
+    clearTimeout(S.keepOffT);
+    if(S.keep){ if(hsResume()) S.keepOffT=setTimeout(()=>{ try{ if(!S.playing&&!S.review&&S.keep) S.keep.pause(); }catch(e){} },10*60e3); else S.keep.pause(); } }catch(e){}
 }
 function showResult(){
   if(S.stat.n<30){ $('#result').hidden=true; return; }
@@ -4462,6 +4470,8 @@ $('#adminUnlock').addEventListener('click',unlockAdmin);
 $('#sugKeyIn').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); unlockAdmin(); } });
 $('#apCheck').addEventListener('click',()=>apFetch(true));
 $('#wipeBtn').addEventListener('click',wipeAll);
+$('#hsResume').checked=hsResume();
+$('#hsResume').addEventListener('change',e=>{ try{ localStorage.setItem('pc-hsresume',e.target.checked?'1':'0'); }catch(x){} if(!S.playing&&!S.review){ if(e.target.checked) mediaOff(); else { clearTimeout(S.keepOffT); try{ S.keep&&S.keep.pause(); }catch(x){} } } });
 $('#newVerGo').addEventListener('click',()=>{ try{ if(S.playing) stop(); savePos(); }catch(e){} location.reload(); });
 $('#newVerX').addEventListener('click',()=>{ S.verDismissed=S.verRemote; $('#newVer').hidden=true; });
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkAppVersion(); });
