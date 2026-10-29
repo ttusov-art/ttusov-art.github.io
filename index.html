@@ -1013,7 +1013,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gh';
+const APP_VERSION='2026-10-29 gj';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1854,7 +1854,7 @@ async function copySongTo(id,part){
 // "Loading…" while a song opens: on the pitch lane and on the Choose song button
 function songLoading(on,name){ const ov=$('#laneLoading'), gp=$('#guidePick'); ov.hidden=!on; if(on) ov.textContent='Loading'+(name?' '+name:'')+'…';
   const tn=[...gp.childNodes].find(n=>n.nodeType===3); if(tn) tn.textContent=on?'Loading… ':'Choose song'; gp.disabled=on; }
-async function openLibSong(id,auto){
+async function openLibSong(id,auto){ chooseSongHintOff();
   const mi=libMetaCache&&libMetaCache.find(x=>x.id===id); songLoading(true,mi&&mi.name);
   try{ return await openLibSongInner(id,auto); } finally{ songLoading(false); }
 }
@@ -4673,7 +4673,7 @@ new MutationObserver(()=>{ const el=document.getElementById('linkText'); if(!el|
 function showLinkBox(url,shared){
   if(!shared) S.pendingSlug=null;
   $('#linkGo').hidden=false;
-  $('#linkBox').hidden=false; $('#linkIn').value=url||''; $('#linkText').textContent=''; $('#linkGo').disabled=false;
+  $('#linkBox').hidden=false; $('#linkIn').hidden=false; $('#linkIn').value=url||''; $('#linkText').textContent=''; $('#linkGo').disabled=false;
   $('#linkIntro').textContent=shared==='update'||shared==='check'?'Songs shared with you through a link. Only new songs and changes are downloaded.':shared?'Someone shared a song library with you. Tap Add songs to download it into your library on this device.':'Paste the Dropbox link to a Part Coach backup. Its songs are added to your library.';
   $('#linkGo').textContent=shared==='update'||shared==='check'?'Update':'Add songs';
   $('#linkBox').scrollIntoView({block:'center',behavior:'smooth'}); if(!url&&!shared) $('#linkIn').focus({preventScroll:true});
@@ -4730,12 +4730,17 @@ async function addFromLink(upd){ if(upd&&typeof upd.url!=='string') upd=null;   
       if(!blob){ out.textContent='Download cancelled. Tap again when you are on Wi-Fi, or to download anyway.'; return; }
       ok=await restoreLibrary(new File([blob],'shared library.zip'),out);
     }
-    if(ok){ setShared(raw,typeof ok==='string'?ok:(upd&&upd.part)||null,upd?upd.slug||null:S.pendingSlug||null); if(!upd){ S.pendingSlug=null; installTip(); setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); setTimeout(()=>{ if(!(S.updReady&&S.updReady.length)) checkShared(false); },800); } }
+    if(ok){ setShared(raw,typeof ok==='string'?ok:(upd&&upd.part)||null,upd?upd.slug||null:S.pendingSlug||null); if(!upd){ S.pendingSlug=null; installTip(); setStatus('Shared songs are in your library'+(typeof ok==='string'?', in the part '+ok:'')+'. Tap Choose song to open one.'); chooseSongHint(); setTimeout(()=>{ if(!(S.updReady&&S.updReady.length)) checkShared(false); },800); } }
     if(ok&&upd) out.textContent=out.textContent.replace(' Tap Choose song to open one.','').replace(/^Done: /,'Update finished'+(upd.part?' for '+upd.part:'')+': ');
     return ok;
   }catch(e){ out.textContent=(upd?'Could not update':'Could not add the songs')+': '+e.message+'.'; return false; }
   finally{ if(!upd) btn.disabled=false; }
 }
+// first songs downloaded: Choose song is the next step, so it pulses until a song is opened
+function chooseSongHint(){ $('#linkGo').hidden=true; $('#linkIn').hidden=true; $('#linkText').textContent=$('#linkText').textContent.replace(' Tap Choose song to open one.',''); $('#linkIntro').textContent='✓ The songs are on this phone.'+(S.cur&&S.cur.libId!=null?'':' Now tap Choose song above to open one.');
+  if(S.cur&&S.cur.libId!=null) return; const b=$('#guidePick'); b.classList.add('next-step','pick-hint');
+  setTimeout(()=>b.scrollIntoView({block:'center',behavior:'smooth'}),300); }
+function chooseSongHintOff(){ const b=$('#guidePick'); if(b&&b.classList.contains('pick-hint')) b.classList.remove('next-step','pick-hint'); }
 // ----- Part Coach as an app on the phone's home screen -----
 S.installEvt=null; window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); S.installEvt=e; });
 function isStandalone(){ return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true; }
@@ -4850,7 +4855,7 @@ async function openSharedLink(url,slug,partName){
   setStatus('Updates are ready for '+name+'. Tap Update in the Song section.');
 }
 function closeGuideMenu(){ $('#guideMenu').hidden=true; $('#guidePick').setAttribute('aria-expanded','false'); }
-$('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
+$('#guidePick').addEventListener('click',e=>{ e.stopPropagation(); chooseSongHintOff(); if($('#guideMenu').hidden) openGuideMenu(); else closeGuideMenu(); });
 document.addEventListener('click',e=>{ if(!$('#guideMenu').hidden&&!e.target.closest('.pick-wrap')) closeGuideMenu(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#guideMenu').hidden){ closeGuideMenu(); $('#guidePick').focus(); } });
 $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadGuide(f).finally(()=>e.target.value=''); });
