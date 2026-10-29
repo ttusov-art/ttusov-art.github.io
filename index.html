@@ -64,7 +64,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .kv-head{display:flex;align-items:center;gap:10px}
 .kv-head h2{margin:0;font-size:24px;flex:1}
 .kv-sub{color:var(--muted);font-size:14px;margin:4px 0 0}
-.kv-size{gap:10px;align-items:center;margin:-2px 0 10px} #kvPedal.on{background:var(--warm);border-color:var(--warm);color:#fff} #kvBig.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .kv-oct{display:inline-flex;align-items:center;gap:6px}
+.kv-size{gap:10px;align-items:center;margin:-2px 0 10px} #kvPedal{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;-webkit-tap-highlight-color:transparent} .kv-card{-webkit-touch-callout:none} #keyView .kv-svg,#keyView .kv-size{user-select:none;-webkit-user-select:none}
+#kvPedal.on{background:var(--warm);border-color:var(--warm);color:#fff} #kvBig.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .kv-oct{display:inline-flex;align-items:center;gap:6px}
 .kv-svg{display:block;width:100%;height:auto;margin:14px 0 10px;touch-action:none;user-select:none;-webkit-user-select:none}
 .kv-w{fill:#d9dee2;stroke:#9aa3a9;stroke-width:1}
 .kv-w.in{fill:#ffffff}
@@ -1046,7 +1047,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 hh';
+const APP_VERSION='2026-10-29 hi';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4678,6 +4679,7 @@ $('#kvPiano').addEventListener('pointerdown',kvTap);
   pb.addEventListener('pointerdown',e=>{ e.preventDefault(); pb.setPointerCapture(e.pointerId); down=performance.now(); was=S.kvPedal; if(!was) kvSetPedal(true); });
   const end=()=>{ if(!down) return; const held=performance.now()-down>350; down=0; if(was) kvSetPedal(false); else if(held) kvSetPedal(false); };
   pb.addEventListener('pointerup',end); pb.addEventListener('pointercancel',end);
+  pb.addEventListener('contextmenu',e=>e.preventDefault()); pb.addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});   // no text selection, menu or buzz on a long press
   pb.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); kvSetPedal(!S.kvPedal); } }); }
 $('#kvBig').addEventListener('click',()=>{ try{ localStorage.setItem('pc-kvbig',kvBig()?'0':'1'); }catch(e){} renderKeyView(); });
 $('#kvOctDn').addEventListener('click',()=>{ S.kvOct=0; renderKeyView(); }); $('#kvOctUp').addEventListener('click',()=>{ S.kvOct=1; renderKeyView(); });
