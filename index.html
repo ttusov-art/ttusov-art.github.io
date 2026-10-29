@@ -420,6 +420,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 #admSongs .song-row.adm-flash{animation:admFlash 1.2s ease-out forwards;border-radius:8px}
 #admSongs .adm-arrows{display:flex;gap:6px;flex:none;margin-left:auto} #admSongs .song-row{align-items:center} #admSongs .take-info{flex:1 1 140px;min-width:0}
 #admSongs .adm-n{color:var(--muted);font-family:var(--font-mono);font-weight:600} #admSongs .adm-moved{color:var(--accent)}
+.rep-kinds{gap:6px;flex-wrap:wrap} .rep-kind.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.rep-block{display:flex;flex-direction:column;gap:6px;padding:10px 12px;margin-bottom:10px;border:1px solid color-mix(in srgb,#d97706 50%,var(--line));border-radius:10px;background:color-mix(in srgb,#d97706 7%,var(--surface))}
+.pick-menu .pm-rep{color:#b45309;font-weight:600}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
 .ed-row .member-tip{flex:1 1 100%}
@@ -599,7 +602,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         </span>
         <button id="edToggle" type="button" class="icon-btn ed-toggle" aria-expanded="false" aria-controls="edFold" aria-label="Editor" title="Editor: edit the pitch line or time the lyrics"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
       </div>
-      <div class="row ed-row" id="edFold" hidden><span class="small member-tip">Fix a wrong note with Edit target line, or the lyric timing with Time lyrics, then tap Suggest my edits. The moderator checks it and the whole choir gets the better version.</span><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button><button id="playDone" type="button" class="primary" hidden title="Set-up guide: every line is timed and the notes are fixed">Play-through done ✓</button></div>
+      <div class="row ed-row" id="edFold" hidden><span class="small member-tip">Fix a wrong note with Edit target line, or the lyric timing with Time lyrics, then tap Suggest my edits. The moderator checks it and the whole choir gets the better version.</span><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button><button id="reportBtn" type="button" hidden title="Mark this spot for an approver or the moderator to check">⚑ Sounds off here</button><button id="playDone" type="button" class="primary" hidden title="Set-up guide: every line is timed and the notes are fixed">Play-through done ✓</button></div>
       <div class="ed-lyr" id="edLyrBox" hidden><div class="lyr-list" id="lyrList" hidden></div><span class="small" id="lyrHint"></span></div>
     <div class="share-box admin-tools" id="pitchTools" hidden>
         <b>Pitch line and beat grid (moderator)</b>
@@ -1038,7 +1041,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 hb';
+const APP_VERSION='2026-10-29 hc';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2423,7 +2426,7 @@ async function suggestNow(){
   const rec=await libGet(S.cur.libId); if(!rec||!rec.base){ setStatus('Only songs from your choir\'s share link can be suggested.',true); return; }
   const live=liveOf(), d=newDiff(rec,live); if(!diffCount(d)){ setStatus('There are no new edits to suggest in this song.'); return; }
   if(!sugUrl()){ setStatus('Suggestions are not set up for your choir yet. Ask the moderator.',true); return; }
-  try{ const st=await postSuggestion(rec,live); setStatus(st==='queued'?'No connection right now: your suggestion is saved and goes out automatically when you are online.':'Thank you! Your edits ('+diffText(d)+') were sent to the moderator.'); return st; }
+  try{ const st=await postSuggestion(rec,live); if(S.fixReport&&S.fixReport.uid===rec.uid&&appKey()){ const fr=S.fixReport; S.fixReport=null; repHandle({id:fr.id},'fixed'); } setStatus(st==='queued'?'No connection right now: your suggestion is saved and goes out automatically when you are online.':'Thank you! Your edits ('+diffText(d)+') were sent to the moderator.'); return st; }
   catch(e){ setStatus('Could not send the suggestion: '+e.message+'.',true); return null; }
 }
 async function flushSugQueue(){ const q=sugQueue(); if(!q.length) return; const left=[], l=sugList();
@@ -2475,13 +2478,13 @@ async function sugFetchInbox(manual){
   const url=sugUrl(), key=sugKey(), t=$('#sugText');
   if(!url||!key){ S.inbox=[]; paintSugBtn(); if(manual) t.textContent=!url?'Paste the inbox address first.':'Unlock Admin with your review key first.'; return; }
   if(manual) t.textContent='Checking the inbox…';
-  try{ const j=await sugGet(url,{action:'list',key}); S.inbox=(j.list||[]).sort((a,b)=>a.received-b.received); S.approversOn=!!j.approvers; paintSugBtn(); { const a=S.inbox.filter(x=>x.status==='approved').length; if(a&&!manual) setStatus(a+' suggestion'+(a>1?'s were':' was')+' checked by an approver. Tap Suggestions next to Play, then Apply all approved.'); } if(manual){ t.textContent=S.inbox.length?S.inbox.length+' suggestion'+(S.inbox.length>1?'s':'')+' waiting. Tap Suggestions next to Play.':'The inbox works. No suggestions waiting.';
+  try{ const j=await sugGet(url,{action:'list',key}); S.inbox=(j.list||[]).sort((a,b)=>a.received-b.received); S.reports=(j.reports||[]).sort((a,b)=>a.received-b.received); S.approversOn=!!j.approvers; paintSugBtn(); if(S.reports.length&&!manual) setTimeout(()=>{ if(!S.inbox.some(x=>x.status==='approved')) setStatus(S.reports.length+' spot'+(S.reports.length>1?'s':'')+' marked as “sounds off” by members. Tap Suggestions next to Play.'); },0); { const a=S.inbox.filter(x=>x.status==='approved').length; if(a&&!manual) setStatus(a+' suggestion'+(a>1?'s were':' was')+' checked by an approver. Tap Suggestions next to Play, then Apply all approved.'); } if(manual){ t.textContent=S.inbox.length?S.inbox.length+' suggestion'+(S.inbox.length>1?'s':'')+' waiting. Tap Suggestions next to Play.':'The inbox works. No suggestions waiting.';
       if(S.inbox.length) setTimeout(()=>$('#sugBtn').scrollIntoView({block:'center',behavior:'smooth'}),400); } }
   catch(e){ if(/wrong review key/.test(e.message||'')){ try{ localStorage.removeItem('pc-sugkey'); }catch(x){} S.inbox=[]; paintSugBtn(); paintAdmin(); } if(manual) t.textContent='Could not read the inbox: '+e.message+'.'; }
 }
 function paintSugBtn(){ const b=$('#sugBtn');
-  if(sugKey()){ const n=S.inbox.length, a=S.inbox.filter(x=>x.status==='approved').length; b.hidden=!n; b.textContent='Suggestions ('+n+(a?' · '+a+' approved':'')+')'; b.classList.toggle('next-step',a>0); }
-  else if(appKey()){ const n=S.apInbox.length; b.hidden=!n; b.textContent='To approve ('+n+')'; b.classList.remove('next-step'); }
+  if(sugKey()){ const rn=(S.reports||[]).length, n=S.inbox.length+rn, a=S.inbox.filter(x=>x.status==='approved').length; b.hidden=!n; b.textContent='Suggestions ('+S.inbox.length+(a?' · '+a+' approved':'')+(rn?' · '+rn+' ⚑':'')+')'; b.classList.toggle('next-step',a>0); }
+  else if(appKey()){ const n=S.apInbox.length+(S.apReports||[]).length; b.hidden=!n; b.textContent='To approve ('+n+')'; b.classList.remove('next-step'); }
   else { b.hidden=true; b.classList.remove('next-step'); } }
 async function openInbox(){
   const lib=await libMeta(), byU={}; lib.forEach(s=>{ if(s.uid) byU[s.uid]=s; });
@@ -2491,23 +2494,56 @@ async function openInbox(){
       (it.status==='approved'&&it.decisions?'<br><span class="small ap-note">✓ Checked by an approver: '+decCount(it).acc+' of '+decCount(it).all+' changes approved</span>':'')+(has?'':'<br><span class="small">This song is not on this device.</span>')+(older?'<br><span class="small">Waiting: review the older suggestion for this song first (from '+new Date(older.received).toLocaleDateString()+').</span>':'')+'</div><div class="row"><button type="button" class="primary" data-rev="'+esc(it.id)+'"'+(has&&!older?'':' disabled')+'>Review</button><button type="button" data-rej="'+esc(it.id)+'"'+(older?' disabled':'')+'>Decline</button></div></div>'; }).join('');
   const ap=S.inbox.filter(x=>x.status==='approved'&&x.decisions), apAcc=ap.reduce((a,x)=>a+decCount(x).acc,0), apAll=ap.reduce((a,x)=>a+decCount(x).all,0);
   const apHtml=ap.length?'<div class="ap-block"><b>'+ap.length+' suggestion'+(ap.length>1?'s':'')+' checked by approvers</b><span class="small">'+apAcc+' of '+apAll+' changes approved. Apply all puts the approved changes into the songs on this device; then make the share file as usual.</span><div class="row"><button type="button" class="primary next-step" data-apall="1">Apply all approved</button></div></div>':'';
-  const r=await dlg({title:'Suggestions from the choir',html:apHtml+((items?'<p class="kv-sub">Oldest first. Suggestions for the same song are reviewed in the order they came in.</p>'+items:'')||'<p class="kv-sub">No suggestions waiting.</p>'),buttons:[{label:'Close',value:null}],
-    onOpen:(b,done)=>{ b.querySelectorAll('[data-rev]').forEach(x=>x.addEventListener('click',()=>done('rev:'+x.dataset.rev))); b.querySelectorAll('[data-rej]').forEach(x=>x.addEventListener('click',()=>done('rej:'+x.dataset.rej))); const aa=b.querySelector('[data-apall]'); if(aa) aa.addEventListener('click',()=>done('apall')); }});
+  const reps=(S.reports||[]).map(rp=>'<div class="dlg-item"><div>'+repLine(rp)+(byU[rp.songUid]?'':'<br><span class="small">This song is not on this device.</span>')+'</div><div class="row"><button type="button" class="primary" data-lis="'+esc(rp.id)+'"'+(byU[rp.songUid]?'':' disabled')+'>Listen</button><button type="button" data-done="'+esc(rp.id)+'">Done</button></div></div>').join('');
+  const repHtml=reps?'<div class="rep-block"><b>⚑ Something sounds off ('+S.reports.length+')</b><span class="small">Spots members marked without knowing what is wrong. Listen opens the spot as a loop with the editor ready; fix it there, then tap Done.</span>'+reps+'</div>':'';
+  const r=await dlg({title:'Suggestions from the choir',html:repHtml+apHtml+((items?'<p class="kv-sub">Oldest first. Suggestions for the same song are reviewed in the order they came in.</p>'+items:'')||'<p class="kv-sub">No suggestions waiting.</p>'),buttons:[{label:'Close',value:null}],
+    onOpen:(b,done)=>{ b.querySelectorAll('[data-rev]').forEach(x=>x.addEventListener('click',()=>done('rev:'+x.dataset.rev))); b.querySelectorAll('[data-rej]').forEach(x=>x.addEventListener('click',()=>done('rej:'+x.dataset.rej))); const aa=b.querySelector('[data-apall]'); if(aa) aa.addEventListener('click',()=>done('apall'));
+      b.querySelectorAll('[data-lis]').forEach(x=>x.addEventListener('click',()=>done('lis:'+x.dataset.lis))); b.querySelectorAll('[data-done]').forEach(x=>x.addEventListener('click',()=>done('don:'+x.dataset.done))); }});
   if(r.value==='apall'){ applyApproved(); return; }
+  { const v=r.value||'', rp=(S.reports||[]).find(x=>x.id===v.slice(4));
+    if(rp&&v.startsWith('lis:')){ if(await openReport(rp,false)) setStatus('⚑ Reported spot: '+rp.songName+' '+fmtT1(rp.a)+'–'+fmtT1(rp.b)+' ('+REP_KIND[rp.kind||'']+'). Fix it in the editor, then mark it Done in Suggestions.'); return; }
+    if(rp&&v.startsWith('don:')){ if(await repHandle(rp,'closed')){ setStatus('Report closed.'); if(S.inbox.length||S.reports.length) setTimeout(openInbox,200); } return; } }
   const v=r.value||''; const id=v.slice(4), it=S.inbox.find(x=>x.id===id); if(!it||blockedBy(it)) return;
   if(v.startsWith('rej:')){ await sugSetStatus(it,'rejected'); setStatus('Suggestion for '+it.songName+' declined.'); openInbox(); }
   else startReview(it,byU[it.songUid].id);
 }
 async function sugSetStatus(it,status){ try{ await sugPost(sugUrl(),{action:'review',key:sugKey(),id:it.id,status}); S.inbox=S.inbox.filter(x=>x!==it); paintSugBtn(); return true; }
   catch(e){ setStatus('Could not update the inbox: '+e.message+'.',true); return false; } }
+// ----- "something sounds off here": members mark a spot without knowing what is wrong -----
+const REP_KIND={notes:'Notes',lyrics:'Lyrics',timing:'Timing','':'Not sure'};
+function repSent(){ try{ return JSON.parse(localStorage.getItem('pc-reports')||'[]'); }catch(e){ return []; } }
+function canReport(){ return !!sugUrl()&&!!S.cur&&S.cur.libId!=null&&!!S.curUid&&!isOwnerPart(S.curPart||S.part); }
+function repSpot(){ if(loopActive()) return {a:Math.round(S.loop.a*10)/10,b:Math.round(S.loop.b*10)/10}; const t=curT(); return {a:Math.max(0,Math.round((t-4)*10)/10),b:Math.min(S.dur,Math.round((t+2)*10)/10)}; }
+async function reportSpot(){
+  if(!canReport()){ setStatus(!sugUrl()?'Reports are not set up for your choir yet. Ask the moderator.':'Open a song from your choir\'s library first.',true); return; }
+  if(S.playing) stop(); const sp=repSpot(), name=curSongName();
+  const r=await dlg({title:'Something sounds off here',html:'<p class="kv-sub">'+esc(name)+', '+fmtT1(sp.a)+'–'+fmtT1(sp.b)+(loopActive()?' (your loop)':' (around the playhead)')+'. You don\'t need to know what is wrong: an approver or the moderator listens and fixes it.</p><p class="kv-sub">What seems off? (optional)</p><div class="row rep-kinds">'+
+      Object.entries(REP_KIND).map(([k,l])=>'<button type="button" class="rep-kind'+(k===''?' on':'')+'" data-k="'+k+'">'+l+'</button>').join('')+'</div>',
+    buttons:[{label:'Send',value:'send',primary:true},{label:'Cancel',value:null}],
+    onOpen:b=>{ b.querySelectorAll('.rep-kind').forEach(x=>x.addEventListener('click',()=>{ b.querySelectorAll('.rep-kind').forEach(y=>y.classList.toggle('on',y===x)); })); }});
+  if(r.value!=='send') return; const kb=r.body.querySelector('.rep-kind.on'), kind=kb?kb.dataset.k:'';
+  const rec=await libGet(S.cur.libId), id=newSugId(); busyShow('Sending…');
+  try{ await sugPost(sugUrl(),{action:'report',id,part:partOf(rec),songUid:rec.uid,songName:rec.name,a:sp.a,b:sp.b,kind,dev:devTag()});
+    const l=repSent(); l.unshift({id,uid:rec.uid,at:Date.now()}); try{ localStorage.setItem('pc-reports',JSON.stringify(l.slice(0,100))); }catch(e){}
+    await busyHide('Sent. Thank you!'); setStatus('Thank you! Someone will listen to '+fmtT1(sp.a)+'–'+fmtT1(sp.b)+' in '+rec.name+'.'); }
+  catch(e){ await busyHide(null); setStatus('Could not send: '+e.message+'.',true); } }
+// open a reported spot: the song, a loop around it, the editor ready
+async function openReport(rp,fix){ const lib=await libMeta(), x=lib.find(s=>s.uid===rp.songUid); if(!x){ setStatus(rp.songName+' is not on this phone.',true); return false; }
+  if(S.playing) stop(); if(!(S.cur&&S.cur.libId===x.id)&&!(await openLibSong(x.id))) return false;
+  S.loop.a=Math.max(0,rp.a-0.5); S.loop.b=Math.min(S.dur,rp.b+0.5); S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI();
+  S.pos=S.loop.a; setWin(Math.max(4,Math.min(12,rp.b-rp.a+3)),false); updateTime(); setEdFold(true); draw(); window.scrollTo({top:0,behavior:'smooth'});
+  if(fix) S.fixReport={id:rp.id,uid:rp.songUid}; return true; }
+async function repHandle(rp,status){ try{ await sugPost(sugUrl(),{action:'rhandle',key:sugKey()||appKey(),id:rp.id,status,dev:devTag()}); S.reports=(S.reports||[]).filter(x=>x.id!==rp.id); S.apReports=(S.apReports||[]).filter(x=>x.id!==rp.id); paintSugBtn(); return true; }
+  catch(e){ if(/already handled|not found/.test(e.message||'')){ S.apReports=(S.apReports||[]).filter(x=>x.id!==rp.id); paintSugBtn(); setStatus('Someone else already took care of this report.'); return true; } setStatus('Could not update the report: '+e.message+'.',true); return false; } }
+function repLine(rp){ return '<b>⚑ '+esc(rp.songName)+'</b> <span class="small">'+esc(rp.part)+'</span><br><span class="small">'+fmtT1(rp.a)+'–'+fmtT1(rp.b)+' · '+REP_KIND[rp.kind||'']+' · '+new Date(rp.received).toLocaleDateString()+(rp.status==='forwarded'?' · passed on by an approver':'')+'</span>'; }
 // ----- approvers: trusted members decide on other members' suggestions for their part; the moderator applies them with one tap -----
 S.apInbox=[];
 async function apFetch(manual){ const url=sugUrl(), key=appKey(), t=$('#apText');
   if(!url||!key){ S.apInbox=[]; paintSugBtn(); return; }
   if(manual&&t) t.textContent='Checking…';
   try{ const own=new Set(sugList().map(x=>x.id)), j=await sugGet(url,{action:'alist',key,parts:S.parts.join(','),dev:devTag()});
-    S.apInbox=(j.list||[]).filter(x=>!own.has(x.id)).sort((a,b)=>a.received-b.received); paintSugBtn();
-    if(t) t.textContent=S.apInbox.length?S.apInbox.length+' suggestion'+(S.apInbox.length>1?'s':'')+' to check. Tap To approve next to Play.':'Nothing to check right now.'; }
+    S.apInbox=(j.list||[]).filter(x=>!own.has(x.id)).sort((a,b)=>a.received-b.received); { const mine=new Set(repSent().map(x=>x.id)); S.apReports=(j.reports||[]).filter(x=>!mine.has(x.id)).sort((a,b)=>a.received-b.received); } paintSugBtn();
+    { const n=S.apInbox.length+(S.apReports||[]).length; if(t) t.textContent=n?n+' thing'+(n>1?'s':'')+' to check. Tap To approve next to Play.':'Nothing to check right now.'; } }
   catch(e){ if(/wrong approver key/.test(e.message||'')){ try{ localStorage.removeItem('pc-appkey'); }catch(x){} S.apInbox=[]; paintSugBtn(); paintAdmin(); setStatus('The approver key was changed by the moderator, so approving is locked on this phone.',true); }
     else if(manual&&t) t.textContent='Could not check: '+e.message+'.'; } }
 async function openApInbox(){
@@ -2516,8 +2552,13 @@ async function openApInbox(){
   const items=S.apInbox.map(it=>{ const has=!!byU[it.songUid], older=blockedBy(it);
     return '<div class="dlg-item"><div><b>'+esc(it.songName)+'</b> <span class="small">'+esc(it.part)+'</span><br><span class="small">'+new Date(it.received).toLocaleDateString()+' · '+esc(diffText({notes:it.notes,lyrics:it.lyrics}))+'</span>'+
       (has?'':'<br><span class="small">This song is not on this phone.</span>')+(older?'<br><span class="small">Waiting: check the older suggestion for this song first.</span>':'')+'</div><div class="row"><button type="button" class="primary" data-rev="'+esc(it.id)+'"'+(has&&!older?'':' disabled')+'>Check</button><button type="button" data-rej="'+esc(it.id)+'"'+(older?' disabled':'')+'>Decline all</button></div></div>'; }).join('');
-  const r=await dlg({title:'Suggestions to approve',html:(items?'<p class="kv-sub">Listen to each change and approve or decline it. Your decisions go to the moderator, who puts the approved changes into the songs. Your own suggestions are never shown here.</p>'+items:'<p class="kv-sub">Nothing to check right now.</p>'),buttons:[{label:'Close',value:null}],
-    onOpen:(b,done)=>{ b.querySelectorAll('[data-rev]').forEach(x=>x.addEventListener('click',()=>done('rev:'+x.dataset.rev))); b.querySelectorAll('[data-rej]').forEach(x=>x.addEventListener('click',()=>done('rej:'+x.dataset.rej))); }});
+  const reps=(S.apReports||[]).map(rp=>'<div class="dlg-item"><div>'+repLine(rp)+(byU[rp.songUid]?'':'<br><span class="small">This song is not on this phone.</span>')+'</div><div class="row"><button type="button" class="primary" data-fix="'+esc(rp.id)+'"'+(byU[rp.songUid]?'':' disabled')+'>Listen &amp; fix</button><button type="button" data-fwd="'+esc(rp.id)+'">Send to moderator</button></div></div>').join('');
+  const r=await dlg({title:'Suggestions to approve',html:(reps?'<p class="kv-sub"><b>Something sounds off:</b> members marked these spots. Listen and fix it (sent as your suggestion), or pass it on to the moderator.</p>'+reps:'')+(items?'<p class="kv-sub">Listen to each change and approve or decline it. Your decisions go to the moderator, who puts the approved changes into the songs. Your own suggestions are never shown here.</p>'+items:'')+(!reps&&!items?'<p class="kv-sub">Nothing to check right now.</p>':''),buttons:[{label:'Close',value:null}],
+    onOpen:(b,done)=>{ b.querySelectorAll('[data-rev]').forEach(x=>x.addEventListener('click',()=>done('rev:'+x.dataset.rev))); b.querySelectorAll('[data-rej]').forEach(x=>x.addEventListener('click',()=>done('rej:'+x.dataset.rej)));
+      b.querySelectorAll('[data-fix]').forEach(x=>x.addEventListener('click',()=>done('fix:'+x.dataset.fix))); b.querySelectorAll('[data-fwd]').forEach(x=>x.addEventListener('click',()=>done('fwd:'+x.dataset.fwd))); }});
+  { const v=r.value||'', rp=(S.apReports||[]).find(x=>x.id===v.slice(4));
+    if(rp&&v.startsWith('fwd:')){ busyShow('Passing it on…'); const ok=await repHandle(rp,'forwarded'); await busyHide(ok?'Sent':null); if(ok){ setStatus('Passed on to the moderator: '+rp.songName+' '+fmtT1(rp.a)+'.'); if(S.apInbox.length||(S.apReports||[]).length) setTimeout(openApInbox,300); } return; }
+    if(rp&&v.startsWith('fix:')){ if(await openReport(rp,true)) setStatus('Listen to the loop. Found it? Fix it in the editor (Edit target line, Time lyrics or the Lyrics editor) and tap Suggest my edits: the report closes when you send. Can\'t find it? Use Send to moderator in To approve.'); return; } }
   const v=r.value||'', it=S.apInbox.find(x=>x.id===v.slice(4)); if(!it||blockedBy(it)) return;
   if(v.startsWith('rej:')){ busyShow('Sending your decision…'); const ok=await apSend(it,{notes:it.notes.map(()=>'rej'),lyrics:it.lyrics.map(()=>'rej')}); await busyHide(ok?'Sent':null); if(ok){ setStatus('Declined: '+it.songName+'. The moderator gets your decision.'); if(S.apInbox.length) setTimeout(openApInbox,300); } }
   else startReview(it,byU[it.songUid].id,'approve'); }
@@ -4454,7 +4495,7 @@ async function closeEditor(fromPencil){
   if(S.editMode) setEditMode(false); if(S.tap) stopTap(); if(fromPencil) setEdFold(false);
 }
 // the pencil next to Voice / Backing / Tone / Click shows or hides the editor buttons
-function setEdFold(on){ setTimeout(setupPulse,0); $('#edFold').hidden=!on; $('#edLyrBox').hidden=!on||!S.tap; if(document.getElementById('pitchTools')) paintAdminTools(); $('#edToggle').setAttribute('aria-expanded',String(on)); }
+function setEdFold(on){ setTimeout(setupPulse,0); { const rb=$('#reportBtn'); if(rb) rb.hidden=!canReport(); } $('#edFold').hidden=!on; $('#edLyrBox').hidden=!on||!S.tap; if(document.getElementById('pitchTools')) paintAdminTools(); $('#edToggle').setAttribute('aria-expanded',String(on)); }
 $('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; if(!open&&(S.editMode||S.tap)){ closeEditor(true); return; } setEdFold(open); });   // closing the pencil also ends editing
 $('#edClearSel').addEventListener('click',()=>{ S.sel=null; updateSelInfo(); draw(); });
 $('#edTimeBtn').addEventListener('click',()=>{ if(S.tap){ closeEditor(false); return; } if(S.editMode) setEditMode(false); startTap(); });
@@ -4552,6 +4593,7 @@ $('#adminUnlock').addEventListener('click',unlockAdmin);
 $('#sugKeyIn').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); unlockAdmin(); } });
 $('#apCheck').addEventListener('click',()=>apFetch(true));
 $('#wipeBtn').addEventListener('click',wipeAll);
+$('#reportBtn').addEventListener('click',reportSpot);
 $('#hsResume').checked=hsResume();
 $('#hsResume').addEventListener('change',e=>{ try{ localStorage.setItem('pc-hsresume',e.target.checked?'1':'0'); }catch(x){} if(!S.playing&&!S.review){ if(e.target.checked) mediaOff(); else { clearTimeout(S.keepOffT); try{ S.keep&&S.keep.pause(); }catch(x){} } } });
 $('#newVerGo').addEventListener('click',()=>{ try{ if(S.playing) stop(); savePos(); }catch(e){} location.reload(); });
@@ -5121,6 +5163,7 @@ function bmRow(m,bm,label,close,reopen){ const row=document.createElement('div')
 // jump menu: bookmarks of this song, then sections from the lyrics sheet, or the lyric lines
 function openSecMenu(){
   const m=$('#secMenu'); m.innerHTML=''; const list=songSections();
+  if(canReport()){ const rb=document.createElement('button'); rb.type='button'; rb.setAttribute('role','menuitem'); rb.className='pm-rep'; rb.innerHTML='<span class="pm-name">⚑ Something sounds off here…</span><span class="pm-meta"></span>'; rb.querySelector('.pm-meta').textContent=(()=>{ const sp=repSpot(); return fmtT(sp.a)+'–'+fmtT(sp.b); })(); rb.addEventListener('click',()=>{ closeSecMenu(); reportSpot(); }); m.appendChild(rb); }
   if(S.cur&&S.cur.libId!=null){ const add=document.createElement('button'); add.type='button'; add.setAttribute('role','menuitem'); add.className='pm-bm-add';
     add.innerHTML='<span class="pm-name">'+(loopActive()?'☆ Bookmark this loop':'☆ Bookmark from here')+'</span><span class="pm-meta">'+(loopActive()?fmtT(S.loop.a)+'–'+fmtT(S.loop.b):fmtT(curT()))+'</span>';
     add.addEventListener('click',()=>{ closeSecMenu(); bmAdd(); }); m.appendChild(add);
