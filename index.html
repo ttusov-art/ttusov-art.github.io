@@ -1024,7 +1024,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gv';
+const APP_VERSION='2026-10-29 gw';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3899,13 +3899,13 @@ function mediaPos(){ try{ if('mediaSession' in navigator&&navigator.mediaSession
 function mediaOn(){
   try{
     if(!S.keep){ S.keep=new Audio(silentWavUrl()); S.keep.loop=true; S.keep.setAttribute('playsinline',''); }
-    const p=S.keep.play(); if(p&&p.catch) p.catch(()=>{});
+    clearTimeout(S.keepOffT); if(S.keep.paused){ const p=S.keep.play(); if(p&&p.catch) p.catch(()=>{}); }
     if('mediaSession' in navigator){
       mediaMeta(); navigator.mediaSession.playbackState='playing'; mediaPos();
       if(!S.msHandlers){
         S.msHandlers=true; const H=(a,f)=>{ try{ navigator.mediaSession.setActionHandler(a,f); }catch(e){} };
-        H('play',()=>{ if(!S.playing&&!S.review) play(); });
-        H('pause',()=>stop());
+        H('play',()=>{ if(!S.playing&&!S.review) play(); else if(S.playing) stop(); });   // some headsets send play for every press
+        H('pause',()=>{ if(S.playing||S.review) stop(); else play(); });
         H('stop',()=>stop());
         H('nexttrack',()=>mediaSkip(1));
         H('previoustrack',()=>mediaSkip(-1));
@@ -3938,7 +3938,10 @@ async function mediaSkipRun(){ const sk=S.skip; if(!sk) return; if(sk.busy){ cle
   setStatus((sk.was?'Now playing: ':'Next song: ')+sk.list[k].name+' ('+(k+1)+' of '+sk.list.length+').'); }
 function mediaOff(){
   if(S.skip||S.keepMedia){ mediaMeta(); return; }   // switching songs: keep the controls
-  try{ if(S.keep) S.keep.pause(); if('mediaSession' in navigator){ navigator.mediaSession.playbackState='paused'; mediaPos(); } }catch(e){}
+  // paused: the silent track keeps running for a while (with the session marked "paused"), so the phone keeps sending
+  // the headset's play/pause button to Part Coach; after 10 minutes it stops and the phone's audio is freed for other apps
+  try{ if('mediaSession' in navigator){ navigator.mediaSession.playbackState='paused'; mediaPos(); }
+    clearTimeout(S.keepOffT); S.keepOffT=setTimeout(()=>{ try{ if(!S.playing&&!S.review&&S.keep) S.keep.pause(); }catch(e){} },10*60e3); }catch(e){}
 }
 function showResult(){
   if(S.stat.n<30){ $('#result').hidden=true; return; }
