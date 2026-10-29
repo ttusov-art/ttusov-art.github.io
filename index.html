@@ -402,6 +402,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .skip-list{display:flex;flex-direction:column;gap:2px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)} .skip-head{color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .skip-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;color:var(--muted)} .skip-row .skip-name{color:var(--fg)}
 .new-ver{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);padding:10px 14px;border-radius:12px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px;color:var(--fg)}
+.lyr-cd{margin-left:.5em;letter-spacing:.18em;color:var(--muted);opacity:.7;font-weight:400;white-space:nowrap}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
 .ed-row .member-tip{flex:1 1 100%}
@@ -1015,7 +1016,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gm';
+const APP_VERSION='2026-10-29 gn';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3403,6 +3404,16 @@ function tapUndo(){
 function fitTapLine(){ const el=$('#lyrNow'); el.style.fontSize=''; $('#lyrBar').classList.toggle('oneline',!!S.editMode&&!S.tap); if(!S.tap&&!S.editMode) return;
   let fs=parseFloat(getComputedStyle(el).fontSize); while(el.scrollWidth>el.clientWidth+1&&fs>14){ fs-=1; el.style.fontSize=fs+'px'; } }
 window.addEventListener('resize',()=>{ if(S.tap||S.editMode) fitTapLine(); });
+// a long rest before a lyric line (more than 4 bars without singing): four small dots after the coming line, one fewer every bar
+function lyrCountdown(cur,nxt,j,now){ if(!S.beat||nxt.t==null) return 0; const left=nxt.t-now; if(left<=0) return 0;
+  const P=segAt(nxt.t).P, bar=P*beatsPerBar(); if(!(bar>0)||left>4*bar) return 0;
+  const c=S.lyrGap||(S.lyrGap={}), k=j+'@'+nxt.t+'@'+(cur?cur.t:'-');
+  if(c.tM!==S.tM||c.n!==S.lyrics.length){ for(const x in c) delete c[x]; c.tM=S.tM; c.n=S.lyrics.length; }
+  if(c[k]==null){ let from=cur&&cur.t!=null?cur.t:0; const T=S.tT,M=S.tM;
+    if(T&&M&&T.length){ let i=idxAt(Math.max(0,nxt.t-0.15)); while(i>0&&T[i]>=nxt.t-0.15) i--; while(i>0&&isNaN(M[i])&&T[i]>from) i--; if(T[i]>from&&!isNaN(M[i])) from=T[i]; }
+    c[k]=nxt.t-from; }
+  if(c[k]<=4*bar+0.05) return 0;
+  return Math.min(4,Math.max(1,Math.ceil(left/bar-1e-6))); }
 function updateLyricBar(now){
   const bar=$('#lyrBar'), show=S.lyrShow&&S.lyrics.length>0;
   if(!show&&!S.tap){ bar.hidden=true; return; }
@@ -3413,12 +3424,17 @@ function updateLyricBar(now){
     const i=lyricIndexAt(now+0.05), j=nextTimedAfter(i);
     const cur=i>=0?S.lyrics[i]:null, nxt=j>=0?S.lyrics[j]:null;
     if(cur&&nxt==null&&now-cur.t>8){ key='end'; nowTxt=''; nextTxt=''; }
-    else if(!cur){ key='pre'+j; nowTxt=nxt?nxt.text:''; nextTxt=nxt&&nxt.t-now<60?'starts in '+Math.max(0,Math.ceil(nxt.t-now))+' s':''; waiting=true; }
+    var cd=nxt?lyrCountdown(cur,nxt,j,now):0;
+    if(cur&&nxt==null&&now-cur.t>8){ key='end'; nowTxt=''; nextTxt=''; }
+    else if(!cur){ key='pre'+j; nowTxt=nxt?nxt.text:''; nextTxt=cd?'':nxt&&nxt.t-now<60?'starts in '+Math.max(0,Math.ceil(nxt.t-now))+' s':''; waiting=true; }
     else { key='l'+i+'-'+j; nowTxt=cur.text; nextTxt=nxt?nxt.text:''; }
-    if(!cur&&nxt) key+='-'+Math.max(0,Math.ceil(nxt.t-now));
+    if(!cur&&nxt&&!cd) key+='-'+Math.max(0,Math.ceil(nxt.t-now));
+    key+='|cd'+cd;
   }
   if(key===S.lyrBarKey) return; S.lyrBarKey=key;
-  const pv=$('#lyrPrev'); pv.hidden=!S.tap; pv.textContent=S.tap?prevTxt:''; $('#lyrNow').textContent=nowTxt; $('#lyrNext').textContent=nextTxt; fitTapLine(); $('#lyrNow').classList.toggle('waiting',waiting);
+  const pv=$('#lyrPrev'); pv.hidden=!S.tap; pv.textContent=S.tap?prevTxt:''; $('#lyrNow').textContent=nowTxt; $('#lyrNext').textContent=nextTxt;
+  if(!S.tap&&cd){ const d=document.createElement('span'); d.className='lyr-cd'; d.setAttribute('aria-label',cd+' bar'+(cd>1?'s':'')+' to go'); d.textContent='•'.repeat(cd); (waiting?$('#lyrNow'):$('#lyrNext')).appendChild(d); }   // bars until the next line comes in
+  fitTapLine(); $('#lyrNow').classList.toggle('waiting',waiting);
   const li=S.tap?S.tap.i:lyricIndexAt(now+0.05);
   document.querySelectorAll('.lyr-row').forEach(r=>r.classList.toggle('cur',+r.dataset.i===li));
   if(S.tap&&S.lyrListI!==li){ S.lyrListI=li; lyrListFollow(); }
