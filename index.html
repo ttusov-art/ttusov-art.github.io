@@ -392,6 +392,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .ap-block{display:flex;flex-direction:column;gap:6px;padding:10px 12px;margin-bottom:10px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .ap-note{color:var(--accent)}
 .key-in{-webkit-text-security:disc;text-security:disc}
+.req-form{gap:8px} .req-form input{flex:1 1 140px;min-width:0;font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)} .req-form select{flex:0 1 auto}
+.req-item{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)} .req-item .row{gap:6px}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
 .ed-row .member-tip{flex:1 1 100%}
@@ -849,9 +851,15 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   </section>
 
   <details class="panel fold" id="leadPanel">
-    <summary>Admin<span class="count unpub-dot" id="unpubDot" hidden>· changes to share</span></summary>
+    <summary>Admin<span class="count unpub-dot" id="unpubDot" hidden>· changes to share</span><span class="count unpub-dot" id="reqDot" hidden></span></summary>
     <div class="fold-body">
-      <span class="small">Sharing songs with your choir and checking members' suggestions. Choir members don't need anything here.</span>
+      <span class="small">Sharing songs with your choir and checking members' suggestions.</span>
+    <div class="share-box ap-invite" id="reqBox" hidden>
+      <b>Help your section: become an approver</b>
+      <span class="small">Approvers listen to the fixes other members suggest for their part and approve the good ones, so everyone gets better notes and lyrics sooner. It takes a few minutes now and then. Ask the moderator for an approver key: your name and part go only to the moderator.</span>
+      <div id="reqForm" class="row req-form"><input id="reqName" type="text" autocomplete="name" maxlength="60" placeholder="Your name" aria-label="Your name"><select id="reqPart" class="sel" aria-label="Your part"></select><button id="reqSend" type="button" class="primary">Request an approver key</button></div>
+      <span class="small" id="reqText"></span>
+    </div>
     <div class="share-box" id="adminLock">
       <b>For the moderator and approvers</b>
       <span class="small">Enter your review key (moderator) or approver key to show your tools on this device.</span>
@@ -866,6 +874,11 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <span class="small" id="apText"></span>
     </div>
     <div id="adminTools" hidden>
+    <div class="share-box" id="reqAdmin" hidden>
+      <b>Approver requests</b>
+      <span class="small">Members who would like to approve suggestions for their part. Approve gives their app the approver key automatically.</span>
+      <div id="reqList"></div>
+    </div>
     <div class="share-box">
       <b>Add a new song</b>
       <span class="small">Choose a song (for example a part MP3). The app separates the voice, finds the pitch line and keeps it in the library, in the part chosen in Song library. If you already have the vocals on their own (or a .ntpsession file), use Add vocals from this device.</span>
@@ -987,7 +1000,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gb';
+const APP_VERSION='2026-10-29 gc';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2437,6 +2450,37 @@ async function apFinish(){ const s=S.sug; if(!s) return;
   sugRestore(s); await busyHide(ok===true?'Sent. Thank you!':null);
   if(ok===true) setStatus('Sent: '+acc+' of '+s.changes.length+' changes approved. The moderator puts them into the song.');
   if(S.apInbox.length) setTimeout(openApInbox,300); }
+// ----- becoming an approver: a member asks, the moderator says yes, the member's app receives the key -----
+function reqGet(){ try{ return JSON.parse(localStorage.getItem('pc-apreq')||'null'); }catch(e){ return null; } }
+function reqSave(r){ try{ if(r) localStorage.setItem('pc-apreq',JSON.stringify(r)); else localStorage.removeItem('pc-apreq'); }catch(e){} }
+function paintReq(){ const box=$('#reqBox'); if(!box) return; const show=!sugKey()&&!appKey()&&!!sugUrl(); box.hidden=!show; if(!show) return;
+  const r=reqGet(), f=$('#reqForm'), t=$('#reqText');
+  if(r&&r.status==='new'){ f.hidden=true; t.textContent='Request sent on '+new Date(r.at).toLocaleDateString()+' as '+r.name+' ('+r.part+'). Waiting for the moderator: approving unlocks here by itself when they say yes.'; return; }
+  f.hidden=false; t.textContent=r&&r.status==='declined'?'The moderator said no to your last request. You can ask again later.':'';
+  const sel=$('#reqPart'), want=(r&&r.part)||S.part; sel.innerHTML=''; S.parts.forEach(p=>{ const o=document.createElement('option'); o.value=o.textContent=p; if(p===want) o.selected=true; sel.appendChild(o); });
+  if(r&&r.name&&!$('#reqName').value) $('#reqName').value=r.name; }
+async function reqSend(){ const name=$('#reqName').value.trim(), part=$('#reqPart').value, t=$('#reqText');
+  if(!name){ t.textContent='Type your name first, so the moderator knows who is asking.'; $('#reqName').focus(); return; }
+  const id=newSugId(); busyShow('Sending your request…');
+  try{ await sugPost(sugUrl(),{action:'request',id,name,part,dev:devTag()}); reqSave({id,name,part,at:Date.now(),status:'new'}); paintReq(); await busyHide('Sent'); setStatus('Thank you! Your request went to the moderator.'); }
+  catch(e){ await busyHide(null); t.textContent=/approvers off/.test(e.message||'')?'Approving is not switched on for your choir yet. Tell the moderator you would like to help.':'Could not send the request: '+e.message+'.'; } }
+async function reqPoll(){ const r=reqGet(), url=sugUrl(); if(!r||r.status!=='new'||!url||appKey()) return;
+  try{ const j=await sugGet(url,{action:'rstatus',id:r.id});
+    if(j.status==='granted'&&j.key){ try{ localStorage.setItem('pc-appkey',j.key); }catch(e){} reqSave(null); paintAdmin(); apFetch(false); dlg({title:'You are now an approver',html:'<p class="kv-sub">The moderator said yes: you can now check suggestions for '+esc(r.part)+'. When there is something to check, a To approve button appears next to Play. Thank you for helping!</p>',buttons:[{label:'OK',value:null,primary:true}]}); }
+    else if(j.status==='declined'){ r.status='declined'; reqSave(r); paintReq(); } }catch(e){} }
+// moderator: open requests
+S.reqs=[];
+async function reqFetch(){ const url=sugUrl(), key=sugKey(); if(!url||!key){ S.reqs=[]; paintReqAdmin(); return; }
+  try{ const before=new Set(S.reqs.map(x=>x.id)), j=await sugGet(url,{action:'rlist',key}); S.reqs=(j.list||[]).sort((a,b)=>a.received-b.received); paintReqAdmin();
+    const fresh=S.reqs.filter(x=>!before.has(x.id)); if(fresh.length) setStatus((fresh.length>1?fresh.length+' members ask':fresh[0].name+' ('+fresh[0].part+') asks')+' to become an approver. See Approver requests in Admin.'); }catch(e){} }
+function paintReqAdmin(){ const box=$('#reqAdmin'), n=S.reqs.length, dot=$('#reqDot'); box.hidden=!n; dot.hidden=!n; dot.textContent='· '+n+' approver request'+(n>1?'s':''); const L=$('#reqList'); L.innerHTML='';
+  S.reqs.forEach(r=>{ const d=document.createElement('div'); d.className='req-item'; d.innerHTML='<span><b></b> <span class="small"></span></span><div class="row"><button type="button" class="primary">Approve</button><button type="button">Decline</button></div>';
+    d.querySelector('b').textContent=r.name; d.querySelector('.small').textContent=r.part+' · '+new Date(r.received).toLocaleDateString();
+    const [ok,no]=d.querySelectorAll('button'); ok.addEventListener('click',()=>reqDecide(r,'granted')); no.addEventListener('click',()=>reqDecide(r,'declined')); L.appendChild(d); }); }
+async function reqDecide(r,status){ busyShow(status==='granted'?'Giving '+r.name+' the approver key…':'Declining…');
+  try{ await sugPost(sugUrl(),{action:'rdecide',key:sugKey(),id:r.id,status}); S.reqs=S.reqs.filter(x=>x!==r); paintReqAdmin(); await busyHide('Done');
+    setStatus(status==='granted'?r.name+' is now an approver for '+r.part+': their app unlocks approving the next time it opens.':'Request from '+r.name+' declined.'); }
+  catch(e){ await busyHide(null); setStatus('Could not answer the request: '+e.message+'.',true); } }
 // moderator: put every approved suggestion into its song (oldest first); anything that no longer fits is left for a normal review
 async function applyApproved(){
   const lib=await libMeta(), byU={}; lib.forEach(x=>{ if(x.uid) byU[x.uid]=x; });
@@ -4273,27 +4317,29 @@ function endTipOff(){ try{ return localStorage.getItem('pc-endtip-off')==='1'||s
 function endTipMaybe(){ if(!memberTips()||(S.cur&&S.cur.warmup)||endTipOff()||S.endTipShown===(curSongName()||"?")) return; S.endTipShown=curSongName()||"?"; $('#endTip').hidden=false;
   const t=$('#edToggle'); t.classList.add('next-step'); clearTimeout(t._tip); t._tip=setTimeout(()=>t.classList.remove('next-step'),8000); }
 function endTipHide(){ $('#endTip').hidden=true; const t=$('#edToggle'); clearTimeout(t._tip); t.classList.remove('next-step'); }
-function paintAdmin(){ const ok=!!sugKey(), ap=!ok&&!!appKey(); $('#adminLock').hidden=ok||ap; $('#apBox').hidden=!ap; if(ap) $('#apParts').textContent=S.parts.join(', '); $('#adminTools').hidden=!ok; $('#lockUrlRow').hidden=!!sugUrl(); paintAdminTools(); paintMemberTips(); }
+function paintAdmin(){ const ok=!!sugKey(), ap=!ok&&!!appKey(); paintReq(); if(!ok){ S.reqs=[]; paintReqAdmin(); } $('#adminLock').hidden=ok||ap; $('#apBox').hidden=!ap; if(ap) $('#apParts').textContent=S.parts.join(', '); $('#adminTools').hidden=!ok; $('#lockUrlRow').hidden=!!sugUrl(); paintAdminTools(); paintMemberTips(); }
 // moderator tools that live next to what they work on: lyrics tools in the Lyrics editor, pitch line / beat tools under the editor buttons
 function paintAdminTools(){ const ok=!!sugKey(); $('#lyrTools').hidden=!ok; $('#pitchTools').hidden=!ok||$('#edFold').hidden; }
 async function unlockAdmin(){ const key=$('#sugKeyIn').value, lu=$('#lockUrl').value.trim(), t=$('#lockText');
   if(lu){ try{ localStorage.setItem('pc-sugurl',lu); }catch(x){} $('#sugUrlIn').value=lu; }
   const url=sugUrl(); if(!url){ t.textContent='Paste the inbox address first.'; return; } if(!key){ t.textContent='Type your review key.'; return; }
-  t.textContent='Checking…'; try{ await sugGet(url,{action:'list',key}); try{ localStorage.setItem('pc-sugkey',key); }catch(x){} $('#sugKeyIn').value=''; t.textContent=''; paintAdmin(); sugFetchInbox(false); setStatus('Admin unlocked on this device.'); }
+  t.textContent='Checking…'; try{ await sugGet(url,{action:'list',key}); try{ localStorage.setItem('pc-sugkey',key); }catch(x){} $('#sugKeyIn').value=''; t.textContent=''; paintAdmin(); sugFetchInbox(false); reqFetch(); setStatus('Admin unlocked on this device.'); }
   catch(e){ if(!/wrong review key/.test(e.message||'')){ t.textContent='Could not check the key: '+e.message+'.'; return; }
     try{ await sugGet(url,{action:'alist',key,parts:S.parts.join(','),dev:devTag()}); try{ localStorage.setItem('pc-appkey',key); }catch(x){} $('#sugKeyIn').value=''; t.textContent=''; paintAdmin(); apFetch(true); setStatus('Approving is unlocked on this phone. Suggestions to check appear as To approve next to Play.'); }
     catch(e2){ t.textContent=/wrong approver key/.test(e2.message||'')?'That key is not right.':'Could not check the key: '+e2.message+'.'; } } }
 $('#adminUnlock').addEventListener('click',unlockAdmin);
 $('#sugKeyIn').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); unlockAdmin(); } });
 $('#apCheck').addEventListener('click',()=>apFetch(true));
+$('#reqSend').addEventListener('click',reqSend);
+$('#reqName').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); reqSend(); } });
 $('#apLock').addEventListener('click',()=>{ try{ localStorage.removeItem('pc-appkey'); }catch(x){} S.apInbox=[]; paintSugBtn(); paintAdmin(); setStatus('Approving is locked on this phone.'); });
 $('#adminLockBtn').addEventListener('click',()=>{ try{ localStorage.removeItem('pc-sugkey'); }catch(x){} S.inbox=[]; paintSugBtn(); paintAdmin(); setStatus('Admin locked on this device.'); });
 paintAdmin();
 $('#sugUrlIn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-sugurl',e.target.value.trim()); }catch(x){} });
 $('#sugCheck').addEventListener('click',()=>{ try{ localStorage.setItem('pc-sugurl',$('#sugUrlIn').value.trim()); }catch(x){} sugFetchInbox(true); });
 window.addEventListener('online',()=>pollSugStatus());
-BOOT.push((getShared().length&&!sugKey()?fetchLinks():Promise.resolve()).then(()=>Promise.allSettled([pollSugStatus(),sugFetchInbox(false),apFetch(false)])).catch(()=>{}));
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-(S.sugCheckAt||0)>5*60e3&&!S.playing){ S.sugCheckAt=Date.now(); pollSugStatus(); sugFetchInbox(false); apFetch(false); } });
+BOOT.push((getShared().length&&!sugKey()?fetchLinks():Promise.resolve()).then(()=>Promise.allSettled([pollSugStatus(),sugFetchInbox(false),apFetch(false),reqPoll(),reqFetch()])).catch(()=>{}));
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-(S.sugCheckAt||0)>5*60e3&&!S.playing){ S.sugCheckAt=Date.now(); pollSugStatus(); sugFetchInbox(false); apFetch(false); reqPoll(); reqFetch(); } });
 $('#rKeyBox').addEventListener('click',openKeyView);
 $('#rKeyBox').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); openKeyView(); } });
 $('#kvClose').addEventListener('click',closeKeyView);
@@ -4678,7 +4724,7 @@ function shareUrlFor(link){ return location.origin+location.pathname+'?lib='+enc
 const slugOf=n=>String(n||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'songs';
 const appBase=()=>location.origin+location.pathname;
 const shortUrlFor=part=>appBase()+'?'+slugOf(part);
-async function fetchLinks(){ try{ const r=await fetch('links.json',{cache:'no-store'}); if(!r.ok) return null; const j=await r.json(); if(j&&typeof j._suggest==='string'&&/^https:\/\//.test(j._suggest)&&!sugKey()){ try{ localStorage.setItem('pc-sugurl',j._suggest.trim()); }catch(e){} paintMemberTips(); } return j&&typeof j==='object'?j:null; }catch(e){ return null; } }
+async function fetchLinks(){ try{ const r=await fetch('links.json',{cache:'no-store'}); if(!r.ok) return null; const j=await r.json(); if(j&&typeof j._suggest==='string'&&/^https:\/\//.test(j._suggest)&&!sugKey()){ try{ localStorage.setItem('pc-sugurl',j._suggest.trim()); }catch(e){} paintMemberTips(); paintReq(); } return j&&typeof j==='object'?j:null; }catch(e){ return null; } }
 function makeLinksJson(){
   const L=shareLinks(), out={}; Object.keys(L).forEach(part=>{ if(L[part]) out[slugOf(part)]={part,url:L[part]}; }); if(sugUrl()) out._suggest=sugUrl();
   const t=$('#shareText'); if(!Object.keys(out).length){ t.textContent='Paste the Dropbox link of at least one part and tap Share link first.'; return; }
