@@ -1024,7 +1024,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gu';
+const APP_VERSION='2026-10-29 gv';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1365,11 +1365,12 @@ async function playNextSong(manual,dir){ dir=dir||1;
     if(!S.shuf||!S.shuf.length){ const ids=list.map(x=>x.id).filter(id=>id!==curId); for(let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; } S.shuf=ids.length?ids:[list[0].id]; }
     next=S.shuf.shift();
   } else { let k=cur+dir; if(k<0) k=list.length-1; if(k>=list.length){ if(S.pmode==='partloop'||manual) k=0; else { setStatus('That was the last song of '+part+'.'); return; } } next=list[k].id; }
-  const was=!manual||S.playing; if(manual) stop();
+  const was=!manual||S.playing; if(was) S.keepMedia=true; if(manual) stop();
   if(manual&&list.length===1&&next===curId){ setStatus(list[0].name+' is the only song in '+part+'.'); if(was) play(); return; }
-  const rate=S.rate; if(!(await openLibSong(next,true))) return;
-  if(rate!==1){ S.rate=rate; $('#tempo').value=String(rate); await prepareTempo(); }
-  const k=list.findIndex(x=>x.id===next); if(was) await play();
+  const rate=S.rate; if(was) S.keepMedia=true;   // keep the lock-screen controls (and the page awake) while the next song opens
+  try{ if(!(await openLibSong(next,true))) return;
+    if(rate!==1){ S.rate=rate; $('#tempo').value=String(rate); await prepareTempo(); } } finally{ S.keepMedia=false; }
+  const k=list.findIndex(x=>x.id===next); if(was) await play(); else mediaOff();
   setStatus((was?'Now playing: ':'Next song: ')+list[k].name+' ('+(k+1)+' of '+list.length+' in '+part+').');
 }
 function updateLoopUI(){
@@ -3900,15 +3901,14 @@ function mediaOn(){
     if(!S.keep){ S.keep=new Audio(silentWavUrl()); S.keep.loop=true; S.keep.setAttribute('playsinline',''); }
     const p=S.keep.play(); if(p&&p.catch) p.catch(()=>{});
     if('mediaSession' in navigator){
-      navigator.mediaSession.metadata=new MediaMetadata({title:$('#songName').textContent,artist:'Part Coach'+(S.curPart?' · '+S.curPart:''),artwork:[{src:'icon-192.png',sizes:'192x192',type:'image/png'},{src:'icon-512.png',sizes:'512x512',type:'image/png'}]});
-      navigator.mediaSession.playbackState='playing'; mediaPos();
+      mediaMeta(); navigator.mediaSession.playbackState='playing'; mediaPos();
       if(!S.msHandlers){
         S.msHandlers=true; const H=(a,f)=>{ try{ navigator.mediaSession.setActionHandler(a,f); }catch(e){} };
         H('play',()=>{ if(!S.playing&&!S.review) play(); });
         H('pause',()=>stop());
         H('stop',()=>stop());
-        H('nexttrack',()=>playNextSong(true));
-        H('previoustrack',()=>playPrevSong());
+        H('nexttrack',()=>mediaSkip(1));
+        H('previoustrack',()=>mediaSkip(-1));
         H('seekbackward',d=>{ seek(curT()-((d&&d.seekOffset)||5)); mediaPos(); });
         H('seekforward',d=>{ seek(curT()+((d&&d.seekOffset)||5)); mediaPos(); });
         H('seekto',d=>{ if(d&&d.seekTime!=null){ seek(d.seekTime); mediaPos(); } });
@@ -3916,7 +3916,28 @@ function mediaOn(){
     }
   }catch(e){}
 }
+function mediaMeta(title){ try{ if(!('mediaSession' in navigator)) return; navigator.mediaSession.metadata=new MediaMetadata({title:title||$('#songName').textContent,artist:'Part Coach'+(S.curPart||S.part?' · '+(S.curPart||S.part):''),artwork:[{src:'icon-192.png',sizes:'192x192',type:'image/png'},{src:'icon-512.png',sizes:'512x512',type:'image/png'}]}); }catch(e){} }
+// lock screen ⏮ ⏭: the title changes at once; quick taps add up (⏭⏭ = two songs on); the song opens once the taps stop.
+// Meanwhile the silent media keeps playing, so the phone keeps the controls and does not put the page to sleep.
+S.skip=null;
+async function mediaSkip(dir){
+  const part=S.curPart||S.part, list=sortSongs((await libMeta()).filter(x=>partOf(x)===part)); if(!list.length) return;
+  const sk=S.skip||(S.skip={pos:Math.max(0,list.findIndex(x=>S.cur&&x.id===S.cur.libId)),was:S.playing});
+  if(S.playing){ sk.was=true; stop(); }
+  sk.pos=((sk.pos+dir)%list.length+list.length)%list.length; sk.id=list[sk.pos].id; sk.list=list;
+  mediaMeta(list[sk.pos].name+' – loading…'); try{ navigator.mediaSession.playbackState=sk.was?'playing':'paused'; }catch(e){}
+  setStatus('Next: '+list[sk.pos].name+' ('+(sk.pos+1)+' of '+list.length+' in '+part+')…');
+  clearTimeout(sk.t); sk.t=setTimeout(mediaSkipRun,500); }
+async function mediaSkipRun(){ const sk=S.skip; if(!sk) return; if(sk.busy){ clearTimeout(sk.t); sk.t=setTimeout(mediaSkipRun,300); return; }
+  const id=sk.id; sk.busy=true; const rate=S.rate;
+  try{ if(!(S.cur&&S.cur.libId===id)){ if(!(await openLibSong(id,true))){ return; } if(rate!==1){ S.rate=rate; $('#tempo').value=String(rate); await prepareTempo(); } } }
+  finally{ sk.busy=false; }
+  if(sk.id!==id){ sk.t=setTimeout(mediaSkipRun,0); return; }   // another tap came while this one was opening
+  S.skip=null; const k=sk.list.findIndex(x=>x.id===id);
+  if(sk.was) await play(); else { mediaMeta(); mediaOff(); }
+  setStatus((sk.was?'Now playing: ':'Next song: ')+sk.list[k].name+' ('+(k+1)+' of '+sk.list.length+').'); }
 function mediaOff(){
+  if(S.skip||S.keepMedia){ mediaMeta(); return; }   // switching songs: keep the controls
   try{ if(S.keep) S.keep.pause(); if('mediaSession' in navigator){ navigator.mediaSession.playbackState='paused'; mediaPos(); } }catch(e){}
 }
 function showResult(){
