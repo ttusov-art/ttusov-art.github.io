@@ -1007,7 +1007,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gf';
+const APP_VERSION='2026-10-29 gg';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2488,6 +2488,10 @@ async function reqDecide(r,status){ busyShow(status==='granted'?'Giving '+r.name
   try{ await sugPost(sugUrl(),{action:'rdecide',key:sugKey(),id:r.id,status}); S.reqs=S.reqs.filter(x=>x!==r); paintReqAdmin(); await busyHide('Done');
     setStatus(status==='granted'?r.name+' is now an approver for '+r.part+': their app unlocks approving the next time it opens.':'Request from '+r.name+' declined.'); }
   catch(e){ await busyHide(null); setStatus('Could not answer the request: '+e.message+'.',true); } }
+// a review is saved: the decided song is the new starting point. The editor closes, and neither Undo nor "Cancel my edits"
+// can take the accepted changes back afterwards (that would share a song that no longer matches the "accepted" status)
+function reviewDone(){ S.edSnap=null; if(Array.isArray(S.undo)) S.undo.length=0; if(Array.isArray(S.redo)) S.redo.length=0; try{ $('#edRedo').disabled=true; }catch(e){}
+  if(S.tap) stopTap(); if(S.editMode) setEditMode(false); setEdFold(false); S.sel=null; updateSelInfo(); draw(); }
 // moderator: put every approved suggestion into its song (oldest first); anything that no longer fits is left for a normal review
 async function applyApproved(){
   const lib=await libMeta(), byU={}; lib.forEach(x=>{ if(x.uid) byU[x.uid]=x; });
@@ -2516,7 +2520,7 @@ async function applyApproved(){
         await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); }
       done.push([it,acc.length]); }
     if(prev!=null&&!(S.cur&&S.cur.libId===prev)) await openLibSong(prev,true);
-  }finally{ S.sug=null; $('#sugBar').hidden=true; paintSugBtn(); renderLib(); }
+  }finally{ S.sug=null; $('#sugBar').hidden=true; paintSugBtn(); renderLib(); if(done.length) reviewDone(); }
   await busyHide(done.length?'Done':null);
   const used=done.filter(d=>d[1]>0), names=[...new Set(used.map(d=>d[0].songName))];
   setStatus((done.length?done.length+' approved suggestion'+(done.length>1?'s':'')+' handled'+(names.length?': changes put into '+names.join(', ')+'. Make the share file so the choir gets them.':' (all changes were declined).'):'Nothing could be applied.')+
@@ -2601,7 +2605,7 @@ async function sugFinish(){ const s=S.sug; if(!s) return; if(S.playing) stop(); 
   if(r.value!=='ok') return;
   const status=acc===0?'rejected':acc===s.changes.length?'accepted':'partly';
   busyShow(acc?'Saving the accepted changes…':'Saving your review…'); const okSet=await sugSetStatus(s.it,status); if(!okSet) await busyHide(null);
-  if(okSet){ S.sug=null; $('#sugBar').hidden=true;
+  if(okSet){ S.sug=null; $('#sugBar').hidden=true; reviewDone();
     if(acc&&S.cur.libId!=null){ unpubMark(S.curPart,curSongName(),'accepted suggestion from '+new Date(s.it.received).toLocaleDateString()+' ('+acc+' of '+s.changes.length+': '+s.changes.filter(c=>c.state==='acc').map(sugWhat).slice(0,3).join(', ')+(acc>3?', …':'')+')'); await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); }
     draw(); setStatus(acc?'Saved: '+acc+' of '+s.changes.length+' suggested changes accepted. Make the share file again so everyone gets them.':'Done: the suggestion was declined.'); await busyHide(acc?'Saved':'Done'); if(S.inbox.length) setTimeout(openInbox,300); } }
 async function sugCancel(){ const s=S.sug; if(!s) return; if(S.playing) stop();
