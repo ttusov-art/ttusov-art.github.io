@@ -423,6 +423,8 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .rep-kinds{gap:6px;flex-wrap:wrap} .rep-kind.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .rep-block{display:flex;flex-direction:column;gap:6px;padding:10px 12px;margin-bottom:10px;border:1px solid color-mix(in srgb,#d97706 50%,var(--line));border-radius:10px;background:color-mix(in srgb,#d97706 7%,var(--surface))}
 .pick-menu .pm-rep{color:#b45309;font-weight:600}
+.rep-offer{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,#8b5cf6 50%,var(--line));border-radius:10px;background:color-mix(in srgb,#8b5cf6 7%,var(--surface));font-size:14px}
+.rep-offer .row{gap:6px;flex-wrap:wrap;align-items:center} .rep-chip{padding:4px 10px;font-family:var(--font-mono);font-size:13px;opacity:.55} .rep-chip.on{opacity:1;border-color:#8b5cf6;color:#6d28d9}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
 .ed-row .member-tip{flex:1 1 100%}
@@ -640,6 +642,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           </div>
       </div>
       <div class="end-tip" id="endTip" hidden role="status"><span class="small">Heard a wrong note or a lyric out of time? Fix it with the pencil <b>✎</b> above (words: in the Lyrics editor), then tap Suggest my edits. Every fix helps the whole choir.</span><div class="row"><button id="endTipGo" type="button" class="primary">Show me</button><button id="endTipOff" type="button" class="link-btn">Don't show again</button><button id="endTipX" type="button" class="link-btn" aria-label="Close the tip">Close</button></div></div>
+      <div class="rep-offer" id="repOffer" hidden role="status"></div>
       <div class="row hint-row"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag the A and B tabs at the top to make the loop longer or shorter. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.</span><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
     </div>
   </section>
@@ -1041,7 +1044,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 hc';
+const APP_VERSION='2026-10-29 hd';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1140,7 +1143,7 @@ async function pitchLineOf(buf,onProg,rk){
   return {tt,mm,hop:tr.hop,t0:tr.t0};
 }
 function songReady(name,label){
-  renderSheetBtns(); closeSheet();
+  renderSheetBtns(); closeSheet(); if(typeof repHide==='function') repHide();
   S.lyrTextHist=[]; S.edSnap=null; S.needTiming=false; S.gateBase=null; S.gateLoud=null; { const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } } $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>{ S.beatJob=scheduleBeatDetect(false); },50); setTimeout(()=>{ S.keyJob=scheduleKeyDetect(false); },400);
   normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
@@ -2774,9 +2777,9 @@ function paintRedo(){ const b=document.getElementById('edRedo'); if(b) b.disable
 function swapStep(u,word){ if(u&&u.lyrAll){ const back={lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}; S.lyrics=u.lyrAll; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); updateSelInfo(); setStatus('Lyric change '+word+'.'); return back; }
   if(u&&u.lyr!=null){ const back={lyr:u.lyr,t:S.lyrics[u.lyr]?S.lyrics[u.lyr].t:null}; if(S.lyrics[u.lyr]) S.lyrics[u.lyr].t=u.t; lyrChanged(); updateSelInfo(); setStatus('Lyric move '+word+'.'); return back; }
   const back=Float32Array.from(S.tM); S.tM=u; targetEdited(word==='undone'?'Undone.':'Redone.'); return back; }
-function edRedo(){ if(!S.redo.length) return; const u=S.redo.pop(); const back=swapStep(u,'redone'); S.undo.push(back); if(S.undo.length>30) S.undo.shift(); paintRedo(); updateSelInfo(); }
+function edRedo(){ if(!S.redo.length) return; const u=S.redo.pop(); const back=swapStep(u,'redone'); S.undo.push(back); if(S.undo.length>30) S.undo.shift(); paintRedo(); updateSelInfo(); S.repSeen=back; repHide(); }
 let edSaveTimer=null;
-function targetEdited(msg){ S.ovwImg=null; paintSuggest();
+function targetEdited(msg){ S.ovwImg=null; paintSuggest(); if(S.editMode&&!S.sug&&!S.gating&&!S.repApplying){ clearTimeout(S.repT); S.repT=setTimeout(repCheckNotes,500); }
   if(!S.gating&&S.gateBase){ S.gateBase=null; const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } }   // another edit: the slider starts again from the line as it is now
   S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
   computeViewKeep(); updateSelInfo(); draw();
@@ -2935,7 +2938,7 @@ function edShift(d){
   targetEdited();
 }
 function edRemove(){ const r=selRange(); if(!r) return; pushUndo(); for(let i=r.i0;i<=r.i1;i++) S.tM[i]=NaN; targetEdited('Removed the target in the selection.'); }
-function edUndo(){ if(!S.undo.length) return; const u=S.undo.pop(); const back=swapStep(u,'undone'); S.redo.push(back); paintRedo(); updateSelInfo(); }
+function edUndo(){ if(!S.undo.length) return; const u=S.undo.pop(); const back=swapStep(u,'undone'); S.redo.push(back); paintRedo(); updateSelInfo(); S.repSeen=S.undo[S.undo.length-1]; repHide(); }
 function resetLabel(){ return selRange()?'Reset selection':'Reset to original'; }
 function edReset(btn){
   const r=selRange();
@@ -3507,6 +3510,43 @@ function lyrListFollow(){ const list=$('#lyrList'); if(!list||list.hidden) retur
   if(!r){ if(S.tap&&S.tap.i>=S.lyrics.length) list.scrollTo({top:list.scrollHeight,behavior:'smooth'}); return; }
   const prev=r.previousElementSibling; list.scrollTo({top:prev?prev.offsetTop:0,behavior:'smooth'}); }
 
+// ===== repeats: a fix in one line can go to the other lines with the same words and the same melody =====
+const repNorm=t=>String(t||'').toLowerCase().replace(/['’‘`´]/g,'').normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+function repLineAt(t){ let i=-1; S.lyrics.forEach((l,k)=>{ if(l.t!=null&&l.t<=t+1e-3) i=k; }); if(i<0) return null; const nx=S.lyrics.slice(i+1).find(l=>l.t!=null); return {i,L:S.lyrics[i],end:nx?nx.t:S.dur}; }
+// do two stretches of the pitch line look alike (same melody, allowing up to 0.3 s shift)?
+function repSimilar(ta,tb,len){ const T=S.tT,M=S.tM,n=M.length; if(!T||!n) return false; const a0=idxAt(ta), a1=idxAt(ta+len), b0=idxAt(tb); let best=9;
+  for(let lag=-30;lag<=30;lag++){ let sum=0,cnt=0,av=0; for(let q=a0;q<=a1;q++){ const v=M[q]; if(isNaN(v)) continue; av++; const j=b0+(q-a0)+lag; if(j<0||j>=n||isNaN(M[j])) continue; sum+=Math.abs(v-M[j]); cnt++; } if(av>=20&&cnt/av>=0.7) best=Math.min(best,sum/cnt); }
+  return best<=0.45; }
+function repHide(){ const b=$('#repOffer'); if(b){ b.hidden=true; b.innerHTML=''; } S.repOffer=null; }
+function repShow(html,onApply){ const b=$('#repOffer'); b.innerHTML=html; b.hidden=false;
+  b.querySelectorAll('.rep-chip').forEach(c=>c.addEventListener('click',()=>{ c.classList.toggle('on'); const n=b.querySelectorAll('.rep-chip.on').length, go=b.querySelector('[data-go]'); go.disabled=!n; go.textContent=n>1?'Apply to '+n:'Apply'; }));
+  b.querySelector('[data-go]').addEventListener('click',()=>{ const pick=[...b.querySelectorAll('.rep-chip')].map(c=>c.classList.contains('on')); repHide(); onApply(pick); });
+  b.querySelector('[data-no]').addEventListener('click',repHide); }
+function repChips(list){ return list.map(x=>'<button type="button" class="rep-chip on">'+fmtT(x.t)+'</button>').join(''); }
+// notes: compare the line as it was (top of the undo list) with now; find the changed stretch and look for it in the repeats
+function repCheckNotes(){ if(!S.editMode||S.sug||!S.lyrics.length) return; const base=S.undo[S.undo.length-1]; if(!(base instanceof Float32Array)||base===S.repSeen||base.length!==S.tM.length) return; S.repSeen=base;
+  const T=S.tT,M=S.tM,n=M.length, same=(a,b)=>(isNaN(a)&&isNaN(b))||Math.abs(a-b)<0.005; let i0=-1,i1=-1; for(let i=0;i<n;i++) if(!same(base[i],M[i])){ if(i0<0) i0=i; i1=i; }
+  if(i0<0) return; const ln=repLineAt(T[i0]); if(!ln||T[i1]>=ln.end) return; const key=repNorm(ln.L.text); if(!key) return;
+  const rel=T[i0]-ln.L.t, pad=Math.round(0.5/((T[1]-T[0])||0.01)), a0=Math.max(idxAt(ln.L.t),i0-pad), a1=Math.min(idxAt(ln.end)-1,i1+pad), found=[];
+  S.lyrics.forEach((R,k)=>{ if(k===ln.i||R.t==null||repNorm(R.text)!==key) return; const g=idxAt(R.t+rel)-i0; let best=null;
+    for(let lag=-30;lag<=30;lag++){ const off=g+lag; let sum=0,cnt=0,bv=0; for(let q=a0;q<=a1;q++){ const v=base[q]; if(isNaN(v)) continue; bv++; const w=M[q+off]; if(q+off<0||q+off>=n||isNaN(w)) continue; let d=Math.abs(v-w); if(q>=i0&&q<=i1&&same(M[q],w)) d=0; sum+=d; cnt++; }
+      if(bv&&cnt/bv>=0.7){ const sc=sum/cnt; if(!best||sc<best.sc) best={sc,off}; } }
+    if(!best||best.sc>0.45) return;
+    let already=true; for(let q=i0;q<=i1;q++) if(!same(M[q],M[q+best.off])){ already=false; break; } if(already) return;
+    found.push({t:R.t,off:best.off}); });
+  if(!found.length) return;
+  repShow('<span>Same change for '+(found.length>1?found.length+' repeats':'the repeat')+' of “'+esc(ln.L.text.length>40?ln.L.text.slice(0,38)+'…':ln.L.text)+'”?</span><div class="row">'+repChips(found)+'</div><div class="row"><button type="button" class="primary" data-go>'+(found.length>1?'Apply to '+found.length:'Apply')+'</button><button type="button" class="link-btn" data-no>Not now</button></div>',
+    pick=>{ const use=found.filter((x,k)=>pick[k]); if(!use.length) return; pushUndo(); S.repSeen=S.undo[S.undo.length-1];
+      for(const x of use) for(let q=i0;q<=i1;q++){ const j=q+x.off; if(j>=0&&j<n) S.tM[j]=M[q]; }
+      S.repApplying=true; try{ targetEdited('The change was copied to '+use.length+' repeat'+(use.length>1?'s':'')+' ('+use.map(x=>fmtT(x.t)).join(', ')+'). Undo takes it back.'); } finally{ S.repApplying=false; } }); }
+// timing: a lyric line moved by hand → offer to move its repeats by the same amount
+function repCheckTime(i,delta){ const L=S.lyrics[i]; if(!L||Math.abs(delta)<0.02) return; const key=repNorm(L.text); if(!key) return;
+  const t0=L.t-delta, nx=S.lyrics.slice(i+1).find(l=>l.t!=null), len=Math.min(3,Math.max(1,(nx?nx.t:S.dur)-L.t));
+  const found=[]; S.lyrics.forEach((R,k)=>{ if(k===i||R.t==null||repNorm(R.text)!==key||!repSimilar(t0,R.t,len)) return; const prev=S.lyrics.slice(0,k).filter(l=>l.t!=null).pop(), next=S.lyrics.slice(k+1).find(l=>l.t!=null), nt=R.t+delta;
+    if((prev&&nt<=prev.t+0.05)||(next&&nt>=next.t-0.05)||nt<0) return; found.push({k,t:R.t}); });
+  if(!found.length) return;
+  repShow('<span>Move '+(found.length>1?'the '+found.length+' repeats':'the repeat')+' of “'+esc(L.text.length>40?L.text.slice(0,38)+'…':L.text)+'” by '+(delta>0?'+':'−')+Math.abs(delta).toFixed(2)+' s too?</span><div class="row">'+repChips(found)+'</div><div class="row"><button type="button" class="primary" data-go>'+(found.length>1?'Apply to '+found.length:'Apply')+'</button><button type="button" class="link-btn" data-no>Not now</button></div>',
+    pick=>{ const use=found.filter((x,k)=>pick[k]); if(!use.length) return; undoPush({lyrAll:S.lyrics.map(l=>({t:l.t,text:l.text}))}); for(const x of use) S.lyrics[x.k].t=Math.round((S.lyrics[x.k].t+delta)*1000)/1000; lyrChanged(); setStatus('Moved '+use.length+' repeat'+(use.length>1?'s':'')+' by '+(delta>0?'+':'−')+Math.abs(delta).toFixed(2)+' s.'); }); }
 // ===== voice recording =====
 const REC_SRC=`class PcRec extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(2048);this.n=0;this.t=0;}
 process(inp){const c=inp[0]&&inp[0][0];if(c){if(this.n===0)this.t=currentTime;this.b.set(c,this.n);this.n+=c.length;if(this.n>=2048){this.port.postMessage({t:this.t,d:this.b.slice(0,this.n)});this.n=0;}}return true;}}
@@ -4391,7 +4431,7 @@ canvas.addEventListener('pointermove',e=>{ if(drag&&drag.loopEdge){ const d=drag
     if(d.moved&&(S.loop.a!==d.a0||S.loop.b!==d.b0)){ S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); setStatus('Loop '+(S.loop.a!=null?fmtT1(S.loop.a):'start')+' – '+(S.loop.b!=null?fmtT1(S.loop.b):'end')+'.'); }
     draw(); return; }
   if(drag&&drag.stretch){ drag=null; touchPts.delete(e.pointerId); updateSelInfo(); draw(); return; }
-  if(S.lyrDrag){ const d=S.lyrDrag; S.lyrDrag=null; const L=S.lyrics[d.i]; if(L.t!==d.t0){ if(S.tap){ S.tap.hist.push({i:d.i,t:d.t0,cleared:[],moved:true,back:S.tap.i}); $('#lyrUndo').disabled=false; } else { undoPush({lyr:d.i,t:d.t0}); updateSelInfo(); } setStatus('“'+L.text+'” moved to '+fmtT1(L.t)+'.'); } lyrChanged(); return; }
+  if(S.lyrDrag){ const d=S.lyrDrag; S.lyrDrag=null; const L=S.lyrics[d.i]; if(L.t!==d.t0&&!S.tap&&d.t0!=null) setTimeout(()=>repCheckTime(d.i,L.t-d.t0),0); if(L.t!==d.t0){ if(S.tap){ S.tap.hist.push({i:d.i,t:d.t0,cleared:[],moved:true,back:S.tap.i}); $('#lyrUndo').disabled=false; } else { undoPush({lyr:d.i,t:d.t0}); updateSelInfo(); } setStatus('“'+L.text+'” moved to '+fmtT1(L.t)+'.'); } lyrChanged(); return; }
   if(kb&&kb.pts.has(e.pointerId)){ kb.pts.delete(e.pointerId);
     if(kb.pts.size){ kbStart(); return; }
     const lastNote=S.kbNote; keyNoteOff(); const moved=kb.moved; kb=null; if(moved) saveView(); else if(S.editMode&&S.sel&&lastNote!=null) fillSelWith(lastNote); return; }
