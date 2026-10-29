@@ -438,6 +438,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
 .ed-row .member-tip{flex:1 1 100%}
+.set-group{display:grid;gap:14px;padding:12px 14px 14px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--fg) 2.5%,transparent)}
+.set-h{margin:0;font-size:15px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--fg)}
+.set-danger{border-color:color-mix(in srgb,var(--off) 35%,var(--line))} .set-danger .wipe-field{margin-top:0;padding-top:0;border-top:0}
+.set-tips ul.tips{margin:6px 0 0}
+.set-group label.check{font-size:15px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--fg)}
 .more-info{margin-top:2px} .more-info summary{cursor:pointer;color:var(--accent);font-size:13px;padding:2px 0} .more-info>span{display:block;margin-top:6px}
 .more-list{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
 display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px}
@@ -812,6 +817,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <details class="panel fold" id="setPanel" open>
       <summary>Settings</summary>
       <div class="fold-body">
+      <div class="set-group"><h3 class="set-h">Sound</h3>
       <div class="field">
         <label for="volGuide">Guide voice volume</label>
         <div class="field-row"><input id="volGuide" type="range" min="0" max="4" step="0.05" value="0.75"><span class="val" id="volGuideV">75%</span></div>
@@ -823,52 +829,12 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <div class="field">
         <label for="volTone">Guide tone volume</label>
         <div class="field-row"><input id="volTone" type="range" min="0" max="1.5" step="0.05" value="0.75"><span class="val" id="volToneV">75%</span></div>
-        <span class="small">A clean tone that plays the target note. Easier to hear than the voice when the backing is busy.</span>
+        <details class="more-info"><summary>More info</summary><span class="small">A clean tone that plays the target note. Easier to hear than the voice when the backing is busy.</span></details>
       </div>
       <div class="field">
         <label for="volMet">Metronome volume</label>
         <div class="field-row"><input id="volMet" type="range" min="0.05" max="1" step="0.05" value="0.75"><span class="val" id="volMetV">75%</span></div>
-        <span class="small">The Click button above the pitch lane plays a click on every beat of the song's beat grid.</span>
-      </div>
-      <div class="field">
-        <label class="check" for="hsResume"><input id="hsResume" type="checkbox" checked>Headset button can resume playback</label>
-        <span class="small">On: the play/pause button on your headphones both pauses and continues. The phone then keeps showing the Pause symbol on the lock screen even while paused (for up to 10 minutes). Off: the lock screen shows the right symbol, but the headset button can only pause.</span>
-      </div>
-      <div class="field">
-        <label class="check" for="restoreBacksOn"><input id="restoreBacksOn" type="checkbox" checked>Restore deleted songs and backings with updates</label>
-        <span class="small">On: when the moderator's update arrives, songs and backing tracks you deleted come back. Off: what you deleted stays deleted (saves space on this device).</span>
-      </div>
-      <div class="field">
-        <label for="delay">Delay compensation</label>
-        <div class="field-row"><input id="delay" type="range" min="0" max="1500" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
-      </div>
-      <div class="field">
-        <label for="pdelay">Picture delay</label>
-        <div class="field-row pd-row"><button id="pdDown" type="button" aria-label="Show the picture earlier" title="Earlier">−</button><input id="pdelay" type="range" min="0" max="600" step="10" value="0" aria-label="Picture delay"><button id="pdUp" type="button" aria-label="Show the picture later" title="Later">+</button><span class="val" id="pdelayV">0 ms</span><span id="pdV" hidden></span></div>
-        <span class="small">Lines up what you see with what you hear. If the playhead and moving lane run ahead of the music (common with Bluetooth headphones, often 150–300 ms), press + until they match; − moves them back. It changes only the picture, not the sound or your score.</span>
-      </div>
-      <div class="field">
-        <span class="small warn" id="delayHint" hidden></span>
-        <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Clap along with the piano, then with the picture (about 30 seconds). Sets the delay compensation and the picture delay.</span></div>
-        <span class="small">If your line always looks slightly late compared with the target, raise this or tap Measure delay. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span>
-      </div>
-      <div class="field" id="micSelField">
-        <label for="micSel">Microphone</label>
-        <select id="micSel" style="font:inherit;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);width:100%"></select>
-        <span class="small" id="micNote">With Bluetooth earbuds or a headset, choose the phone’s own microphone. Using the headset’s microphone switches it into phone-call mode: the sound gets quiet and thin, and the volume can’t be changed.</span>
-        <details class="more-info"><summary>Additional info</summary>
-          <span class="small">Why not the headset’s microphone? Bluetooth headphones have two modes. Music mode gives full stereo sound but the microphone is off. Call mode turns the microphone on, but the sound drops to thin mono, gets quiet and the volume can’t be changed. No app can get around this, so Part Coach listens through the phone’s own microphone and the headphones stay in music mode. That works well: the backing plays only in your ears, so the phone hears just your voice, and Measure delay makes up for the Bluetooth delay.</span>
-          <span class="small">Want a microphone closer to your mouth?</span>
-          <ul class="small more-list">
-            <li><b>Wired or USB-C headset with a microphone:</b> full sound and the headset microphone at the same time, with almost no delay. The most reliable choice.</li>
-            <li><b>Small clip-on USB-C microphone:</b> keep your Bluetooth headphones for listening and plug the microphone into the phone. Good in a noisy room or when the phone is on a music stand.</li>
-            <li><b>Newer “LE Audio” earbuds with a recent Android phone</b> can send microphone and good sound at the same time, but it depends on the phone, the earbuds and the browser, so it may not work here.</li>
-          </ul>
-        </details>
-      </div>
-      <div class="field">
-        <label for="zoom">Seconds on screen</label>
-        <div class="field-row"><input id="zoom" type="range" min="0.5" max="30" step="0.5" value="8"><span class="val" id="zoomV">8 s</span></div>
+        <details class="more-info"><summary>More info</summary><span class="small">The Click button above the pitch lane plays a click on every beat of the song's beat grid.</span></details>
       </div>
       <div class="field">
         <label for="toneSound">Sound of the guide tone</label>
@@ -883,7 +849,44 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           <option value="piano">Piano (simple)</option>
           <option value="grand">Grand piano (recorded)</option>
         </select>
-        <span class="small">Tap a key on the keyboard left of the pitch lane to hear its note, also while the song plays. Its volume follows the guide tone volume. The recorded grand piano downloads about 1.5 MB the first time (Salamander Grand Piano by Alexander Holm, CC BY 3.0).</span>
+        <details class="more-info"><summary>More info</summary><span class="small">Tap a key on the keyboard left of the pitch lane to hear its note, also while the song plays. Its volume follows the guide tone volume. The recorded grand piano downloads about 1.5 MB the first time (Salamander Grand Piano by Alexander Holm, CC BY 3.0).</span></details>
+      </div>
+      </div>
+      <div class="set-group"><h3 class="set-h">Microphone and delay</h3>
+      <div class="field" id="micSelField">
+        <label for="micSel">Microphone</label>
+        <select id="micSel" style="font:inherit;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);width:100%"></select>
+        <span class="small" id="micNote">With Bluetooth headphones, choose the phone’s own microphone.</span>
+        <details class="more-info"><summary>More info</summary>
+          <span class="small">The headset’s own microphone switches it into phone-call mode: the sound gets quiet and thin, and the volume can’t be changed.</span>
+          <details class="more-info"><summary>More info</summary><span class="small">Why not the headset’s microphone? Bluetooth headphones have two modes. Music mode gives full stereo sound but the microphone is off. Call mode turns the microphone on, but the sound drops to thin mono, gets quiet and the volume can’t be changed. No app can get around this, so Part Coach listens through the phone’s own microphone and the headphones stay in music mode. That works well: the backing plays only in your ears, so the phone hears just your voice, and Measure delay makes up for the Bluetooth delay.</span></details>
+          <span class="small">Want a microphone closer to your mouth?</span>
+          <ul class="small more-list">
+            <li><b>Wired or USB-C headset with a microphone:</b> full sound and the headset microphone at the same time, with almost no delay. The most reliable choice.</li>
+            <li><b>Small clip-on USB-C microphone:</b> keep your Bluetooth headphones for listening and plug the microphone into the phone. Good in a noisy room or when the phone is on a music stand.</li>
+            <li><b>Newer “LE Audio” earbuds with a recent Android phone</b> can send microphone and good sound at the same time, but it depends on the phone, the earbuds and the browser, so it may not work here.</li>
+          </ul>
+        </details>
+      </div>
+      <div class="field">
+        <label for="delay">Delay compensation</label>
+        <div class="field-row"><input id="delay" type="range" min="0" max="1500" step="10" value="80"><span class="val" id="delayV">80 ms</span></div>
+      </div>
+      <div class="field">
+        <label for="pdelay">Picture delay</label>
+        <div class="field-row pd-row"><button id="pdDown" type="button" aria-label="Show the picture earlier" title="Earlier">−</button><input id="pdelay" type="range" min="0" max="600" step="10" value="0" aria-label="Picture delay"><button id="pdUp" type="button" aria-label="Show the picture later" title="Later">+</button><span class="val" id="pdelayV">0 ms</span><span id="pdV" hidden></span></div>
+        <details class="more-info"><summary>More info</summary><span class="small">Lines up what you see with what you hear. If the playhead and moving lane run ahead of the music (common with Bluetooth headphones, often 150–300 ms), press + until they match; − moves them back. It changes only the picture, not the sound or your score.</span></details>
+      </div>
+      <div class="field">
+        <span class="small warn" id="delayHint" hidden></span>
+        <div class="row"><button id="calBtn" type="button">Measure delay</button><span class="small" id="calText">Clap along with the piano, then with the picture (about 30 seconds). Sets the delay compensation and the picture delay.</span></div>
+        <details class="more-info"><summary>More info</summary><span class="small">If your line always looks slightly late compared with the target, raise this or tap Measure delay. Wired headphones: about 50–100 ms. Bluetooth: often 200–300 ms.</span></details>
+      </div>
+      </div>
+      <div class="set-group"><h3 class="set-h">Display and scoring</h3>
+      <div class="field">
+        <label for="zoom">Seconds on screen</label>
+        <div class="field-row"><input id="zoom" type="range" min="0.5" max="30" step="0.5" value="8"><span class="val" id="zoomV">8 s</span></div>
       </div>
       <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
@@ -895,19 +898,34 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           <option value="off">Off: only the summary after singing</option>
         </select>
       </div>
-      <ul class="tips">
-        <li>Your line is green within 50 cents of the target, amber within a semitone and red further off. The faint blue line is your previous loop pass.</li>
-        <li>Score counts only moments where both the target and you have a clear pitch.</li>
-        <li>On time: at each note start the app checks when you reached the new note; within 80 ms counts as on time. With gentle marks, a small green dot means on time and a faint ring means early or late. Detailed marks add colours and the offset in ms (+ late, − early). The summary after singing tells you if you tend to be early or late.</li>
-        <li>Turn the guide voice down once you know the part, and sing it alone over the backing.</li>
-        <li>You can turn the screen off while singing. The song, scoring and recording keep going, and lock-screen controls can pause it.</li>
-      </ul>
+      <details class="more-info set-tips"><summary>How the colours and scores work</summary>
+        <ul class="tips">
+          <li>Your line is green within 50 cents of the target, amber within a semitone and red further off. The faint blue line is your previous loop pass.</li>
+          <li>Score counts only moments where both the target and you have a clear pitch.</li>
+          <li>On time: at each note start the app checks when you reached the new note; within 80 ms counts as on time. With gentle marks, a small green dot means on time and a faint ring means early or late. Detailed marks add colours and the offset in ms (+ late, − early). The summary after singing tells you if you tend to be early or late.</li>
+          <li>Turn the guide voice down once you know the part, and sing it alone over the backing.</li>
+          <li>You can turn the screen off while singing. The song, scoring and recording keep going, and lock-screen controls can pause it.</li>
+        </ul>
+      </details>
+      </div>
+      <div class="set-group"><h3 class="set-h">Playback and updates</h3>
+      <div class="field">
+        <label class="check" for="hsResume"><input id="hsResume" type="checkbox" checked>Headset button can resume playback</label>
+        <details class="more-info"><summary>More info</summary><span class="small">On: the play/pause button on your headphones both pauses and continues. The phone then keeps showing the Pause symbol on the lock screen even while paused (for up to 10 minutes). Off: the lock screen shows the right symbol, but the headset button can only pause.</span></details>
+      </div>
+      <div class="field">
+        <label class="check" for="restoreBacksOn"><input id="restoreBacksOn" type="checkbox" checked>Restore deleted songs and backings with updates</label>
+        <details class="more-info"><summary>More info</summary><span class="small">On: when the moderator's update arrives, songs and backing tracks you deleted come back. Off: what you deleted stays deleted (saves space on this device).</span></details>
+      </div>
+      </div>
+      <div class="set-group set-danger"><h3 class="set-h">This device</h3>
       <div class="field wipe-field">
         <label>Remove Part Coach from this device</label>
         <span class="small">Deletes all songs, backings, recordings, lyrics edits, settings, keys and the downloaded piano from this phone or computer. Nothing on Dropbox or in the choir's inbox is touched; open your share link again to get the songs back.</span>
         <div class="row"><button id="wipeBtn" type="button" class="danger-btn">Remove all Part Coach data…</button></div>
       </div>
-      <span class="small" id="appVer"></span>
+
+      </div>      <span class="small" id="appVer"></span>
       </div>
     </details>
   </section>
@@ -1062,7 +1080,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 hj';
+const APP_VERSION='2026-10-29 hk';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
