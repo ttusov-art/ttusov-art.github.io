@@ -64,6 +64,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .kv-head{display:flex;align-items:center;gap:10px}
 .kv-head h2{margin:0;font-size:24px;flex:1}
 .kv-sub{color:var(--muted);font-size:14px;margin:4px 0 0}
+.kv-size{gap:10px;align-items:center;margin-top:10px} #kvBig.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .kv-oct{display:inline-flex;align-items:center;gap:6px}
 .kv-svg{display:block;width:100%;height:auto;margin:14px 0 10px;touch-action:none;user-select:none;-webkit-user-select:none}
 .kv-w{fill:#d9dee2;stroke:#9aa3a9;stroke-width:1}
 .kv-w.in{fill:#ffffff}
@@ -500,6 +501,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   <div class="kv-card">
     <div class="kv-head"><h2 id="kvName">Key</h2><button id="kvClose" type="button" aria-label="Close">✕</button></div>
     <p class="kv-sub" id="kvRel"></p>
+    <div class="kv-size row"><button id="kvBig" type="button" aria-pressed="false" title="Bigger keys: one octave at a time">Bigger keys</button><span class="kv-oct" id="kvOctRow" hidden><button id="kvOctDn" type="button" aria-label="Lower octave">◀</button><span class="small" id="kvOctLab"></span><button id="kvOctUp" type="button" aria-label="Higher octave">▶</button></span></div>
     <div id="kvPiano"></div>
     <p class="kv-sub" id="kvFrom" style="margin-bottom:10px"></p>
     <div class="kv-row">
@@ -1044,7 +1046,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 he';
+const APP_VERSION='2026-10-29 hf';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2287,6 +2289,7 @@ async function saveKey(){ if(!S.cur||S.cur.libId==null) return; const k=S.mkey?{
        else await libUpdate(S.cur.libId,{musicKey:k}); }catch(e){} }
 // ----- key view: two octaves with the notes of the key named, the home note marked -----
 S.kvKey=null;
+function kvBig(){ try{ return localStorage.getItem('pc-kvbig')==='1'; }catch(e){ return false; } }
 function openKeyView(){ if(!S.mkey) return; S.kvKey={tonic:S.mkey.tonic,mode:S.mkey.mode}; $('#keyView').hidden=false; renderKeyView(); $('#kvClose').focus({preventScroll:true}); }
 function closeKeyView(){ S.kvFingers.forEach(f=>{ if(f.v) voiceOff(f.v,true); }); S.kvFingers.clear();  $('#keyView').hidden=true; kvStop(); }
 function renderKeyView(){
@@ -2295,14 +2298,15 @@ function renderKeyView(){
   $('#kvRel').textContent='Same notes as '+keyName(r)+'. Scale: '+SCALE_STEPS[k.mode].map(st=>sp[(k.tonic+st)%12]).join(' ');
   $('#kvFrom').textContent=same?(S.mkey.auto?'Found from '+(S.mkey.from||'the song')+'. Pick another key below if it sounds wrong.':'Set by you for this song.'):'This song: '+(S.mkey?keyName(S.mkey):'–')+'. Showing '+keyName(k)+' to compare.';
   $('#kvSel').value=k.tonic+':'+k.mode; $('#kvUse').hidden=same; $('#kvAuto').hidden=!(same&&S.mkey&&!S.mkey.auto);
-  // piano: C to C over two octaves (15 white keys)
-  const W=15, ww=40, wh=150, bw=24, bh=92, svg=[], BLK={1:0,3:1,6:3,8:4,10:5};
+  // piano: C to C over two octaves (15 white keys); "Bigger keys": one octave (8 white keys), ◀ ▶ switch between the two octaves
+  const big=kvBig(), W=big?8:15, ww=40, wh=big?110:150, bw=24, bh=big?68:92, o0=big?S.kvOct||0:0, svg=[], BLK={1:0,3:1,6:3,8:4,10:5};
+  $('#kvBig').setAttribute('aria-pressed',String(big)); $('#kvBig').classList.toggle('on',big); $('#kvOctRow').hidden=!big; $('#kvOctDn').disabled=o0===0; $('#kvOctUp').disabled=o0===1; { const b0=4+o0+kvShift()/12; $('#kvOctLab').textContent='C'+b0+'–C'+(b0+1); }
   const white=[0,2,4,5,7,9,11];
   svg.push('<svg viewBox="0 0 '+(W*ww+2)+' '+(wh+2)+'" role="img" aria-label="Piano keys of '+keyName(k)+'" class="kv-svg">');
   const lab=(pc,x,y,cls)=>sp[pc]!=null?'<text x="'+x+'" y="'+y+'" class="'+cls+'">'+sp[pc]+'</text>':'';
-  for(let i=0;i<W;i++){ const oct=Math.floor(i/7), pc=white[i%7], m=60+oct*12+pc, inK=sp[pc]!=null, home=pc===k.tonic, x=1+i*ww;
+  for(let i=0;i<W;i++){ const oct=Math.floor(i/7)+o0, pc=white[i%7], m=60+oct*12+pc, inK=sp[pc]!=null, home=pc===k.tonic, x=1+i*ww;
     svg.push('<rect data-m="'+m+'" x="'+x+'" y="1" width="'+ww+'" height="'+wh+'" rx="4" class="kv-w'+(home?' home':inK?' in':'')+'"/>'+lab(pc,x+ww/2,wh-14,'kv-tw'+(home?' home':''))); }
-  for(let i=0;i<W-1;i++){ const oct=Math.floor(i/7), wp=white[i%7]; if(wp===4||wp===11) continue; const pc=wp+1, m=60+oct*12+pc, inK=sp[pc]!=null, home=pc===k.tonic, x=1+(i+1)*ww-bw/2;
+  for(let i=0;i<W-1;i++){ const oct=Math.floor(i/7)+o0, wp=white[i%7]; if(wp===4||wp===11) continue; const pc=wp+1, m=60+oct*12+pc, inK=sp[pc]!=null, home=pc===k.tonic, x=1+(i+1)*ww-bw/2;
     svg.push('<rect data-m="'+m+'" x="'+x+'" y="1" width="'+bw+'" height="'+bh+'" rx="3" class="kv-b'+(home?' home':inK?' in':'')+'"/>'+lab(pc,x+bw/2,bh-12,'kv-tb'+(home?' home':''))); }
   svg.push('</svg>'); $('#kvPiano').innerHTML=svg.join('');
 }
@@ -4665,6 +4669,8 @@ $('#kvUse').addEventListener('click',()=>{ S.mkey={...S.kvKey,auto:false}; saveK
 $('#kvAuto').addEventListener('click',()=>{ S.mkey=null; scheduleKeyDetect(true).then(()=>{ if(S.mkey) S.kvKey={tonic:S.mkey.tonic,mode:S.mkey.mode}; renderKeyView(); }); });
 $('#kvPlay').addEventListener('click',kvPlayScale);
 $('#kvPiano').addEventListener('pointerdown',kvTap);
+$('#kvBig').addEventListener('click',()=>{ try{ localStorage.setItem('pc-kvbig',kvBig()?'0':'1'); }catch(e){} renderKeyView(); });
+$('#kvOctDn').addEventListener('click',()=>{ S.kvOct=0; renderKeyView(); }); $('#kvOctUp').addEventListener('click',()=>{ S.kvOct=1; renderKeyView(); });
 $('#kvPiano').addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
 $('#edShR').addEventListener('click',()=>edShiftLine(1));
 $('#edUp').addEventListener('click',()=>edShift(1));
