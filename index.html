@@ -1016,7 +1016,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 go';
+const APP_VERSION='2026-10-29 gp';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3404,21 +3404,21 @@ function tapUndo(){
 function fitTapLine(){ const el=$('#lyrNow'); el.style.fontSize=''; $('#lyrBar').classList.toggle('oneline',!!S.editMode&&!S.tap); if(!S.tap&&!S.editMode) return;
   let fs=parseFloat(getComputedStyle(el).fontSize); while(el.scrollWidth>el.clientWidth+1&&fs>14){ fs-=1; el.style.fontSize=fs+'px'; } }
 window.addEventListener('resize',()=>{ if(S.tap||S.editMode) fitTapLine(); });
-// a long rest before a lyric line (more than 4 bars without singing): four small dots after the coming line, one fewer every bar
-function lyrCountdown(cur,nxt,j,now){ if(!S.beat||nxt.t==null) return 0; const left=nxt.t-now; if(left<=0) return 0;
-  const sg=segAt(nxt.t), P=sg.P, n=beatsPerBar(), bar=P*n; if(!(bar>0)||left>5*bar) return 0;
-  const c=S.lyrGap||(S.lyrGap={}), k=j+'@'+nxt.t+'@'+(cur?cur.t:'-');
+// where the singing before a lyric line stops (end of the pitch line of the phrase before it), cached per line
+function lineGap(cur,nxt,j){ const c=S.lyrGap||(S.lyrGap={}), k=j+'@'+nxt.t+'@'+(cur?cur.t:'-');
   if(c.tM!==S.tM||c.n!==S.lyrics.length){ for(const x in c) delete c[x]; c.tM=S.tM; c.n=S.lyrics.length; }
   if(c[k]==null){ let from=cur&&cur.t!=null?cur.t:0; const T=S.tT,M=S.tM;
     if(T&&M&&T.length){ let i=idxAt(Math.max(0,nxt.t-0.15)); while(i>0&&T[i]>=nxt.t-0.15) i--; while(i>0&&isNaN(M[i])&&T[i]>from) i--; if(T[i]>from&&!isNaN(M[i])) from=T[i]; }
-    c[k]=nxt.t-from; }
-  if(c[k]<=4*bar+0.05) return 0;
-  if(hasBars()){ // a dot goes with each beat 1 (the accented click): count the beat 1s still to come up to the one where the line comes in
-    const kE=Math.round((nxt.t-sg.off)/P); let kD=kE; for(let d=0;d<=Math.floor(n/2);d++){ if(barPos(kE-d,sg)===0){ kD=kE-d; break; } if(barPos(kE+d,sg)===0){ kD=kE+d; break; } }
-    let cnt=0; for(let q=kD;cnt<5;q-=n){ if(sg.off+q*P>now+0.02) cnt++; else break; }
-    return cnt>4?0:cnt||-1; }   // -1: the last beat 1 has passed, the line comes in a beat or two later (keep waiting, no dots)
-  if(left>4*bar) return 0;
-  return Math.min(4,Math.max(1,Math.ceil(left/bar-1e-6))); }
+    c[k]=from; }
+  return c[k]; }
+// a rest of more than 2 bars before a lyric line: small dots after the coming line, one fewer on every beat 1 (the accented click),
+// at most four; they start once the singing before has stopped. -1: the last beat 1 has passed, the line comes in a beat or two later.
+function lyrCountdown(cur,nxt,j,now){ if(!S.beat||nxt.t==null) return 0; const left=nxt.t-now; if(left<=0) return 0;
+  const sg=segAt(nxt.t), P=sg.P, n=beatsPerBar(), bar=P*n; if(!(bar>0)||left>5*bar) return 0;
+  const from=lineGap(cur,nxt,j); if(nxt.t-from<=2*bar+0.05||now<from) return 0;
+  const kE=Math.round((nxt.t-sg.off)/P); let kD=kE; for(let d=0;d<=Math.floor(n/2);d++){ if(barPos(kE-d,sg)===0){ kD=kE-d; break; } if(barPos(kE+d,sg)===0){ kD=kE+d; break; } }
+  let cnt=0; for(let q=kD;cnt<5;q-=n){ if(sg.off+q*P>now+0.005) cnt++; else break; }
+  return cnt>4?0:cnt||-1; }
 function updateLyricBar(now){
   const bar=$('#lyrBar'), show=S.lyrShow&&S.lyrics.length>0;
   if(!show&&!S.tap){ bar.hidden=true; return; }
@@ -3432,7 +3432,7 @@ function updateLyricBar(now){
     var cd=nxt?lyrCountdown(cur,nxt,j,now):0;
     if(cur&&nxt==null&&now-cur.t>8){ key='end'; nowTxt=''; nextTxt=''; }
     else if(!cur){ key='pre'+j; nowTxt=nxt?nxt.text:''; nextTxt=cd?'':nxt&&nxt.t-now<60?'starts in '+Math.max(0,Math.ceil(nxt.t-now))+' s':''; waiting=true; }
-    else if(cd){ key='w'+j; nowTxt=nxt.text; nextTxt=''; waiting=true; }   // countdown: the line just sung is gone, the coming line waits with its dots
+    else if(cd||(nxt&&nxt.t>now&&now>lineGap(cur,nxt,j)+0.05&&nxt.t-lineGap(cur,nxt,j)>Math.max(0.8,S.beat?beatP(nxt.t):0))){ key='w'+j; nowTxt=nxt.text; nextTxt=''; waiting=true; }   // the phrase is sung (its pitch line ended): the line goes, the coming line waits (with its dots in a long rest)
     else { key='l'+i+'-'+j; nowTxt=cur.text; nextTxt=nxt?nxt.text:''; }
     if(!cur&&nxt&&!cd) key+='-'+Math.max(0,Math.ceil(nxt.t-now));
     key+='|cd'+cd;
