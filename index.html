@@ -411,6 +411,11 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .skip-list{display:flex;flex-direction:column;gap:2px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)} .skip-head{color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .skip-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;color:var(--muted)} .skip-row .skip-name{color:var(--fg)}
 .new-ver{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);padding:10px 14px;border-radius:12px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px;color:var(--fg)}
+.ana-row{gap:8px;margin-top:10px;align-items:center}
+.ana-box{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.ana-item{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.ana-item.on{border-color:#8b5cf6;box-shadow:0 0 0 2px color-mix(in srgb,#8b5cf6 25%,transparent)} .ana-item.good{border-color:var(--accent)}
+.ana-times{gap:10px;flex-wrap:wrap} .ana-prog{color:var(--accent)}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
 .ed-row .member-tip{flex:1 1 100%}
@@ -656,6 +661,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   <section class="panel result" id="result" hidden>
     <h2>Last run</h2>
     <div id="resultText"></div>
+    <div id="anaBox" class="ana-box" hidden></div>
   </section>
 
   <details class="panel fold" id="takesPanel" open hidden>
@@ -1028,7 +1034,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-29 gy';
+const APP_VERSION='2026-10-29 ha';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1213,7 +1219,7 @@ async function play(){ if(!$('#endTip').hidden) endTipHide();
   beginTake();
   startTone();
   S.playing=true;
-  S.pts=S.pts.filter(p=>p.t<S.pos-0.02); S.micHist=[];
+  S.pts=S.pts.filter(p=>p.t<S.pos-0.02); S.micHist=[]; S.runFrom=S.pos; S.anaMarks=null; $('#anaBox')&&($('#anaBox').hidden=true);
   if(S.pos<0.5){ S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; }
   S.tim.next=lowerOnset(S.pos-S.delay*S.rate+0.05); for(const k of [...S.tim.res.keys()]) if(k>=S.tim.next) S.tim.res.delete(k);
   S.timPass={n:0,good:0};
@@ -1402,7 +1408,7 @@ function stop(){
   setPlayLbl('Play');
   try{ S.wake&&S.wake.release(); }catch(e){} S.wake=null;
   stopBg(); mediaOff();
-  showResult(); updateTime(); draw();
+  S.runTo=S.pos; showResult(); updateTime(); draw();
 }
 function startTone(){
   stopTone(); const c=S.ctx;
@@ -3950,6 +3956,73 @@ function mediaOff(){
     clearTimeout(S.keepOffT);
     if(S.keep){ if(hsResume()) S.keepOffT=setTimeout(()=>{ try{ if(!S.playing&&!S.review&&S.keep) S.keep.pause(); }catch(e){} },10*60e3); else S.keep.pause(); } }catch(e){}
 }
+// ===== analyse a run: how the notes are started, held and ended (from your sung line against the target) =====
+// note = a target note between two onsets; for each: start (overshoot / dip / scoop, time to settle), the held part
+// (steadiness, sharp/flat), the end (sagging), plus timing from the onset scoring. The most frequent problems become the top 3.
+function anaRange(){ const L=S.loop; if(loopActive()) return {a:L.a,b:L.b,loop:true}; const a=S.runFrom||0, b=S.runTo!=null?S.runTo:S.pos; return {a:Math.min(a,b),b:Math.max(a,b),loop:false}; }
+function anaNotes(a,b){ const T=S.tT,M=S.tM; if(!T||!T.length) return []; const ons=(S.onsets||[]).filter(o=>o.t>=a-0.02&&o.t<b), out=[];
+  ons.forEach((o,k)=>{ let i=idxAt(o.t), j=i; const lim=k+1<ons.length?idxAt(ons[k+1].t):T.length; while(j+1<lim&&!isNaN(M[j+1])&&T[j+1]<=b) j++;
+    const v=[]; for(let q=i;q<=j;q++) if(!isNaN(M[q])) v.push(M[q]); if(v.length<8) return; v.sort((x,y)=>x-y);
+    const tg=v[v.length>>1], spread=v[Math.floor(v.length*0.9)]-v[Math.floor(v.length*0.1)];
+    out.push({t0:T[i],t1:T[j],tg,glide:spread>0.6,kind:o.kind}); });
+  out.forEach((n,k)=>{ const p=out[k-1]; n.prev=p&&n.t0-p.t1<0.35?p.tg:null; n.dir=n.prev==null?'entry':n.tg>n.prev+0.3?'up':n.tg<n.prev-0.3?'down':'same'; });
+  return out; }
+const anaDev=(m,tg)=>{ let d=m-tg; if(S.ignoreOct) d=((d%12)+18)%12-6; return d; };
+function anaRun(){
+  const R=anaRange(), notes=anaNotes(R.a,R.b), pts=S.pts.filter(p=>p.t>=R.a-0.05&&p.t<=R.b+0.05&&!isNaN(p.m));
+  const F={over:[],dip:[],scoop:[],settle:[],wobble:[],flat:[],sharp:[],sag:[],late:[],early:[]}; let used=0;
+  for(const n of notes){ if(n.glide) continue; let ps=pts.filter(p=>p.t>=n.t0-0.04&&p.t<=n.t1+0.02).map(p=>({t:p.t,d:anaDev(p.m,n.tg)})).filter(x=>Math.abs(x.d)<7);
+    if(n.prev!=null){ const pd=n.prev-n.tg; let k=0; while(k<ps.length&&ps[k].t<n.t0+0.3&&Math.abs(ps[k].d-pd)<0.5) k++; ps=ps.slice(k); }   // still on the previous note (a late start): that is timing, not the start of this note
+    const dur=n.t1-n.t0; if(ps.length<6||dur<0.18) continue; used++;
+    const win=Math.min(0.28,dur*0.45), on=ps.filter(x=>x.t<n.t0+win), at={t:n.t0,m:n.tg};
+    if(on.length>=3){ const hi=Math.max(...on.map(x=>x.d)), lo=Math.min(...on.map(x=>x.d)), first=on.slice(0,3).reduce((a,x)=>a+x.d,0)/3;
+      if(n.dir==='up'&&hi>0.6) F.over.push({...at,v:hi,dir:'up'}); else if(n.dir==='down'&&lo<-0.6) F.dip.push({...at,v:lo,dir:'down'});
+      else if(n.dir==='down'&&hi>0.7) F.over.push({...at,v:hi,dir:'down'}); else if(n.dir==='up'&&lo<-0.7&&first<-0.5) F.scoop.push({...at,v:lo,dir:'up'});
+      else if(n.dir==='entry'||n.dir==='same'){ if(hi>0.7) F.over.push({...at,v:hi,dir:n.dir}); else if(first<-0.6) F.scoop.push({...at,v:first,dir:n.dir}); } }
+    // time to settle: the first 0.1 s within 35 cents
+    let st=null; for(let k=0;k<ps.length;k++){ let ok=true,e=k; while(e<ps.length&&ps[e].t-ps[k].t<0.1){ if(Math.abs(ps[e].d)>0.35){ ok=false; break; } e++; } if(ok&&e<ps.length){ st=ps[k].t-n.t0; break; } }
+    if(dur>0.5&&(st==null||st>0.3)) F.settle.push({...at,v:st==null?dur:st,dir:n.dir});
+    if(dur>=0.7){ const mid=ps.filter(x=>x.t>n.t0+0.3&&x.t<n.t1-0.2), end=ps.filter(x=>x.t>=n.t1-0.25);
+      if(mid.length>=6){ const mean=mid.reduce((a,x)=>a+x.d,0)/mid.length, sd=Math.sqrt(mid.reduce((a,x)=>a+(x.d-mean)**2,0)/mid.length);
+        if(sd>0.25) F.wobble.push({...at,t:n.t0+0.3,v:sd}); if(mean<-0.3) F.flat.push({...at,t:n.t0+0.3,v:mean}); else if(mean>0.3) F.sharp.push({...at,t:n.t0+0.3,v:mean});
+        if(end.length>=3){ const em=end.reduce((a,x)=>a+x.d,0)/end.length; if(em-mean<-0.35) F.sag.push({t:n.t1-0.2,m:n.tg,v:em-mean}); } } } }
+  for(const x of (S.timStat&&S.timStat.list)||[]){ if(x.t<R.a-0.02||x.t>R.b||x.off==null) continue; const m=targetAt(x.t+0.05); if(x.off>0.12) F.late.push({t:x.t,m,v:x.off}); else if(x.off<-0.12) F.early.push({t:x.t,m,v:x.off}); }
+  return {R,F,notes:used}; }
+const ANA={
+  over:{t:'Overshooting at note starts',w:1.2,txt:(l,n)=>'You start '+l.length+' of '+n+' notes above the target and then come down'+anaDirTxt(l)+'.',tip:'Hear the note in your head before you sing it, and start it lighter; aim for the note, not past it.'},
+  dip:{t:'Dipping under notes when going down',w:1.2,txt:(l,n)=>l.length+' downward note'+(l.length>1?'s':'')+' start'+(l.length>1?'':'s')+' below the target before you come up.',tip:'Think of lower notes as staying bright and slightly "high"; keep the breath going as you step down.'},
+  scoop:{t:'Scooping up into notes',w:1,txt:(l,n)=>l.length+' note'+(l.length>1?'s':'')+' start'+(l.length>1?'':'s')+' below and slide up to the target.',tip:'Start right on the pitch: hum the note quietly first, then sing it with a clean, light onset.'},
+  settle:{t:'Slow to settle on the note',w:0.9,txt:(l,n)=>'On '+l.length+' note'+(l.length>1?'s':'')+' it takes more than 0.3 s to find the pitch'+anaDirTxt(l)+'.',tip:'Slow the passage down (Tempo 75%) with Tone on, and land each step cleanly before speeding up.'},
+  wobble:{t:'Unsteady held notes',w:0.8,txt:(l,n)=>l.length+' held note'+(l.length>1?'s':'')+' waver'+(l.length>1?'':'s')+' around the target.',tip:'Keep an even breath flow through the whole note; a long, steady "ah" on one pitch is good practice.'},
+  flat:{t:'Held notes a bit flat',w:0.9,txt:(l,n)=>l.length+' held note'+(l.length>1?'s are':' is')+' on average about '+Math.round(100*Math.abs(l.reduce((a,x)=>a+x.v,0)/l.length))+' cents low.',tip:'Lift the pitch a little in your mind and keep the sound forward and bright.'},
+  sharp:{t:'Held notes a bit sharp',w:0.9,txt:(l,n)=>l.length+' held note'+(l.length>1?'s are':' is')+' on average about '+Math.round(100*Math.abs(l.reduce((a,x)=>a+x.v,0)/l.length))+' cents high.',tip:'Relax the throat and jaw; listen to the guide and let the note settle rather than push.'},
+  sag:{t:'Notes sag at the end',w:1,txt:(l,n)=>l.length+' long note'+(l.length>1?'s go':' goes')+' flat towards the end.',tip:'Support the note all the way to its release: keep the breath going and stop the sound cleanly instead of letting it drop.'},
+  late:{t:'Coming in late',w:0.8,txt:(l,n)=>l.length+' note start'+(l.length>1?'s are':' is')+' late (on average '+Math.round(1000*l.reduce((a,x)=>a+x.v,0)/l.length)+' ms).',tip:'Breathe in time before the note, and turn on Click to feel where the beat is.'},
+  early:{t:'Coming in early',w:0.8,txt:(l,n)=>l.length+' note start'+(l.length>1?'s are':' is')+' early (on average '+Math.round(-1000*l.reduce((a,x)=>a+x.v,0)/l.length)+' ms).',tip:'Wait for the beat: count the rest silently, and use Click to feel it.'}};
+function anaDirTxt(l){ const up=l.filter(x=>x.dir==='up').length, dn=l.filter(x=>x.dir==='down').length; if(up>=2&&up>dn*2) return ', mostly on the way up'; if(dn>=2&&dn>up*2) return ', mostly on the way down'; return ''; }
+function anaKey(R){ return (S.curUid||S.cur&&S.cur.libId||'x')+'@'+(R.loop?R.a.toFixed(1)+'-'+R.b.toFixed(1):Math.round(R.a/2)*2+'-'+Math.round(R.b/2)*2); }
+function anaHist(){ try{ return JSON.parse(localStorage.getItem('pc-analysis')||'{}')||{}; }catch(e){ return {}; } }
+function runAnalysis(){
+  const {R,F,notes}=anaRun(), box=$('#anaBox');
+  if(notes<3){ box.innerHTML='<p class="small">Too little singing to analyse. Sing along for at least a few notes (with the microphone on), then tap Analyse again.</p>'; box.hidden=false; return; }
+  const list=Object.keys(F).filter(k=>F[k].length).map(k=>({k,l:F[k],score:F[k].length/notes*ANA[k].w*(F[k].length>=2?1:0.6)})).sort((x,y)=>y.score-x.score).filter(x=>x.score>=0.08).slice(0,3);
+  const key=anaKey(R), H=anaHist(), prev=H[key], counts={}; Object.keys(F).forEach(k=>counts[k]=F[k].length);
+  let html='<p class="small">'+notes+' notes analysed ('+fmtT(R.a)+'–'+fmtT(R.b)+(R.loop?', the loop':'')+').</p>';
+  if(!list.length) html+='<div class="ana-item good"><b>✓ Clean singing</b><span class="small">Note starts, held notes and endings are all close to the target. Try it a little faster, or without the guide voice.</span></div>';
+  list.forEach((x,i)=>{ const A=ANA[x.k], was=prev&&prev.counts?prev.counts[x.k]:null;
+    html+='<div class="ana-item" data-k="'+x.k+'"><b>'+(i+1)+'. '+A.t+'</b><span>'+esc(A.txt(x.l,notes))+'</span><span class="small">Tip: '+esc(A.tip)+'</span>'+
+      (was!=null?'<span class="small ana-prog">'+(was>x.l.length?'↓ Better: ':was<x.l.length?'↑ More than last time: ':'Same as last time: ')+was+' → '+x.l.length+'</span>':'')+
+      '<div class="row ana-times">'+x.l.slice(0,6).map((p,j)=>'<button type="button" class="link-btn" data-k="'+x.k+'" data-j="'+j+'">'+fmtT1(p.t)+'</button>').join('')+'</div></div>'; });
+  if(prev&&prev.counts){ const fixed=Object.keys(prev.counts).filter(k=>prev.counts[k]>=2&&!counts[k]&&!list.some(x=>x.k===k)); if(fixed.length) html+='<p class="small ana-prog">✓ Fixed since last time: '+fixed.map(k=>ANA[k].t.toLowerCase()).join(', ')+'.</p>'; }
+  box.innerHTML=html; box.hidden=false; S.anaF=F;
+  box.querySelectorAll('button[data-j]').forEach(b=>b.addEventListener('click',()=>anaShow(b.dataset.k,+b.dataset.j)));
+  H[key]={at:Date.now(),counts}; const ks=Object.keys(H); if(ks.length>200) ks.sort((a,b)=>H[a].at-H[b].at).slice(0,ks.length-200).forEach(k=>delete H[k]); try{ localStorage.setItem('pc-analysis',JSON.stringify(H)); }catch(e){}
+  if(list.length) anaShow(list[0].k,0,true); }
+// show a finding on the lane: rings at every place it happened, the chosen one brought into view
+function anaShow(k,j,quiet){ const l=S.anaF&&S.anaF[k]; if(!l||!l.length) return; S.anaMarks={k,pts:l,j};
+  document.querySelectorAll('#anaBox .ana-item').forEach(e=>e.classList.toggle('on',e.dataset.k===k));
+  if(!quiet){ if(S.playing) stop(); S.pos=Math.max(0,l[j].t-S.win*0.25); updateTime(); window.scrollTo({top:0,behavior:'smooth'}); }
+  draw(); }
 function showResult(){
   if(S.stat.n<30){ $('#result').hidden=true; return; }
   const pct=Math.round(100*S.stat.hit/S.stat.n), avg=Math.round(S.stat.sum/S.stat.n), secs=Math.round(S.stat.n/60);
@@ -3957,6 +4030,8 @@ function showResult(){
   $('#resultText').innerHTML=`<b>${pct}%</b> of the compared time was within 50 cents of the target. ${tend} <span class="small">(${secs} s of singing compared${S.ignoreOct?', octave ignored':''})</span>`;
   $('#resultText').innerHTML+=timingSummary();
   if(S.passes.length) $('#resultText').innerHTML+='<br>Loop passes (pitch): '+S.passes.join('% · ')+'%.';
+  $('#resultText').innerHTML+='<div class="row ana-row"><button id="anaBtn" type="button" class="primary">Analyse this run</button><span class="small">How you start, hold and end the notes, with tips.</span></div>';
+  $('#anaBtn').addEventListener('click',runAnalysis); $('#anaBox').hidden=true;
   $('#result').hidden=false;
 }
 
@@ -4096,6 +4171,7 @@ function draw(){
     prev=p;
   }
   drawSug(g,xOf,yOf,w,h,col);
+  if(S.anaMarks&&!S.playing){ g.strokeStyle='#8b5cf6'; g.lineWidth=2.5; S.anaMarks.pts.forEach((p,i)=>{ if(p.t<t0-0.5||p.t>t1+0.5||isNaN(p.m)) return; const x=xOf(p.t), y=yOf(p.m); g.globalAlpha=i===S.anaMarks.j?1:0.55; g.beginPath(); g.arc(x,y,i===S.anaMarks.j?13:10,0,Math.PI*2); g.stroke(); }); g.globalAlpha=1; }
   // lyric line starts along the bottom of the lane
   const LY=(S.editMode||S.tap)?{tick:0,box:3,txt:17,top:true}:{tick:h-22,box:h-20,txt:h-6,top:false}; S.lyrTop=LY.top;
   if(S.lyrShow&&S.lyrics.length){
