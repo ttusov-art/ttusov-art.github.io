@@ -217,6 +217,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .tr-row2 .tempo-grp{gap:6px;min-width:0} .tr-row2 #tempo{flex:1;min-width:0;width:100%;text-overflow:ellipsis;padding-left:10px;padding-right:6px}
 .tr-row2>button,.tr-row2>label{width:100%;justify-content:center;min-width:0;white-space:nowrap;padding-left:6px;padding-right:6px}
 /* bookmarks: a ribbon in the top right corner of the pitch lane */
+.lane-wrap.editing .lane-bm{display:none}
 .pick-wrap.lane-bm{position:absolute;top:6px;right:6px;z-index:5} .lane-bm .sec-btn{padding:7px 8px;background:color-mix(in srgb,var(--surface) 88%,transparent);opacity:.95;gap:4px} .lane-bm .bm-txt{display:none}
 .lane-bm .sec-btn svg{width:18px;height:18px} .lane-bm .sec-btn[aria-expanded="true"]{opacity:1;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
 .tr-tools{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,.9fr);gap:8px} .tr-tools>button,.tr-tools>label,.tr-tools .pick-wrap>button{width:100%;height:100%;justify-content:center;min-width:0;white-space:nowrap;padding-left:6px;padding-right:6px}
@@ -1084,7 +1085,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 ik';
+const APP_VERSION='2026-10-30 il';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3036,8 +3037,10 @@ function setEditMode(on){
   if(on){ timingTried(); edSnapTake(); }
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
   $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag the A and B tabs at the top to make the loop longer or shorter. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
-  if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime());
+  if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime()); edLaneClass();
 }
+// bookmarks are hidden while an editor is open
+function edLaneClass(){ const on=!!(S.editMode||S.tap); $('.lane-wrap').classList.toggle('editing',on); if(on&&!$('#secMenu').hidden) closeSecMenu(); }
 function laneTimeAt(clientX){ const rect=canvas.getBoundingClientRect(), w=rect.width, pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3; return visTime()+(clientX-rect.left-headX)/pps; }
 
 // ===== timing: note starts from the target line, scored against your pitch line =====
@@ -3477,12 +3480,13 @@ function startTap(){ if(setupActive()&&!S.setup.tapped){ S.setup.tapped=true; se
   setEdFold(true);   // show the editor row, so Stop timing is in view
   S.tap={i,hist:[]}; S.lyrListI=null; $('#edLyrBox').hidden=false; $('#lyrBar').classList.add('tap'); $('#lyrUndo').hidden=false; $('#lyrUndo').disabled=true; $('#lyrSkip').hidden=false; $('#lyrSkip').disabled=false; $('#lyrTapBtns').hidden=false; $('#lyrPlace').disabled=false; tapBtns(); $('#lyrBar').hidden=false; $('#lyrTap').textContent='Stop timing'; $('#edTimeBtn').textContent='Stop timing'; $('#edTimeBtn').setAttribute('aria-pressed','true');
   S.lyrBarKey=null; updateLyricBar(from);
+  edLaneClass();
   setStatus('Tap the pitch graph to play when you are ready, then tap Place here (or press Space) at the start of each line. You can also pause, drag the playhead to the exact spot and tap Place here. Drag a line’s label at the bottom of the lane to nudge it. Undo takes back the last placement or nudge (not Back or Skip).');
   if(S.playing) stop(); seek(from);   // stay paused: the singer gets ready and presses play
   try{ const c=ensureCtx(); if(c.state!=='running') c.resume(); }catch(e){}   // wake the audio now, so the first play starts without a delay
   requestAnimationFrame(()=>{ const y=$('#lyrBar').getBoundingClientRect().top+window.scrollY-6; window.scrollTo({top:Math.max(0,y),behavior:'smooth'}); });
 }
-function stopTap(){ if(!S.tap) return; S.tap=null; setTimeout(setupPulse,0); $('#edLyrBox').hidden=true; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrTapBtns').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
+function stopTap(){ if(!S.tap) return; S.tap=null; edLaneClass(); setTimeout(setupPulse,0); $('#edLyrBox').hidden=true; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrTapBtns').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
 function tapNow(){
   if(!S.tap||S.review||S.tap.i>=S.lyrics.length) return;
   // playing: allow for reaction time; paused: the playhead was placed by hand, use it as it is
