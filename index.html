@@ -439,6 +439,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .pick-all{gap:14px;margin:6px 0}
 .skip-list{display:flex;flex-direction:column;gap:2px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)} .skip-head{color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .skip-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;color:var(--muted)} .skip-row .skip-name{color:var(--fg)}
+.use-bars{display:flex;align-items:flex-end;gap:2px;height:48px;margin-top:6px} .use-bars i{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:1px;opacity:.85} .use-bars i.z{background:var(--line)}
+.use-axis{display:flex;justify-content:space-between}
+.new-ver.use-note{top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:14px;width:min(560px,calc(100% - 24px));box-sizing:border-box;justify-content:flex-end} .new-ver.use-note span{flex:1 1 220px}
 .new-ver{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);padding:10px 14px;border-radius:12px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px;color:var(--fg)}
 .ana-row{gap:8px;margin-top:10px;align-items:center}
 .ana-box{display:flex;flex-direction:column;gap:8px;margin-top:10px}
@@ -551,6 +554,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     const lit=document.createElement('b'); lit.style.setProperty('--a',`${id} ${total.toFixed(2)}s`); keys[n].appendChild(lit); }
   const st=document.createElement('style'); st.textContent=css; document.head.appendChild(st); })();
 </script>
+<div class="new-ver use-note" id="useNote" hidden role="status"><span>Part Coach counts how many phones open it each day: only a random number for this phone and the date are sent, no names and nothing about your singing. The moderator uses this to see whether the app is worth the effort: if nobody uses it, there is no point in keeping the songs up to date. You can switch it off in Settings.</span><button id="useNoteOk" type="button" class="primary">OK</button></div>
 <div class="new-ver" id="newVer" hidden role="status"><span id="newVerText">A new version of Part Coach is ready.</span><button id="newVerGo" type="button" class="primary">Reload</button><button id="newVerX" type="button" class="link-btn" aria-label="Later">Later</button></div>
 <script>window.BOOT=[]; setTimeout(()=>{ const b=document.getElementById('bootView'); if(b) b.remove(); },25000);   // safety: never stuck</script>
 <div class="key-view" id="keyView" hidden role="dialog" aria-modal="true" aria-labelledby="kvName">
@@ -950,6 +954,12 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         <details class="more-info"><summary>More info</summary><span class="small">On: when the moderator's update arrives, songs and backing tracks you deleted come back. Off: what you deleted stays deleted (saves space on this device).</span></details>
       </div>
       </div>
+      <div class="set-group"><h3 class="set-h">Usage count</h3>
+      <div class="field">
+        <label class="check" for="usageOn"><input id="usageOn" type="checkbox" checked>Count this phone</label>
+        <span class="small">Part Coach counts how many phones open it each day: only a random number for this phone and the date are sent, no names and nothing about your singing. The moderator uses this to see whether the app is worth the effort: if nobody uses it, there is no point in keeping the songs up to date.</span>
+      </div>
+      </div>
       <div class="set-group set-danger"><h3 class="set-h">This device</h3>
       <div class="field wipe-field">
         <label>Remove Part Coach from this device</label>
@@ -986,6 +996,12 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <span class="small" id="apText"></span>
     </div>
     <div id="adminTools" hidden>
+    <div class="share-box" id="useAdmin" hidden>
+      <b>Usage</b>
+      <span class="small" id="useText"></span>
+      <div class="use-bars" id="useBars" aria-hidden="true"></div>
+      <span class="small use-axis"><span>30 days ago</span><span>today</span></span>
+    </div>
     <div class="share-box" id="reqAdmin" hidden>
       <b>Approver requests</b>
       <span class="small">Members who would like to approve suggestions for their part. Approve gives their app the approver key automatically.</span>
@@ -1112,7 +1128,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 io';
+const APP_VERSION='2026-10-30 ip';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4770,7 +4786,7 @@ function paintAdminTools(){ const ok=!!sugKey(); $('#lyrTools').hidden=!ok; $('#
 async function unlockAdmin(){ const key=$('#sugKeyIn').value, lu=$('#lockUrl').value.trim(), t=$('#lockText');
   if(lu){ try{ localStorage.setItem('pc-sugurl',lu); }catch(x){} $('#sugUrlIn').value=lu; }
   const url=sugUrl(); if(!url){ t.textContent='Paste the inbox address first.'; return; } if(!key){ t.textContent='Type your review key.'; return; }
-  t.textContent='Checking…'; try{ await sugGet(url,{action:'list',key}); try{ localStorage.setItem('pc-sugkey',key); }catch(x){} $('#sugKeyIn').value=''; t.textContent=''; paintAdmin(); sugFetchInbox(false); reqFetch(); setStatus('Admin unlocked on this device.'); }
+  t.textContent='Checking…'; try{ await sugGet(url,{action:'list',key}); try{ localStorage.setItem('pc-sugkey',key); }catch(x){} $('#sugKeyIn').value=''; t.textContent=''; paintAdmin(); sugFetchInbox(false); reqFetch(); usageFetch(); setStatus('Admin unlocked on this device.'); }
   catch(e){ if(!/wrong review key/.test(e.message||'')){ t.textContent='Could not check the key: '+e.message+'.'; return; }
     try{ await sugGet(url,{action:'alist',key,parts:S.parts.join(','),dev:devTag()}); try{ localStorage.setItem('pc-appkey',key); }catch(x){} $('#sugKeyIn').value=''; t.textContent=''; paintAdmin(); apFetch(true); setStatus('Approving is unlocked on this phone. Suggestions to check appear as To approve next to Play.'); }
     catch(e2){ t.textContent=/wrong approver key/.test(e2.message||'')?'That key is not right.':'Could not check the key: '+e2.message+'.'; } } }
@@ -4795,7 +4811,8 @@ paintAdmin();
 $('#sugUrlIn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-sugurl',e.target.value.trim()); }catch(x){} });
 $('#sugCheck').addEventListener('click',()=>{ try{ localStorage.setItem('pc-sugurl',$('#sugUrlIn').value.trim()); }catch(x){} sugFetchInbox(true); });
 window.addEventListener('online',()=>pollSugStatus());
-BOOT.push((getShared().length&&!sugKey()?fetchLinks():Promise.resolve()).then(()=>Promise.allSettled([pollSugStatus(),sugFetchInbox(false),apFetch(false),reqPoll(),reqFetch()])).catch(()=>{}));
+BOOT.push((getShared().length&&!sugKey()?fetchLinks():Promise.resolve()).then(()=>{ usageHello(); usageNote(); return Promise.allSettled([pollSugStatus(),sugFetchInbox(false),apFetch(false),reqPoll(),reqFetch(),usageFetch()]); }).catch(()=>{}));
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) usageHello(); });
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-(S.sugCheckAt||0)>5*60e3&&!S.playing){ S.sugCheckAt=Date.now(); pollSugStatus(); sugFetchInbox(false); apFetch(false); reqPoll(); reqFetch(); } });
 $('#rKeyBox').addEventListener('click',openKeyView);
 $('#rKeyBox').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); openKeyView(); } });
@@ -4972,6 +4989,24 @@ $('#partRange').addEventListener('change',e=>setPartRange(e.target.value));
 $('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) useBacking(i); });
 $('#backSave').addEventListener('click',saveBacking);
 $('#backDel').addEventListener('click',e=>deleteBacking(e.currentTarget));
+// ----- usage count: once a day this phone sends its random tag and the date to the inbox (members only; can be switched off) -----
+function usageOn(){ try{ return localStorage.getItem('pc-usage')!=='0'; }catch(e){ return true; } }
+function dayStr(d){ d=d||new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+async function usageHello(){ const url=sugUrl(); if(!url||sugKey()||!usageOn()) return; const day=dayStr();
+  try{ if(localStorage.getItem('pc-hello')===day) return; }catch(e){}
+  try{ await sugPost(url,{action:'hello',dev:devTag(),day}); localStorage.setItem('pc-hello',day); }catch(e){} }
+function usageNote(){ if(!sugUrl()||sugKey()) return; try{ if(localStorage.getItem('pc-usage-seen')) return; }catch(e){ return; }
+  setTimeout(()=>{ $('#useNote').hidden=false; },3000); }
+async function usageFetch(){ const url=sugUrl(), key=sugKey(), box=$('#useAdmin'); if(!url||!key){ box.hidden=true; return; }
+  let j; try{ j=await sugGet(url,{action:'usage',key,today:dayStr()}); }catch(e){ box.hidden=true; return; }   // an older inbox script: nothing to show
+  box.hidden=false; const today=new Date(), list=[];
+  for(let k=29;k>=0;k--){ const d=new Date(today.getFullYear(),today.getMonth(),today.getDate()-k); list.push(j.days[dayStr(d)]||0); }
+  const mx=Math.max(1,...list), ph=n=>n+' phone'+(n===1?'':'s');
+  $('#useText').textContent=(j.phonesAll?ph(list[29])+' today · '+ph(j.phones7)+' in the last 7 days · '+ph(j.phones30)+' in the last 30 days · '+ph(j.phonesAll)+' in all.':'No phones counted yet.')+' Your own phone is not counted. A phone is counted once a day when the app is opened.';
+  $('#useBars').innerHTML=list.map((n,i)=>'<i'+(n?'':' class="z"')+' style="height:'+Math.max(4,Math.round(n/mx*100))+'%" title="'+n+'"></i>').join(''); }
+$('#usageOn').checked=usageOn();
+$('#usageOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-usage',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'This phone is counted again (once a day). Thank you!':'This phone is not counted any more.'); if(e.target.checked) usageHello(); });
+$('#useNoteOk').addEventListener('click',()=>{ $('#useNote').hidden=true; try{ localStorage.setItem('pc-usage-seen','1'); }catch(e){} });
 $('#restoreBacksOn').checked=restoreBacks();
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
