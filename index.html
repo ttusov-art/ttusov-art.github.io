@@ -1128,7 +1128,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 ip';
+const APP_VERSION='2026-10-30 iq';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1394,14 +1394,14 @@ function loopWholeSong(){
 }
 // hold on the lane: first hold sets the start, the next sets the end
 // editor: long-press selects. On empty lane: that beat (keep holding and drag to select more). Outside a selection: extend it to here.
-// Inside the selection: start a new one at that beat. Returns the anchor for dragging after the press.
+// Inside the selection: clear it. Once the selection has been edited, a hold outside starts a new one. Returns the anchor for dragging after the press.
 function beatSpan(t){ const sg=S.beat?segAt(t):null, P=sg?sg.P/visDiv(t):0.5, a=sg?Math.max(sg.t0,sg.off+Math.floor((t-sg.off)/P+1e-6)*P):Math.floor(t/P)*P; return {a:Math.max(0,a),b:Math.min(S.dur,a+P)}; }
 function editHold(t,clientY){ try{ navigator.vibrate&&navigator.vibrate(25); }catch(e){}
   const m=laneNoteAt(clientY), sp=beatSpan(t);
   if(S.sel){ const a=Math.min(S.sel.a,S.sel.b), b=Math.max(S.sel.a,S.sel.b);
     if(t>=a&&t<=b&&b-a>0.01){ S.sel=null; updateSelInfo(); draw(); setStatus('Selection cleared.'); return null; }   // hold inside the selection: clear it (as with the loop)
-    if(t<a||t>b){ S.sel={a:Math.min(a,sp.a),b:Math.max(b,sp.b),m:S.sel.m}; updateSelInfo(); draw(); return {a:Math.min(a,sp.a),b:Math.max(b,sp.b),m:S.sel.m}; } }
-  S.sel={a:sp.a,b:sp.b,m}; updateSelInfo(); draw(); return {a:sp.a,b:sp.b,m}; }
+    if((t<a||t>b)&&!S.selEdited){ S.sel={a:Math.min(a,sp.a),b:Math.max(b,sp.b),m:S.sel.m}; updateSelInfo(); draw(); return {a:Math.min(a,sp.a),b:Math.max(b,sp.b),m:S.sel.m}; } }
+  S.selEdited=false; S.sel={a:sp.a,b:sp.b,m}; updateSelInfo(); draw(); return {a:sp.a,b:sp.b,m}; }   // after an edit, a hold outside starts a new selection
 function sweepSel(an,t){ const sp=beatSpan(t); S.sel={a:Math.min(an.a,sp.a),b:Math.max(an.b,sp.b),m:an.m}; updateSelInfo(); draw(); }
 function holdLoopPoint(t){
   const L=S.loop;
@@ -2936,7 +2936,7 @@ function swapStep(u,word){ if(u&&u.lyrAll){ const back={lyrAll:S.lyrics.map(l=>(
   const back=Float32Array.from(S.tM); S.tM=u; targetEdited(word==='undone'?'Undone.':'Redone.'); return back; }
 function edRedo(){ if(!S.redo.length) return; const u=S.redo.pop(); const back=swapStep(u,'redone'); S.undo.push(back); if(S.undo.length>30) S.undo.shift(); paintRedo(); updateSelInfo(); S.repSeen=back; repHide(); }
 let edSaveTimer=null;
-function targetEdited(msg){ S.ovwImg=null; paintSuggest(); if(S.editMode&&!S.sug&&!S.gating&&!S.repApplying){ clearTimeout(S.repT); S.repT=setTimeout(repCheckNotes,500); }
+function targetEdited(msg){ S.ovwImg=null; if(S.sel) S.selEdited=true; paintSuggest(); if(S.editMode&&!S.sug&&!S.gating&&!S.repApplying){ clearTimeout(S.repT); S.repT=setTimeout(repCheckNotes,500); }
   if(!S.gating&&S.gateBase){ S.gateBase=null; const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } }   // another edit: the slider starts again from the line as it is now
   S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
   computeViewKeep(); updateSelInfo(); draw();
@@ -4564,7 +4564,7 @@ canvas.addEventListener('pointerdown',e=>{
       if(edge){ e.preventDefault(); touchPts.delete(e.pointerId); drag={loopEdge:edge,a0:S.loop.a,b0:S.loop.b}; canvas.setPointerCapture(e.pointerId); return; } } }
   if(S.editMode&&S.sel&&touchPts.size===1){ // grab a stretch handle (edge of the selection)
     const t=laneTimeAt(e.clientX), pps=(canvas.clientWidth-LABELW)/S.win, a=Math.min(S.sel.a,S.sel.b), b=Math.max(S.sel.a,S.sel.b), tol=(e.pointerType==='mouse'?8:16)/pps;
-    const edge=Math.abs(t-a)<=tol?'a':Math.abs(t-b)<=tol?'b':null;
+    const edge=Math.abs(t-a)<=tol?'a':Math.abs(t-b)<=tol?'b':null; if(edge) S.selEdited=false;
     if(edge&&b-a>0.05){ drag={stretch:edge,a0:a,b0:b,x:e.clientX}; canvas.setPointerCapture(e.pointerId); return; } }
   // mouse in the editor: left button plays / pauses (click) and pans (drag) as in practice; right or middle button selects
   if(S.editMode&&e.pointerType==='mouse'&&e.button!==0){ if(e.pointerType==='mouse') e.preventDefault(); const t=laneTimeAt(e.clientX); drag={edit:true,x:e.clientX,t0:t,sel0:S.sel,mouse:e.pointerType==='mouse'}; S.sel={a:snapT(t),b:snapT(t),m:laneNoteAt(e.clientY)}; canvas.setPointerCapture(e.pointerId); draw(); return; }
