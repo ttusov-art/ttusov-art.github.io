@@ -214,7 +214,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .tr-notice{display:flex;gap:8px} .tr-notice>button{flex:1 1 0;justify-content:center} .tr-notice:not(:has(>button:not([hidden]))){display:none}
 .tr-play{display:grid;grid-template-columns:1fr 1.7fr 1fr 1fr 1fr;gap:10px} .tr-play>button{width:100%;justify-content:center;padding-left:0;padding-right:0}
 .tr-row2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,.9fr);gap:8px;align-items:stretch}
-.tr-row2 .tempo-grp{gap:6px;min-width:0} .tr-row2 .tempo-grp label{font-size:14px} .tr-row2 #tempo{flex:1;min-width:0}
+.tr-row2 .tempo-grp{gap:6px;min-width:0} .tr-row2 #tempo{flex:1;min-width:0;width:100%;text-overflow:ellipsis;padding-left:10px;padding-right:6px}
 .tr-row2>button,.tr-row2>label{width:100%;justify-content:center;min-width:0;white-space:nowrap;padding-left:6px;padding-right:6px}
 /* bookmarks: a ribbon in the top right corner of the pitch lane */
 .pick-wrap.lane-bm{position:absolute;top:6px;right:6px;z-index:5} .lane-bm .sec-btn{padding:7px 8px;background:color-mix(in srgb,var(--surface) 88%,transparent);opacity:.95;gap:4px} .lane-bm .bm-txt{display:none}
@@ -681,11 +681,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <button id="restart" type="button" class="icon-btn" aria-label="Start over from the beginning" title="Start over from the beginning"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
     </div>
     <div class="tr-row2">
-    <span class="tempo-grp"><label class="small" for="tempo">Tempo</label>
-    <select id="tempo" class="sel">
-      <option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7">70%</option><option value="0.75">75%</option>
-      <option value="0.8">80%</option><option value="0.85">85%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option>
-    </select></span>
+    <span class="tempo-grp"><select id="tempo" class="sel" aria-label="Tempo" title="Tempo: slower or faster, the pitch stays the same"><option value="1" selected>Tempo 100%</option></select></span>
     <button id="warmBtn" type="button" title="2-minute warm-up in this part’s voice range: scales, arpeggios and sirens">Warm-up</button>
     <label class="btn rec-btn" for="recOn" title="Record my voice"><input id="recOn" type="checkbox" checked aria-label="Record my voice"><span class="rec-dot" aria-hidden="true"></span><span class="rec-txt" aria-hidden="true">REC</span></label>
     </div>
@@ -1080,7 +1076,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 ic';
+const APP_VERSION='2026-10-30 id';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1182,7 +1178,7 @@ function songReady(name,label){
   renderSheetBtns(); closeSheet(); if(typeof repHide==='function') repHide();
   S.lyrTextHist=[]; S.edSnap=null; S.needTiming=false; S.gateBase=null; S.gateLoud=null; { const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } } $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>{ S.beatJob=scheduleBeatDetect(false); },50); setTimeout(()=>{ S.keyJob=scheduleKeyDetect(false); },400);
-  normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1';
+  normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1'; setTimeout(paintTempo,0);
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
   S.songOpening=true; updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
   if(S.pmode==='song') loopWholeSong(); S.songOpening=false; paintSongLoop();
@@ -1330,7 +1326,7 @@ async function prepareTempo(){
     const [guide,back]=await wsola([S.guideBuf,S.backBuf],r,p=>setStatus('Preparing '+Math.round(r*100)+'% tempo… '+Math.round(p*100)+'%'));
     if(S.rate!==r) return false;
     S.stretch={rate:r,guide,back};
-    setStatus('Tempo '+Math.round(r*100)+'% ready. The pitch stays the same.');
+    setStatus('Tempo '+(S.beat&&S.beat.bpm>0?Math.round(S.beat.bpm*r)+' BPM ('+Math.round(r*100)+'% of the song)':Math.round(r*100)+'%')+' ready. The pitch stays the same.');
     return true;
   }catch(err){ setStatus('Could not change the tempo on this device: '+((err&&err.message)||'out of memory')+'.',true); S.rate=1; sel.value='1'; return false; }
   finally{ sel.disabled=false; $('#play').disabled=false; }
@@ -2191,7 +2187,13 @@ let beatSaveTimer=null;
 function saveBeat(){ if(S.cur.libId==null) return; clearTimeout(beatSaveTimer); const id=S.cur.libId, b=S.beat?{...S.beat,changes:(S.beat.changes||[]).map(c=>({...c}))}:null; if(b&&!b.changes.length) delete b.changes; beatSaveTimer=setTimeout(()=>{ libUpdate(id,{beat:b}).catch(()=>{}); },400); }
 function tempoSummary(){ const a=beatSegs(); if(a.length<2) return ''; return a.map((s,i)=>(i?'from '+fmtT(s.t0)+' ':'')+(Math.round(s.ref.bpm*10)/10)+' BPM').join(', '); }
 S.segShown=-1; S.ncShown=-1;
-function renderBeatInfo(msg){
+// the tempo picker in beats per minute (from the song's beat grid); without a beat grid it shows percent
+const TEMPO_RATES=[0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1,1.05,1.1,1.15,1.2];
+function paintTempo(){ const sel=$('#tempo'); if(!sel) return; const bpm=S.beat&&S.beat.bpm>0?S.beat.bpm:null, cur=S.rate||1, key=(bpm||0)+'|'+cur; if(sel._key===key) return; sel._key=key;
+  const rates=TEMPO_RATES.includes(cur)?TEMPO_RATES:TEMPO_RATES.concat([cur]).sort((a,b)=>a-b);
+  sel.innerHTML=rates.map(r=>'<option value="'+r+'"'+(r===cur?' selected':'')+'>'+(bpm?Math.round(bpm*r)+' BPM':'Tempo '+Math.round(r*100)+'%')+'</option>').join('');
+  sel.title=bpm?'Tempo: the song is '+Math.round(bpm)+' BPM; pick a slower or faster tempo (the pitch stays the same)':'Tempo: slower or faster (the pitch stays the same)'; }
+function renderBeatInfo(msg){ setTimeout(paintTempo,0);
   if(typeof renderLyrSnap==='function'&&document.getElementById('lyrList')) renderLyrics(false);
   const inp=$('#bpmIn'), has=!!S.beat, s=has?segAt(curT()):null; S.segShown=s?s.i:-1;
   ['bShiftL','bShiftR','bHalf','bDouble','bOne','bBpb','bTempo'].forEach(id=>$('#'+id).disabled=!has); $('#bBpb').value=String(beatsPerBar());
@@ -4503,10 +4505,10 @@ canvas.addEventListener('pointermove',e=>{ if(drag&&drag.loopEdge){ const d=drag
   drag=null; }));
 
 // ===== controls =====
-$('#tempo').addEventListener('change',async e=>{
+$('#tempo').addEventListener('change',async e=>{ setTimeout(paintTempo,0);
   const was=S.playing; if(was) stop();
   S.rate=+e.target.value; S.ghost=[];
-  if(S.rate===1){ S.stretch=null; setStatus('Normal tempo.'); if(was) play(); return; }
+  if(S.rate===1){ S.stretch=null; setStatus('Original tempo'+(S.beat&&S.beat.bpm>0?' ('+Math.round(S.beat.bpm)+' BPM)':'')+'.'); if(was) play(); return; }
   const ok=await prepareTempo(); if(ok&&was) play();
 });
 async function addCurrentToLib(btn){
