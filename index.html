@@ -449,7 +449,9 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .rep-offer .row{gap:6px;flex-wrap:wrap;align-items:center} .rep-chip{padding:4px 10px;font-family:var(--font-mono);font-size:13px;opacity:.55} .rep-chip.on{opacity:1;border-color:#8b5cf6;color:#6d28d9}
 .end-tip{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .end-tip .row{gap:6px;align-items:center}
-.ed-row .member-tip{flex:1 1 100%}
+.ed-row .member-tip{flex:1 1 100%;order:9}
+.ed-row{gap:6px}.ed-row>button{flex:1 1 auto;padding:8px 5px;font-size:13px;white-space:nowrap;min-width:0}
+.ed-row>#playDone{flex-basis:100%}
 .set-group{display:grid;gap:14px;padding:12px 14px 14px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--fg) 2.5%,transparent)}
 .set-h{margin:0;font-size:15px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--fg)}
 .set-danger{border-color:color-mix(in srgb,var(--off) 35%,var(--line))} .set-danger .wipe-field{margin-top:0;padding-top:0;border-top:0}
@@ -624,7 +626,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         </span>
         <button id="edToggle" type="button" class="icon-btn ed-toggle" aria-expanded="false" aria-controls="edFold" aria-label="Editor" title="Editor: edit the pitch line or time the lyrics"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
       </div>
-      <div class="row ed-row" id="edFold" hidden><span class="small member-tip">Fix a wrong note with Edit target line, or the lyric timing with Time lyrics, then tap Suggest my edits. The moderator checks it and the whole choir gets the better version.</span><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button><button id="reportBtn" type="button" hidden title="Mark this spot for an approver or the moderator to check">⚑ Sounds off here</button><button id="playDone" type="button" class="primary" hidden title="Set-up guide: every line is timed and the notes are fixed">Play-through done ✓</button></div>
+      <div class="row ed-row" id="edFold" hidden><span class="small member-tip">Fix a wrong note with Edit target line, or the lyric timing with Time lyrics, then tap Suggest my edits. The moderator checks it and the whole choir gets the better version.</span><button id="editBtn" type="button" aria-pressed="false">Edit target line</button><button id="edTimeBtn" type="button" disabled title="Tap the start of each lyric line while the song plays">Time lyrics</button><button id="reportBtn" type="button" hidden title="Mark this spot for an approver or the moderator to check">⚑ Sounds off</button><button id="playDone" type="button" class="primary" hidden title="Set-up guide: every line is timed and the notes are fixed">Play-through done ✓</button></div>
       <div class="ed-lyr" id="edLyrBox" hidden><div class="lyr-list" id="lyrList" hidden></div><span class="small" id="lyrHint"></span></div>
     <div class="share-box admin-tools" id="pitchTools" hidden>
         <b>Pitch line and beat grid (moderator)</b>
@@ -1082,7 +1084,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 ih';
+const APP_VERSION='2026-10-30 ii';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
