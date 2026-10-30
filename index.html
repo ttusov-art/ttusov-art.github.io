@@ -1104,7 +1104,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 im';
+const APP_VERSION='2026-10-30 in';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1655,8 +1655,55 @@ function unpubClear(part){ const u=unpubGet(); if(u[part]){ delete u[part]; try{
 function paintUnpub(){ const u=unpubGet(), mine=Object.keys(u).filter(p=>S.parts.includes(p)&&u[p].length), here=u[S.part]||[], el=$('#unpubNote'); if(!el) return;
   $('#unpubDot').hidden=!mine.length||!sugKey(); $('#unpubDot').textContent='· changes to share: '+mine.join(', ');
   if(!here.length){ el.hidden=true; return; } el.hidden=false;
-  const songLi=e=>{ const n=e.notes.slice(0,6); return '<li><b>'+esc(e.name)+'</b>'+(n.length?': '+n.map(esc).join('; ')+(e.notes.length>6?'; and '+(e.notes.length-6)+' more':''):'')+'</li>'; };
-  el.innerHTML='<b>Not published yet</b> in '+esc(S.part)+' (changed since your last share file):<ul style="margin:6px 0 6px 18px;padding:0">'+here.map(songLi).join('')+'</ul>Make the share file and upload it so the choir gets the changes.'+(mine.length>1?' Other parts with changes: '+mine.filter(p=>p!==S.part).map(esc).join(', ')+'.':''); }
+  const songLi=(e,i)=>{ const n=e.notes.slice(0,6); return '<li><b>'+esc(e.name)+'</b>'+(n.length?': '+n.map(x=>x==='your own edits'?'<a href="#" class="own-ed" data-i="'+i+'" title="See what you changed, change by change">your own edits</a>':esc(x)).join('; ')+(e.notes.length>6?'; and '+(e.notes.length-6)+' more':''):'')+'</li>'; };
+  el.innerHTML='<b>Not published yet</b> in '+esc(S.part)+' (changed since your last share file):<ul style="margin:6px 0 6px 18px;padding:0">'+here.map((e,i)=>songLi(e,i)).join('')+'</ul>Make the share file and upload it so the choir gets the changes.'+(mine.length>1?' Other parts with changes: '+mine.filter(p=>p!==S.part).map(esc).join(', ')+'.':''); }
+// ----- moderator: "your own edits" — step through what changed since the last share file, put single changes back -----
+// the published version: the copy saved when the share file was made, or else the uploaded share file (downloaded once)
+async function ownPub(rec){ if(rec.pub&&rec.pub.contour) return rec.pub;
+  const sh=getShared().find(x=>x.part===partOf(rec)); if(!sh) return null;
+  const rf=await remoteFile(directUrl(sh.url)); if(!rf) return null;
+  const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) return null;
+  const man=JSON.parse(await mb.text()), m=(man.songs||[]).find(x=>x.uid&&x.uid===rec.uid); if(!m) return {none:true};
+  if(!m.files||!m.files.contour) return null;
+  const c=new Float32Array(await (await z.get(m.files.contour)).arrayBuffer());
+  const pub={at:man.created||m.updated||Date.now(),contour:c,lyrics:(m.lyrics||[]).map(l=>({t:l.t,text:l.text})),dl:true};
+  rec.pub=pub; await libPutRaw(rec).catch(()=>{}); return pub; }
+function ownWhat(c){ const at=x=>x==null?'untimed':fmtT1(x);   // the diff runs from now to the published version, so it is told backwards here
+  if(c.type==='notes') return 'Notes changed '+fmtT1(c.t0)+'–'+fmtT1(c.t1);
+  if(c.k==='text') return 'Lyric text: “'+c.text+'” → “'+c.oldText+'”'+(c.t!==c.old?' (start '+at(c.t)+' → '+at(c.old)+')':'');
+  if(c.k==='add') return 'You removed the lyric line “'+c.text+'”';
+  if(c.k==='del') return 'You added the lyric line “'+c.oldText+'”'+(c.old!=null?' at '+fmtT1(c.old):'');
+  return 'Lyric “'+c.text+'” moved: '+at(c.t)+' → '+at(c.old); }
+async function openOwnEdits(name){ if(S.sug){ setStatus('Finish the review that is open first.',true); return; }
+  const part=S.part, rec0=(await libList()).find(x=>x.name===name&&partOf(x)===part); if(!rec0){ setStatus('That song is not in '+part+' any more.',true); return; }
+  busyShow('Finding your changes…'); let pub=null;
+  try{ pub=await ownPub(rec0); }catch(e){ pub=null; }
+  if(!pub||pub.none){ await busyHide(null);
+    await dlg({title:'Nothing to compare with',html:'<p class="kv-sub">'+(pub&&pub.none?'This song is not in the uploaded share file yet, so all of it is new for the choir.':'There is no copy of the published version of this song on this phone yet, and the uploaded share file could not be read.')+' From the next share file on, the app keeps a copy, so you can see your edits change by change.</p>',buttons:[{label:'OK',value:null,primary:true}]}); return; }
+  const ok=await openLibSong(rec0.id); if(!ok){ await busyHide(null); return; }
+  const live=liveOf(), base=toF32(pub.contour);
+  const it={notes:lineDiff(live.contour,base,live.tt),lyrics:lyricDiff(live.lyrics,pub.lyrics||[])};
+  await busyHide(null);
+  if(!diffCount(it)){ ownClearNote(part,name);
+    await dlg({title:'No differences',html:'<p class="kv-sub">This song is the same as in the share file of '+new Date(pub.at).toLocaleDateString()+'. The note is removed.</p>',buttons:[{label:'OK',value:null,primary:true}]}); return; }
+  S.sug={it,changes:sugChanges(it),k:0,hist:[],mode:'own',pubAt:pub.at,fromDl:!!pub.dl,name,part,snap:{tM:Float32Array.from(S.tM),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text})),undo:S.undo.length}};
+  if(!S.editMode) setEditMode(true); $('#sugBar').hidden=false; sugGo(0); $('.lane-wrap').scrollIntoView({behavior:'smooth',block:'start'}); }
+function ownClearNote(part,name){ const u=unpubGet(), l=u[part]||[], e=l.find(x=>x.name===name); if(!e) return;
+  e.notes=e.notes.filter(n=>n!=='your own edits'); if(!e.notes.length) l.splice(l.indexOf(e),1); u[part]=l; if(!l.length) delete u[part];
+  try{ localStorage.setItem('pc-unpub',JSON.stringify(u)); }catch(x){} paintUnpub(); }
+async function ownFinish(){ const s=S.sug, back=s.changes.filter(c=>c.state==='acc');
+  if(!back.length){ S.sug=null; $('#sugBar').hidden=true; reviewDone(); setStatus('Done. Your edits stay as they are.'); return; }
+  const r=await dlg({title:'Save?',html:'<p class="kv-sub">'+back.length+' change'+(back.length>1?'s are':' is')+' put back to the published version:</p><div style="max-height:40vh;overflow:auto;margin-top:8px">'+back.map(c=>'<div class="dlg-item"><span>'+esc(ownWhat(c))+'</span></div>').join('')+'</div>',
+    buttons:[{label:'Save',value:'ok',primary:true},{label:'Keep looking',value:null}]});
+  if(r.value!=='ok') return;
+  S.sug=null; $('#sugBar').hidden=true;
+  if(S.cur&&S.cur.libId!=null) await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{});
+  reviewDone();
+  const rec=S.cur&&S.cur.libId!=null?await libGet(S.cur.libId):null, left=rec&&rec.pub?diffCount({notes:lineDiff(Float32Array.from(S.tM),toF32(rec.pub.contour),S.tT),lyrics:lyricDiff(S.lyrics,rec.pub.lyrics||[])}):1;
+  if(!left) ownClearNote(s.part,s.name);
+  draw(); setStatus(left?'Saved: '+back.length+' change'+(back.length>1?'s':'')+' put back. Your other edits stay.':'Saved: the song is back to the published version, so there is nothing new to share for it.'); }
+document.addEventListener('click',e=>{ const a=e.target.closest&&e.target.closest('#unpubNote .own-ed'); if(!a) return; e.preventDefault();
+  const here=unpubGet()[S.part]||[], it=here[+a.dataset.i]; if(it) openOwnEdits(it.name); });
 // ----- set-up guide for a newly separated song (moderator): lyrics → smooth → align → tempo & beat 1 → time lyrics → clean up -----
 S.setup=null;
 function setupSave(){ if(S.cur&&S.cur.libId!=null&&S.setup) libUpdate(S.cur.libId,{setup:{...S.setup}}).catch(()=>{}); }
@@ -1751,7 +1798,9 @@ async function backupLibrary(fixedName,btn0,txt0){
     }
     if(sharePart) man.order=sortSongs(songs.slice()).map(x=>x.uid);   // the running order (uids were filled in above)
     if(sharePart){ try{ const o=ownerParts(); if(!o.includes(sharePart)){ o.push(sharePart); localStorage.setItem('pc-owner-parts',JSON.stringify(o)); } }catch(e){}
-      for(const x of songs) if(x.base||x.sentHash||x.sent){ delete x.base; delete x.sentHash; delete x.sent; await libPutRaw(x); } }   // you make the share file: these songs are yours
+      for(const x of songs){ if(x.base||x.sentHash||x.sent){ delete x.base; delete x.sentHash; delete x.sent; }   // you make the share file: these songs are yours
+        if(x.contour) x.pub={at:man.created,contour:Float32Array.from(toF32(x.contour)),lyrics:(x.lyrics||[]).map(l=>({t:l.t,text:l.text}))};   // what the choir gets: "your own edits" are compared with it
+        await libPutRaw(x); } }
     entries.unshift({name:'part-coach-backup.json',data:new TextEncoder().encode(JSON.stringify(man))});
     const zip=await zipBlob(entries,p=>{ txt.textContent='Preparing the backup… '+Math.round(p*100)+'%'; });
     const d=new Date(), name=fixedName||'Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
@@ -2786,8 +2835,12 @@ function sugWhat(c){ if(c.type==='notes') return 'Notes '+fmtT1(c.t0)+'–'+fmtT
 function renderSugBar(){ const s=S.sug; if(!s) return; const c=s.changes[s.k], done=s.changes.filter(x=>x.state).length;
   const what=sugWhat(c);
   const st=c.state==='acc'?' · accepted':c.state==='rej'?' · declined':'', warn=!c.state&&sugConflict(c)?(c.type==='lyric'&&c.k!=='time'?(c.k==='add'?' · this line is already in your lyrics':' · this line has changed in your lyrics since; it can\'t be found'):' · you changed this part since; accepting replaces your version'):'';
+  if(s.mode==='own'){ const st2=c.state==='acc'?' · put back':c.state==='rej'?' · kept':'';
+    $('#sgInfo').textContent='Your edits since the share file of '+new Date(s.pubAt).toLocaleDateString()+(s.fromDl?' (the uploaded one)':'')+' · change '+(s.k+1)+' of '+s.changes.length+': '+ownWhat(c)+st2+' · violet = the published version';
+    $('#sgAcc').textContent='Put back'; $('#sgRej').textContent='Keep'; $('#sgAll').textContent='Put all the rest back'; }
+  else { $('#sgRej').textContent='Decline';
   $('#sgInfo').textContent=(s.mode==='approve'?'Approving: suggestion from ':'Suggestion from ')+new Date(s.it.received).toLocaleDateString()+' · change '+(s.k+1)+' of '+s.changes.length+': '+what+st+warn+' · '+done+' decided';
-  const apm=s.mode==='approve'; $('#sgAcc').textContent=apm?'Approve':'Accept'; $('#sgAll').textContent=apm?'Approve all the rest':'Accept all the rest';
+  const apm=s.mode==='approve'; $('#sgAcc').textContent=apm?'Approve':'Accept'; $('#sgAll').textContent=apm?'Approve all the rest':'Accept all the rest'; }
   $('#sgPrev').disabled=s.k===0; $('#sgNext').disabled=s.k===s.changes.length-1; $('#sgAcc').disabled=$('#sgRej').disabled=!!c.state; $('#sgUndo').disabled=!s.hist.length;
   const all=s.changes.every(x=>x.state), fb=$('#sgDone'); fb.classList.toggle('primary',all); fb.classList.toggle('next-step',all); $('#sgAll').disabled=all; }   // everything decided: Finish is the next step
 function sugAccept(c){
@@ -2798,7 +2851,7 @@ function sugAccept(c){
       if(c.k==='del') S.lyrics.splice(S.lyrics.indexOf(L),1); else { if(c.k==='text') L.text=c.text; if(c.t!==undefined&&(c.k==='time'||c.t!==c.old)) L.t=c.t; } }
     undoPush({lyrAll:snap}); c.state='acc'; lyrChanged(); $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); } }
 function sugNextOpen(){ const s=S.sug, i=s.changes.findIndex((x,i)=>i>s.k&&!x.state), j=i>=0?i:s.changes.findIndex(x=>!x.state); if(j>=0) sugGo(j); else { renderSugBar(); draw(); } }
-async function sugFinish(){ const s=S.sug; if(!s) return; if(S.playing) stop(); if(s.mode==='approve') return apFinish();
+async function sugFinish(){ const s=S.sug; if(!s) return; if(S.playing) stop(); if(s.mode==='approve') return apFinish(); if(s.mode==='own') return ownFinish();
   const acc=s.changes.filter(c=>c.state==='acc').length, rej=s.changes.filter(c=>c.state==='rej').length, open=s.changes.length-acc-rej;
   const lab=c=>c.state==='acc'?'<b style="color:var(--accent)">Accepted</b>':c.state==='rej'?'<b>Declined</b>':'<b style="color:var(--muted)">Not decided (counts as declined)</b>';
   const list=s.changes.map(c=>'<div class="dlg-item"><span>'+esc(sugWhat(c))+'</span>'+lab(c)+'</div>').join('');
@@ -2811,10 +2864,12 @@ async function sugFinish(){ const s=S.sug; if(!s) return; if(S.playing) stop(); 
     if(acc&&S.cur.libId!=null){ unpubMark(S.curPart,curSongName(),'accepted suggestion from '+new Date(s.it.received).toLocaleDateString()+' ('+acc+' of '+s.changes.length+': '+s.changes.filter(c=>c.state==='acc').map(sugWhat).slice(0,3).join(', ')+(acc>3?', …':'')+')'); await libUpdate(S.cur.libId,{contour:Float32Array.from(S.tM),contourOrig:Float32Array.from(S.tMorig),lyrics:S.lyrics.map(l=>({t:l.t,text:l.text}))}).catch(()=>{}); }
     draw(); setStatus(acc?'Saved: '+acc+' of '+s.changes.length+' suggested changes accepted. Make the share file again so everyone gets them.':'Done: the suggestion was declined.'); await busyHide(acc?'Saved':'Done'); if(S.inbox.length) setTimeout(openInbox,300); } }
 async function sugCancel(){ const s=S.sug; if(!s) return; if(S.playing) stop();
+  if(s.mode==='own'&&!s.changes.some(c=>c.state==='acc')){ sugRestore(s); reviewDone(); setStatus('Closed. Nothing was changed.'); return; }
   const acc=s.changes.filter(c=>c.state==='acc').length;
-  const r=await dlg({title:'Cancel this review?',html:'<p class="kv-sub">'+(acc?'The '+acc+' change'+(acc>1?'s':'')+' you accepted '+(acc>1?'are':'is')+' taken back and nothing is saved. ':'Nothing is saved. ')+'The suggestion stays in the inbox, so you can review it later.</p>',
-    buttons:[{label:'Cancel review',value:'c'},{label:'Keep reviewing',value:null,primary:true}]});
+  const r=await dlg({title:s.mode==='own'?'Close without saving?':'Cancel this review?',html:s.mode==='own'?'<p class="kv-sub">The '+acc+' change'+(acc>1?'s':'')+' you put back '+(acc>1?'are':'is')+' undone again; your edits stay as they were.</p>':'<p class="kv-sub">'+(acc?'The '+acc+' change'+(acc>1?'s':'')+' you accepted '+(acc>1?'are':'is')+' taken back and nothing is saved. ':'Nothing is saved. ')+'The suggestion stays in the inbox, so you can review it later.</p>',
+    buttons:[{label:s.mode==='own'?'Close':'Cancel review',value:'c'},{label:s.mode==='own'?'Keep looking':'Keep reviewing',value:null,primary:true}]});
   if(r.value!=='c') return;
+  if(s.mode==='own'){ sugRestore(s); reviewDone(); setStatus('Closed. Your edits stay as they were.'); return; }
   sugRestore(s); setStatus(s.mode==='approve'?'Cancelled. Nothing was sent; the suggestion is still waiting.':'Review cancelled. Nothing was changed; the suggestion stays in the inbox.'); }
 // back to the song as it was before the review (nothing saved)
 function sugRestore(s){ S.tM=Float32Array.from(s.snap.tM); S.lyrics=s.snap.lyrics.map(l=>({t:l.t,text:l.text})); S.undo.length=Math.min(S.undo.length,s.snap.undo);
