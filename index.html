@@ -196,7 +196,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 #pitchTools .beat-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .snd .ed-toggle{padding:7px 10px;line-height:1.5}
 @media (max-width:400px){.snd .ed-toggle{padding:7px 8px}}
-.ed-toggle[aria-expanded="true"]{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,var(--line));color:var(--accent)}
+.lane-bm .sec-btn[aria-expanded="true"],.ed-toggle[aria-expanded="true"]{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,var(--line));color:var(--accent)}
 .ed-row{gap:8px}
 .ed-fold{display:inline-flex}
 .ed-fold summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 2px;list-style:none;display:inline-flex;align-items:center;gap:4px}
@@ -218,7 +218,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .tr-row2>button,.tr-row2>label{width:100%;justify-content:center;min-width:0;white-space:nowrap;padding-left:6px;padding-right:6px}
 /* bookmarks: a ribbon in the top right corner of the pitch lane */
 .pick-wrap.lane-bm{position:absolute;top:6px;right:6px;z-index:5} .lane-bm .sec-btn{padding:7px 8px;background:color-mix(in srgb,var(--surface) 88%,transparent);opacity:.95;gap:4px} .lane-bm .bm-txt{display:none}
-.lane-bm .sec-btn svg{width:18px;height:18px}
+.lane-bm .sec-btn svg{width:18px;height:18px} .lane-bm .sec-btn[aria-expanded="true"]{opacity:1;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
 .tr-tools{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,.9fr);gap:8px} .tr-tools>button,.tr-tools>label,.tr-tools .pick-wrap>button{width:100%;height:100%;justify-content:center;min-width:0;white-space:nowrap;padding-left:6px;padding-right:6px}
 .tr-tools .pick-wrap>button{gap:5px}
 .tr-tools .pick-wrap{min-width:0} .tr-tools .sec-btn span:not(.bm-n){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1076,7 +1076,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 id';
+const APP_VERSION='2026-10-30 ie';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2191,7 +2191,7 @@ S.segShown=-1; S.ncShown=-1;
 const TEMPO_RATES=[0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1,1.05,1.1,1.15,1.2];
 function paintTempo(){ const sel=$('#tempo'); if(!sel) return; const bpm=S.beat&&S.beat.bpm>0?S.beat.bpm:null, cur=S.rate||1, key=(bpm||0)+'|'+cur; if(sel._key===key) return; sel._key=key;
   const rates=TEMPO_RATES.includes(cur)?TEMPO_RATES:TEMPO_RATES.concat([cur]).sort((a,b)=>a-b);
-  sel.innerHTML=rates.map(r=>'<option value="'+r+'"'+(r===cur?' selected':'')+'>'+(bpm?Math.round(bpm*r)+' BPM':'Tempo '+Math.round(r*100)+'%')+'</option>').join('');
+  sel.innerHTML=rates.map(r=>'<option value="'+r+'"'+(r===cur?' selected':'')+' data-s="'+(bpm?Math.round(bpm*r)+' BPM':'Tempo '+Math.round(r*100)+'%')+'" data-l="'+(bpm?Math.round(bpm*r)+' BPM'+(r===1?' · original':''):Math.round(r*100)+'%'+(r===1?' · original':''))+'">'+(bpm?Math.round(bpm*r)+' BPM':'Tempo '+Math.round(r*100)+'%')+'</option>').join('');
   sel.title=bpm?'Tempo: the song is '+Math.round(bpm)+' BPM; pick a slower or faster tempo (the pitch stays the same)':'Tempo: slower or faster (the pitch stays the same)'; }
 function renderBeatInfo(msg){ setTimeout(paintTempo,0);
   if(typeof renderLyrSnap==='function'&&document.getElementById('lyrList')) renderLyrics(false);
@@ -4505,6 +4505,9 @@ canvas.addEventListener('pointermove',e=>{ if(drag&&drag.loopEdge){ const d=drag
   drag=null; }));
 
 // ===== controls =====
+// while the list is open the song's own tempo is marked "· original"; the closed button stays short
+{ const sel=$('#tempo'), lab=long=>[...sel.options].forEach(o=>{ if(o.dataset.s) o.textContent=long?o.dataset.l:o.dataset.s; });
+  sel.addEventListener('pointerdown',()=>lab(true)); sel.addEventListener('keydown',()=>lab(true)); sel.addEventListener('blur',()=>lab(false)); sel.addEventListener('change',()=>lab(false)); }
 $('#tempo').addEventListener('change',async e=>{ setTimeout(paintTempo,0);
   const was=S.playing; if(was) stop();
   S.rate=+e.target.value; S.ghost=[];
