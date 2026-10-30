@@ -1082,7 +1082,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 ig';
+const APP_VERSION='2026-10-30 ih';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4598,7 +4598,10 @@ async function closeEditor(fromPencil){
 }
 // the pencil next to Voice / Backing / Tone / Click shows or hides the editor buttons
 function setEdFold(on){ setTimeout(setupPulse,0); { const rb=$('#reportBtn'); if(rb) rb.hidden=!canReport(); } $('#edFold').hidden=!on; $('#edLyrBox').hidden=!on||!S.tap; if(document.getElementById('pitchTools')) paintAdminTools(); $('#edToggle').setAttribute('aria-expanded',String(on)); }
-$('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; if(!open&&(S.editMode||S.tap)){ closeEditor(true); return; } setEdFold(open); });   // closing the pencil also ends editing
+$('#edToggle').addEventListener('click',()=>{ const open=$('#edFold').hidden; if(!open&&(S.editMode||S.tap)){ closeEditor(true); return; } setEdFold(open); if(open) edFoldIntoView(); });
+// the buttons the pencil shows: scroll just enough that they sit at the bottom of the screen
+function edFoldIntoView(){ requestAnimationFrame(()=>{ const els=['#edFold','#pitchTools'].map(x=>$(x)).filter(e=>e&&!e.hidden&&e.offsetParent); if(!els.length) return;
+  const bottom=Math.max(...els.map(e=>e.getBoundingClientRect().bottom)), laneTop=$('.lane-wrap').getBoundingClientRect().top, over=Math.min(bottom-window.innerHeight+12,laneTop-8); if(over>0) window.scrollBy({top:over,behavior:'smooth'}); }); }   // never past the top of the graph   // closing the pencil also ends editing
 $('#edClearSel').addEventListener('click',()=>{ S.sel=null; updateSelInfo(); draw(); });
 $('#edTimeBtn').addEventListener('click',()=>{ if(S.tap){ closeEditor(false); return; } if(S.editMode) setEditMode(false); startTap(); });
 $('#bpmIn').addEventListener('change',e=>{ const v=+e.target.value; if(!S.beat&&v>=30&&v<=240){ S.beat={bpm:v,offset:0,auto:false}; beatEdited(); } else setBpm(v); });
