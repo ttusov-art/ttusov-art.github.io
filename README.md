@@ -1,57 +1,90 @@
-Wear headphones, otherwise the microphone hears the track too.
-If your line always looks a little behind the target band, raise Delay compensation: try about 80 ms for wired headphones and 200–300 ms for Bluetooth. The page remembers your setting.
+# Part Coach
 
-added looping: 
-Play or drag to where a phrase starts, then tap Set start.
-Move to where it ends and tap Set end. Repeat turns on by itself.
-Press Play. The section repeats until you pause, with a lead-in before each pass so you hear the run-up. The lead-in is 2 s by default, and you can choose 0–3 s.
+Practise your choir part on your phone: sing along with your part's voice and backing, see the target melody as a pitch line, and watch your own voice drawn on top of it in real time.
 
-Part Coach can now record your voice.
-How it works: with Record my voice ticked (next to the microphone switch), every run you sing becomes a take. When you loop a section, each pass is its own take. Takes appear in a new Your recordings panel, newest first, with the song time, length, tempo and score. Each take has three buttons:
-Voice only: just your voice, brought up to a comfortable volume. The lane shows that take's pitch line in colour, so you can hear and see where you drifted.
-With backing: your voice in sync with the backing track, at the tempo you sang it.
-Save: saves the take as a WAV file to your phone's Downloads folder.
-Press Stop listening to end playback.
-Good to know:
-Recordings stay until you reload or close the page, so save the takes you want to keep. The page keeps the latest 15 takes.
+Part Coach is a single web page. There is nothing to install from an app store and no account to create. It runs in the browser (Chrome, Safari, Ecosia…), can be added to the home screen, and keeps working offline once the songs are on the phone.
 
+---
 
-The first time you separate a song, it downloads the model (67 MB) from Hugging Face, a public site for AI models, and keeps it on that device
+## For choir members
 
+1. **Open the link** for your part that the moderator shared. The app downloads that part's songs to your phone (you can choose which ones).
+2. **Choose a song** and press **Play**. You hear the voice of your part and the backing, each with its own volume.
+3. **Turn on the microphone** to see your own pitch as you sing. The readouts show the target note, how far off you are, and how much of the time you were on pitch and on time.
 
-Storage: the library lives in the browser on that device. If you clear the browser's site data for the page, the library is cleared too.
+Useful things to try:
 
+- **Loop** a difficult passage, slow it down with the **tempo** (BPM) button, and **bookmark** it to come back later.
+- **Key** opens a playable piano keyboard (several fingers at once, with a sustain pedal).
+- **Analyse** listens to a run-through and points out the places worth practising.
+- **Warm-up**: a short session of scales, arpeggios and sirens in your part's range.
+- **Lyrics** follow along, with a countdown before each entry after a long rest.
 
-Part Coach now supports lyrics, with line-by-line timing.
-How to use it:
-Open a song, then open the new Lyrics section, below the loop bar.
-Paste or type the lyrics, one line per sung phrase, and tap Use these lines. The app places each line on a sung phrase automatically. It looks for breath pauses and also considers how long each line of text is.
-Play the song to check the timing. To fix a single line, use − / + (0.2 s steps), Now (sets the line to the playhead), or ▶ (plays from just before that line).
-If many lines are off, tap Tap to time. The song plays, the lyrics bar turns into a big tap button, and you tap it (or press Space on a laptop) when each line starts. It starts from the first line without a time, so you can re-time just part of a song.
+**Found a mistake?** Tap the pencil ✎. You can fix a wrong note (**Edit target line**) or the timing of a lyric line (**Time lyrics**) and send it as a suggestion. If you can hear that something is off but don't know what, tap **⚑ Sounds off** to mark the spot for someone else to check. Suggestions are anonymous, and editing and suggesting is very welcome: it makes the songs better for everyone.
 
+Updates: when the moderator publishes new or corrected songs, tap **Update**. When a new version of the app itself is out, a banner offers to reload.
 
-Measure delay (in Settings, under Delay compensation)
-Put in your earbuds, choose the microphone you normally use, and tap Measure delay.
-You hear two low beeps to count you in, then eight high beeps. Clap, or sing a short "ta", exactly on each high beep.
-The app measures how late each clap arrives and sets Delay compensation to the result. It also tells you how steady your claps were. If it says "a bit uneven", just run it again.
-Run it once per setup. If you switch between Bluetooth earbuds and wired headphones, measure again, because they have very different delays. The slider now goes up to 600 ms.
-2. Voice timing slider for takes
-When you play a take ("Voice only" or "With backing"), a Voice timing slider appears in the recordings panel:
-Adjusting: slide left (earlier) or right (later) until your voice locks in with the backing. Playback restarts at the same spot, so you hear the change right away.
-Pitch line and score move along with your voice.
-Use this for new recordings copies the corrected value into Delay compensation, so live scoring and future takes are aligned too.
+---
 
-Panning in the editor now works only with two fingers (or shift + mouse wheel on a laptop).
+## For the moderator
 
-Editor mode in PC:
-Key	What it does
-← / →	Move the view back or forward by ⅛ of the screen (one second at the default zoom)
-Shift + ← / →	Move by half a screen
-Space	Play / pause
-↑ / ↓	Selected notes up or down a semitone
-Shift + ↑ / ↓	Selected notes up or down an octave (a bonus I added)
-Enter	Fill
-Delete or Backspace	Remove
-Ctrl + Z (Cmd + Z on a Mac)	Undo
-Esc	Clear the selection (also a bonus)
-Ctrl + ← / → (Cmd on a Mac) selects from the playhead
+The moderator prepares the songs and shares them. The admin tools are unlocked with the review key from the inbox script (see below).
+
+**Adding a song.** Choose a part recording (for example an MP3). The app separates the voice from the backing on your device, finds the pitch line and keeps everything in the song library. A set-up guide then walks through the steps: lyrics (also from a PDF), smoothing the pitch line, aligning, tempo and beat 1, timing the lyrics and cleaning up.
+
+**Sharing.** Make the share file for a part (a `.zip`), upload it to Dropbox and share the Dropbox link with the choir. Upload the new file under the same name to replace the old one, so the link stays the same. The app reminds you which songs have changes that are not published yet, and **your own edits** shows them change by change, with the option to put single changes back.
+
+**Short links (optional).** **Make links.json** creates a `links.json` file. Upload it next to `index.html` and each part gets a short link like `…/?alto-1`. It also tells members' phones where the suggestions inbox is.
+
+**Suggestions inbox.** Members' suggestions, "sounds off" reports, approver requests and the usage count go to a Google spreadsheet through a small Google Apps Script (`suggestions-inbox.gs`):
+
+1. Create a Google spreadsheet, open **Extensions → Apps Script** and paste in `suggestions-inbox.gs`.
+2. Change `REVIEW_KEY` to a long secret of your own. Optionally change `APPROVER_KEY` to a second secret to switch on approvers.
+3. **Deploy → New deployment → Web app**, execute as *me*, access *anyone*. Copy the web app link into Part Coach (Admin).
+4. After changing the script later, deploy it as a **new version of the same deployment**, so the link stays the same.
+
+**Approvers** are trusted members who can check suggestions for their own part (never their own suggestions). Members can ask to become one from the app, and you say yes or no in Admin.
+
+**Usage.** If members agree, the Admin panel shows how many phones used the app in the last days and weeks.
+
+---
+
+## Files in this repository
+
+| File or folder | What it is |
+|---|---|
+| `index.html` | The whole app: page, styles and code in one file |
+| `fonts/` | The fonts, served with the app (with their licences) |
+| `piano/` | Piano recordings for the playable keyboard |
+| `lib/` | Two helper libraries: MP3 encoding (lamejs) and PDF reading (PDF.js) |
+| `voc_ft.part0–4.wasm` | The voice separation model, split into five parts (used by the moderator only) |
+| `beats.js` | Beat detection code, a copy used for testing |
+| `manifest.webmanifest`, icons | Lets the app be added to the home screen |
+| `suggestions-inbox.gs` | The Google Apps Script for the suggestions inbox (not used by the page itself) |
+| `links.json` | Optional short links per part, made by the app |
+
+There is no build step: what is in the repository is exactly what GitHub Pages serves.
+
+---
+
+## Privacy
+
+- Songs, recordings, singing scores and settings stay on each phone. The microphone is analysed only on the phone and is never sent anywhere.
+- Sent to the moderator's Google spreadsheet:
+  - suggestions and reports (the changes, the song and part, an optional comment and a random number for the phone, no name);
+  - approver requests (the name and part typed in; the name is removed 30 days after the decision);
+  - the usage count, only after the member says yes (a random number and the date; removed after 12 months).
+- GitHub Pages (the app) and Dropbox (the songs) see visitors' internet addresses when files are downloaded, like any website. Fonts, piano sounds and libraries are served with the app, so no other sites are contacted.
+- Only on the moderator's phone, when separating a new song, the separation engine (ONNX Runtime) is downloaded from a public code server.
+- **Remove all Part Coach data** in Settings deletes everything from a phone.
+
+The same information is in the app under **Settings → Privacy**.
+
+---
+
+## Credits
+
+- Piano sounds: Salamander Grand Piano by Alexander Holm, CC BY 3.0
+- Fonts: Bricolage Grotesque, IBM Plex Sans and Mono, Atkinson Hyperlegible, SIL Open Font License
+- MP3 encoding: lamejs (LGPL); PDF reading: PDF.js by Mozilla (Apache 2.0)
+- Voice separation: the UVR-MDX-NET Voc_FT model from the Ultimate Vocal Remover project, run with ONNX Runtime Web by Microsoft
