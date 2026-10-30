@@ -553,6 +553,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   const st=document.createElement('style'); st.textContent=css; document.head.appendChild(st); })();
 </script>
 <div class="new-ver use-note" id="useNote" hidden role="status"><span>May Part Coach count this phone? Once a day it would send only a random number for this phone and the date, no names and nothing about your singing. The moderator uses this to see whether the app is worth the effort: if nobody uses it, there is no point in keeping the songs up to date. You can change this any time in Settings.</span><button id="useNoteOk" type="button" class="primary">Yes, count it</button><button id="useNoteNo" type="button">No, thanks</button></div>
+<div class="new-ver use-note" id="iosNote" hidden role="status"><span><b>Keep your songs on this iPhone:</b> Safari deletes them after about a week without opening Part Coach. Add it to your Home Screen and they stay.</span><button id="iosNoteHow" type="button" class="primary">Show me how</button><button id="iosNoteX" type="button">Later</button></div>
 <div class="new-ver" id="newVer" hidden role="status"><span id="newVerText">A new version of Part Coach is ready.</span><button id="newVerGo" type="button" class="primary">Reload</button><button id="newVerX" type="button" class="link-btn" aria-label="Later">Later</button></div>
 <script>window.BOOT=[]; setTimeout(()=>{ const b=document.getElementById('bootView'); if(b) b.remove(); },25000);   // safety: never stuck</script>
 <div class="key-view" id="keyView" hidden role="dialog" aria-modal="true" aria-labelledby="kvName">
@@ -1138,7 +1139,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 is';
+const APP_VERSION='2026-10-30 it';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -5209,13 +5210,23 @@ async function installHelp(fromTip){
   const ios=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   let html, btns=[];
   if(S.installEvt){ html='<p class="kv-sub">Put Part Coach on your home screen: it opens like an app, full screen, with its own icon.</p>'; btns=[{label:'Add to home screen',value:'go',primary:true}]; }
-  else if(ios) html='<p class="kv-sub">On iPhone and iPad (Safari):</p><ol class="kv-sub" style="margin:6px 0 0 18px;padding:0"><li>Tap the Share button <b>⬆︎</b> at the bottom of Safari.</li><li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>.</li></ol><p class="kv-sub">Do this right here on this page, so the icon opens your part. Then open Part Coach from the icon and add the songs there once more (the icon has its own storage on iPhone).</p>';
+  else if(ios) html='<p class="kv-sub"><b>Important on iPhone:</b> Safari deletes the songs of a website that was not opened for about a week. On the home screen they stay.</p><p class="kv-sub">On iPhone and iPad (Safari):</p><ol class="kv-sub" style="margin:6px 0 0 18px;padding:0"><li>Tap the Share button <b>⬆︎</b> at the bottom of Safari.</li><li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>.</li></ol><p class="kv-sub">Do this right here on this page, so the icon opens your part. Then open Part Coach from the icon and add the songs there once more (the icon has its own storage on iPhone).</p>';
   else html='<p class="kv-sub">Open the browser menu <b>⋮</b> and tap <b>Add to Home screen</b> or <b>Install app</b>. Part Coach then opens like an app, with its own icon.</p>';
   btns.push({label:fromTip?'Not now':'Close',value:null}); if(fromTip) btns.push({label:"Don't show again",value:'never'});
   const r=await dlg({title:'Part Coach on your home screen',html,buttons:btns});
   if(r.value==='go'&&S.installEvt){ S.installEvt.prompt(); try{ await S.installEvt.userChoice; }catch(e){} S.installEvt=null; }
   if(r.value==='never') try{ localStorage.setItem('pc-installtip','0'); }catch(e){} }
-function installTip(){ if(isStandalone()) return; try{ if(localStorage.getItem('pc-installtip')==='0') return; }catch(e){} setTimeout(()=>installHelp(true),1500); }
+function installTip(){ keepStorage(); if(isStandalone()) return; try{ if(localStorage.getItem('pc-installtip')==='0') return; }catch(e){} setTimeout(()=>installHelp(true),1500); }
+// ----- keep the songs: ask the browser not to clear the storage, and remind iPhone users (Safari clears sites unused for ~7 days) to use the home screen -----
+async function keepStorage(){ try{ if(navigator.storage&&navigator.storage.persist&&!(await navigator.storage.persisted())) await navigator.storage.persist(); }catch(e){} }
+const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+function iosNoteMaybe(){ if(!isIOS()||isStandalone()) return; try{ if(localStorage.getItem('pc-installtip')==='0') return; if(Date.now()-(+localStorage.getItem('pc-iosnote')||0)<7*864e5) return; }catch(e){ return; }
+  if(!(libMetaCache||[]).length) return;   // only once there are songs to lose
+  if(!$('#useNote').hidden){ setTimeout(iosNoteMaybe,4000); return; }   // one note at a time
+  $('#iosNote').hidden=false; }
+function iosNoteLater(){ $('#iosNote').hidden=true; try{ localStorage.setItem('pc-iosnote',String(Date.now())); }catch(e){} }   // again in a week
+$('#iosNoteX').addEventListener('click',iosNoteLater);
+$('#iosNoteHow').addEventListener('click',()=>{ iosNoteLater(); installHelp(false); });
 S.lastCheck=0;
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&getShared().length&&Date.now()-S.lastCheck>5*60e3&&!S.playing) checkShared(false); });
 setInterval(()=>{ if(!document.hidden&&getShared().length&&Date.now()-S.lastCheck>15*60e3&&!S.playing) checkShared(false); },60e3);
@@ -5570,7 +5581,8 @@ async function bootFinish(bt){ const v=$('#bootView'); if(!v) return; const slee
     await new Promise(res=>{ let last=performance.now(), calm=0; const lim=performance.now()+4000;
       const f=now=>{ calm=now-last<60?calm+(now-last):0; last=now; if(calm>=500||now>lim) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); });
   }catch(e){}
-  v.classList.add('out'); setTimeout(()=>v.remove(),350); S.bootMs=Math.round(performance.now()-t0); setTimeout(checkAppVersion,1500); }
+  v.classList.add('out'); setTimeout(()=>v.remove(),350); S.bootMs=Math.round(performance.now()-t0); setTimeout(checkAppVersion,1500);
+  libMeta().then(m=>{ if(m&&m.length){ keepStorage(); setTimeout(iosNoteMaybe,5000); } }).catch(()=>{}); }
 // where you were in the song: saved when you pause, leave the app or every few seconds while playing; the last song reopens there
 function savePos(){ try{ if(S.wiping) return; if(S.cur&&S.cur.libId!=null&&S.dur) localStorage.setItem('pc-lastpos',JSON.stringify({id:S.cur.libId,pos:+(S.playing?visTime():S.pos).toFixed(2)})); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.hidden) savePos(); });
