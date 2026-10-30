@@ -13,9 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f5f7f8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0e1419" media="(prefers-color-scheme: dark)">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
 <style>
 /* Layout: sing-along workbench — readout + scrolling pitch lane (target band, your line), transport, setup panels */
 :root{
@@ -441,7 +439,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .skip-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;color:var(--muted)} .skip-row .skip-name{color:var(--fg)}
 .use-bars{display:flex;align-items:flex-end;gap:2px;height:48px;margin-top:6px} .use-bars i{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:1px;opacity:.85} .use-bars i.z{background:var(--line)}
 .use-axis{display:flex;justify-content:space-between}
-.new-ver.use-note{top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:14px;width:min(560px,calc(100% - 24px));box-sizing:border-box;justify-content:flex-end} .new-ver.use-note span{flex:1 1 220px}
+.new-ver.use-note{top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:14px;width:min(560px,calc(100% - 24px));box-sizing:border-box;justify-content:flex-end} .new-ver.use-note span{flex:1 1 100%}
 .new-ver{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);padding:10px 14px;border-radius:12px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px;color:var(--fg)}
 .ana-row{gap:8px;margin-top:10px;align-items:center}
 .ana-box{display:flex;flex-direction:column;gap:8px;margin-top:10px}
@@ -554,7 +552,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     const lit=document.createElement('b'); lit.style.setProperty('--a',`${id} ${total.toFixed(2)}s`); keys[n].appendChild(lit); }
   const st=document.createElement('style'); st.textContent=css; document.head.appendChild(st); })();
 </script>
-<div class="new-ver use-note" id="useNote" hidden role="status"><span>Part Coach counts how many phones open it each day: only a random number for this phone and the date are sent, no names and nothing about your singing. The moderator uses this to see whether the app is worth the effort: if nobody uses it, there is no point in keeping the songs up to date. You can switch it off in Settings.</span><button id="useNoteOk" type="button" class="primary">OK</button></div>
+<div class="new-ver use-note" id="useNote" hidden role="status"><span>May Part Coach count this phone? Once a day it would send only a random number for this phone and the date, no names and nothing about your singing. The moderator uses this to see whether the app is worth the effort: if nobody uses it, there is no point in keeping the songs up to date. You can change this any time in Settings.</span><button id="useNoteOk" type="button" class="primary">Yes, count it</button><button id="useNoteNo" type="button">No, thanks</button></div>
 <div class="new-ver" id="newVer" hidden role="status"><span id="newVerText">A new version of Part Coach is ready.</span><button id="newVerGo" type="button" class="primary">Reload</button><button id="newVerX" type="button" class="link-btn" aria-label="Later">Later</button></div>
 <script>window.BOOT=[]; setTimeout(()=>{ const b=document.getElementById('bootView'); if(b) b.remove(); },25000);   // safety: never stuck</script>
 <div class="key-view" id="keyView" hidden role="dialog" aria-modal="true" aria-labelledby="kvName">
@@ -954,10 +952,22 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         <details class="more-info"><summary>More info</summary><span class="small">On: when the moderator's update arrives, songs and backing tracks you deleted come back. Off: what you deleted stays deleted (saves space on this device).</span></details>
       </div>
       </div>
+      <div class="set-group"><h3 class="set-h">Privacy</h3>
+      <div class="field">
+        <span class="small">Your songs, recordings, singing scores and settings stay on this phone. The microphone is only analysed here and never sent anywhere.</span>
+        <details class="more-info"><summary>What is sent, and where</summary><span class="small">
+          <b>Suggestions and “sounds off” reports</b> you send: the changes or the spot and your comment, the song and part, and a random number for this phone (so you can't approve your own suggestion). No name.<br>
+          <b>Asking to become an approver:</b> the name and part you type. The name is removed 30 days after the moderator decides.<br>
+          <b>Usage count</b>, only if you said yes: a random number for this phone and the date, once a day. Removed after 12 months.<br>
+          These go to a Google spreadsheet that only the moderator can read (Google stores it). The app itself comes from GitHub Pages and the songs from Dropbox; like any website, these services see your internet address when you download. Fonts and the piano sounds come with the app, so nothing goes to other sites.<br>
+          You can ask the moderator to see or delete what was sent from your phone. “Remove all Part Coach data” below deletes everything on this phone.
+        </span></details>
+      </div>
+      </div>
       <div class="set-group"><h3 class="set-h">Usage count</h3>
       <div class="field">
-        <label class="check" for="usageOn"><input id="usageOn" type="checkbox" checked>Count this phone</label>
-        <span class="small">Part Coach counts how many phones open it each day: only a random number for this phone and the date are sent, no names and nothing about your singing. The moderator uses this to see whether the app is worth the effort: if nobody uses it, there is no point in keeping the songs up to date.</span>
+        <label class="check" for="usageOn"><input id="usageOn" type="checkbox">Count this phone</label>
+        <span class="small">Off unless you said yes. When on, once a day only a random number for this phone and the date are sent, no names and nothing about your singing. The moderator uses this to see whether the app is worth the effort: if nobody uses it, there is no point in keeping the songs up to date.</span>
       </div>
       </div>
       <div class="set-group set-danger"><h3 class="set-h">This device</h3>
@@ -967,7 +977,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         <div class="row"><button id="wipeBtn" type="button" class="danger-btn">Remove all Part Coach data…</button></div>
       </div>
 
-      </div>      <span class="small" id="appVer"></span>
+      </div>      <span class="small" id="appVer"></span><span class="small credits">Piano sounds: Salamander Grand Piano by Alexander Holm (CC BY 3.0). Fonts: Bricolage Grotesque, IBM Plex, Atkinson Hyperlegible (SIL Open Font License).</span>
       </div>
     </details>
   </section>
@@ -1128,7 +1138,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 ir';
+const APP_VERSION='2026-10-30 is';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1603,7 +1613,7 @@ async function deleteBacking(btn){
 let libUpdQ=Promise.resolve();
 function libUpdate(id,patch){ const run=libUpdQ.then(async()=>{ const s=await libGet(id); if(!s) return; Object.assign(s,patch); await libPut(s); }); libUpdQ=run.catch(()=>{}); return run; }
 async function encodeMp3(buf,kbps,onProg,mono=true){
-  if(!window.lamejs) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js');
+  if(!window.lamejs) await loadScript('lib/lame.min.js');
   const sr=buf.sampleRate, n=buf.length; let chs;
   if(mono||buf.numberOfChannels<2){ const a=buf.getChannelData(0); if(buf.numberOfChannels>1){ const b=buf.getChannelData(1), m=new Float32Array(n); for(let i=0;i<n;i++) m[i]=0.5*(a[i]+b[i]); chs=[m]; } else chs=[a]; }
   else chs=[buf.getChannelData(0),buf.getChannelData(1)];
@@ -3255,8 +3265,8 @@ function lyrChanged(){ renderLyrics(false); saveLyrics(); draw(); paintSuggest()
 // ----- lyrics from a PDF table: one column per part, rows in singing order -----
 async function loadPdfJs(){
   if(window.pdfjsLib) return window.pdfjsLib;
-  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  await loadScript('lib/pdf.min.js');
+  pdfjsLib.GlobalWorkerOptions.workerSrc='lib/pdf.worker.min.js';
   return pdfjsLib;
 }
 // read the PDF table into a sheet: title, part columns, rows (with section labels on the left)
@@ -3425,7 +3435,7 @@ const SHEET_FONTS={app:'var(--font-body)',atkinson:'"Atkinson Hyperlegible",Verd
 function sheetType(){ let t={}; try{ t=JSON.parse(localStorage.getItem('pc-sheettype')||'{}')||{}; }catch(e){} return {fs:Math.max(11,Math.min(30,+t.fs||(innerWidth<480?14:15))),font:SHEET_FONTS[t.font]?t.font:'app'}; }
 function applySheetType(t){
   t=t||sheetType(); const tb=$('#sheetTable'); tb.style.setProperty('--sheet-fs',t.fs+'px'); tb.style.setProperty('--sheet-font',SHEET_FONTS[t.font]); $('#sheetFont').value=t.font;
-  if(t.font==='atkinson'&&!document.getElementById('atkFont')){ const l=document.createElement('link'); l.id='atkFont'; l.rel='stylesheet'; l.href='https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap'; document.head.appendChild(l); }
+  if(t.font==='atkinson'&&!document.getElementById('atkFont')){ const l=document.createElement('link'); l.id='atkFont'; l.rel='stylesheet'; l.href='fonts/atkinson.css'; document.head.appendChild(l); }
 }
 function setSheetType(ch){ const t={...sheetType(),...ch}; try{ localStorage.setItem('pc-sheettype',JSON.stringify(t)); }catch(e){} applySheetType(t); }
 // melody shape of one lyric line, drawn as a thin line under it
@@ -4479,7 +4489,8 @@ let kb=null, kbLastTap=0, kbSaveTimer=null;
 // key volume follows the guide tone slider (at off, the keys still sound quietly)
 function keyVol(){ const v=+$('#volTone').value; return (v>0?v:0.12)*0.45; }
 // recorded grand piano: Salamander samples every minor third (C, D#, F#, A), pitched to the nearest note
-const GRAND_URL='https://tonejs.github.io/audio/salamander/', GRAND_PC={0:'C',3:'Ds',6:'Fs',9:'A'};
+const GRAND_URL='piano/',   // Salamander Grand Piano samples (CC BY 3.0, Alexander Holm), kept next to the app
+      GRAND_PC={0:'C',3:'Ds',6:'Fs',9:'A'};
 const GRAND_NOTES=(()=>{ const a=[]; for(let m=21;m<=108;m++) if(GRAND_PC[m%12]!==undefined) a.push(m); return a; })();
 S.grand={};
 function grandLoad(m){ if(S.grand[m]) return S.grand[m]; const name=GRAND_PC[m%12]+(Math.floor(m/12)-1)+'.mp3';
@@ -4990,12 +5001,12 @@ $('#backSel').addEventListener('change',e=>{ const i=+e.target.value; if(i>=0) u
 $('#backSave').addEventListener('click',saveBacking);
 $('#backDel').addEventListener('click',e=>deleteBacking(e.currentTarget));
 // ----- usage count: once a day this phone sends its random tag and the date to the inbox (members only; can be switched off) -----
-function usageOn(){ try{ return localStorage.getItem('pc-usage')!=='0'; }catch(e){ return true; } }
+function usageOn(){ try{ return localStorage.getItem('pc-usage')==='1'; }catch(e){ return false; } }   // only after a yes
 function dayStr(d){ d=d||new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 async function usageHello(){ const url=sugUrl(); if(!url||sugKey()||!usageOn()) return; const day=dayStr();
   try{ if(localStorage.getItem('pc-hello')===day) return; }catch(e){}
   try{ await sugPost(url,{action:'hello',dev:devTag(),day}); localStorage.setItem('pc-hello',day); }catch(e){} }
-function usageNote(){ if(!sugUrl()||sugKey()) return; try{ if(localStorage.getItem('pc-usage-seen')) return; }catch(e){ return; }
+function usageNote(){ if(!sugUrl()||sugKey()) return; try{ if(localStorage.getItem('pc-usage')!=null) return; }catch(e){ return; }   // asked until answered
   setTimeout(()=>{ $('#useNote').hidden=false; },3000); }
 async function usageFetch(){ const url=sugUrl(), key=sugKey(), box=$('#useAdmin'); if(!url||!key){ box.hidden=true; return; }
   let j; try{ j=await sugGet(url,{action:'usage',key,today:dayStr()}); }catch(e){ box.hidden=true; return; }   // an older inbox script: nothing to show
@@ -5005,8 +5016,10 @@ async function usageFetch(){ const url=sugUrl(), key=sugKey(), box=$('#useAdmin'
   $('#useText').textContent=(j.phonesAll?ph(list[29])+' today · '+ph(j.phones7)+' in the last 7 days · '+ph(j.phones30)+' in the last 30 days · '+ph(j.phonesAll)+' in all.':'No phones counted yet.')+' Your own phone is not counted. A phone is counted once a day when the app is opened.';
   $('#useBars').innerHTML=list.map((n,i)=>'<i'+(n?'':' class="z"')+' style="height:'+Math.max(4,Math.round(n/mx*100))+'%" title="'+n+'"></i>').join(''); }
 $('#usageOn').checked=usageOn();
-$('#usageOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-usage',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'This phone is counted again (once a day). Thank you!':'This phone is not counted any more.'); if(e.target.checked) usageHello(); });
-$('#useNoteOk').addEventListener('click',()=>{ $('#useNote').hidden=true; try{ localStorage.setItem('pc-usage-seen','1'); }catch(e){} });
+$('#usageOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-usage',e.target.checked?'1':'0'); }catch(x){} $('#useNote').hidden=true; setStatus(e.target.checked?'This phone is counted once a day. Thank you!':'This phone is not counted.'); if(e.target.checked) usageHello(); });
+function useAnswer(yes){ $('#useNote').hidden=true; try{ localStorage.setItem('pc-usage',yes?'1':'0'); }catch(e){} $('#usageOn').checked=yes; setStatus(yes?'Thank you! This phone is counted once a day.':'OK, this phone is not counted.'); if(yes) usageHello(); }
+$('#useNoteOk').addEventListener('click',()=>useAnswer(true));
+$('#useNoteNo').addEventListener('click',()=>useAnswer(false));
 $('#restoreBacksOn').checked=restoreBacks();
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
