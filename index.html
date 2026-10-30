@@ -442,7 +442,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 #admSongs .song-row.adm-flash{animation:admFlash 1.2s ease-out forwards;border-radius:8px}
 #admSongs .adm-arrows{display:flex;gap:6px;flex:none;margin-left:auto} #admSongs .song-row{align-items:center} #admSongs .take-info{flex:1 1 140px;min-width:0}
 #admSongs .adm-n{color:var(--muted);font-family:var(--font-mono);font-weight:600} #admSongs .adm-moved{color:var(--accent)}
-.rep-kinds{gap:6px;flex-wrap:wrap} .rep-kind.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.rep-kinds{gap:6px;flex-wrap:wrap} .rep-note-lab{display:block;margin-top:10px} .rep-note{width:100%;font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);resize:vertical;margin-top:4px} .rep-note-show{color:var(--fg);font-style:italic} .rep-kind.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .rep-block{display:flex;flex-direction:column;gap:6px;padding:10px 12px;margin-bottom:10px;border:1px solid color-mix(in srgb,#d97706 50%,var(--line));border-radius:10px;background:color-mix(in srgb,#d97706 7%,var(--surface))}
 .pick-menu .pm-rep{color:#b45309;font-weight:600}
 .rep-offer{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-top:6px;border:1px solid color-mix(in srgb,#8b5cf6 50%,var(--line));border-radius:10px;background:color-mix(in srgb,#8b5cf6 7%,var(--surface));font-size:14px}
@@ -1076,7 +1076,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-30 ie';
+const APP_VERSION='2026-10-30 if';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2571,12 +2571,12 @@ async function reportSpot(){
   if(!canReport()){ setStatus(!sugUrl()?'Reports are not set up for your choir yet. Ask the moderator.':'Open a song from your choir\'s library first.',true); return; }
   if(S.playing) stop(); const sp=repSpot(), name=curSongName();
   const r=await dlg({title:'Something sounds off here',html:'<p class="kv-sub">'+esc(name)+', '+fmtT1(sp.a)+'–'+fmtT1(sp.b)+(loopActive()?' (your loop)':' (around the playhead)')+'. You don\'t need to know what is wrong: an approver or the moderator listens and fixes it.</p><p class="kv-sub">What seems off? (optional)</p><div class="row rep-kinds">'+
-      Object.entries(REP_KIND).map(([k,l])=>'<button type="button" class="rep-kind'+(k===''?' on':'')+'" data-k="'+k+'">'+l+'</button>').join('')+'</div>',
+      Object.entries(REP_KIND).map(([k,l])=>'<button type="button" class="rep-kind'+(k===''?' on':'')+'" data-k="'+k+'">'+l+'</button>').join('')+'</div><label class="kv-sub rep-note-lab" for="repNote">Your comment (optional)</label><textarea id="repNote" class="rep-note" rows="2" maxlength="300" placeholder="e.g. the high note at the end sounds too low"></textarea>',
     buttons:[{label:'Send',value:'send',primary:true},{label:'Cancel',value:null}],
     onOpen:b=>{ b.querySelectorAll('.rep-kind').forEach(x=>x.addEventListener('click',()=>{ b.querySelectorAll('.rep-kind').forEach(y=>y.classList.toggle('on',y===x)); })); }});
-  if(r.value!=='send') return; const kb=r.body.querySelector('.rep-kind.on'), kind=kb?kb.dataset.k:'';
+  if(r.value!=='send') return; const kb=r.body.querySelector('.rep-kind.on'), kind=kb?kb.dataset.k:'', note=(r.body.querySelector('#repNote').value||'').trim().slice(0,300);
   const rec=await libGet(S.cur.libId), id=newSugId(); busyShow('Sending…');
-  try{ await sugPost(sugUrl(),{action:'report',id,part:partOf(rec),songUid:rec.uid,songName:rec.name,a:sp.a,b:sp.b,kind,dev:devTag()});
+  try{ await sugPost(sugUrl(),{action:'report',id,part:partOf(rec),songUid:rec.uid,songName:rec.name,a:sp.a,b:sp.b,kind,note,dev:devTag()});
     const l=repSent(); l.unshift({id,uid:rec.uid,at:Date.now()}); try{ localStorage.setItem('pc-reports',JSON.stringify(l.slice(0,100))); }catch(e){}
     await busyHide('Sent. Thank you!'); setStatus('Thank you! Someone will listen to '+fmtT1(sp.a)+'–'+fmtT1(sp.b)+' in '+rec.name+'.'); }
   catch(e){ await busyHide(null); setStatus('Could not send: '+e.message+'.',true); } }
@@ -2588,7 +2588,7 @@ async function openReport(rp,fix){ const lib=await libMeta(), x=lib.find(s=>s.ui
   if(fix) S.fixReport={id:rp.id,uid:rp.songUid}; return true; }
 async function repHandle(rp,status){ try{ await sugPost(sugUrl(),{action:'rhandle',key:sugKey()||appKey(),id:rp.id,status,dev:devTag()}); S.reports=(S.reports||[]).filter(x=>x.id!==rp.id); S.apReports=(S.apReports||[]).filter(x=>x.id!==rp.id); paintSugBtn(); return true; }
   catch(e){ if(/already handled|not found/.test(e.message||'')){ S.apReports=(S.apReports||[]).filter(x=>x.id!==rp.id); paintSugBtn(); setStatus('Someone else already took care of this report.'); return true; } setStatus('Could not update the report: '+e.message+'.',true); return false; } }
-function repLine(rp){ return '<b>⚑ '+esc(rp.songName)+'</b> <span class="small">'+esc(rp.part)+'</span><br><span class="small">'+fmtT1(rp.a)+'–'+fmtT1(rp.b)+' · '+REP_KIND[rp.kind||'']+' · '+new Date(rp.received).toLocaleDateString()+(rp.status==='forwarded'?' · passed on by an approver':'')+'</span>'; }
+function repLine(rp){ return '<b>⚑ '+esc(rp.songName)+'</b> <span class="small">'+esc(rp.part)+'</span><br><span class="small">'+fmtT1(rp.a)+'–'+fmtT1(rp.b)+' · '+REP_KIND[rp.kind||'']+' · '+new Date(rp.received).toLocaleDateString()+(rp.status==='forwarded'?' · passed on by an approver':'')+'</span>'+(rp.note?'<br><span class="small rep-note-show">“'+esc(rp.note)+'”</span>':''); }
 // ----- approvers: trusted members decide on other members' suggestions for their part; the moderator applies them with one tap -----
 S.apInbox=[];
 async function apFetch(manual){ const url=sugUrl(), key=appKey(), t=$('#apText');
