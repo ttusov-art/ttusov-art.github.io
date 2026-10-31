@@ -78,6 +78,13 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px
 .kv-tb{font:600 11px system-ui,sans-serif;fill:#fff;text-anchor:middle}
 .kv-tb.home{fill:#fff;font-weight:800}
 .kv-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.prac-bar{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-top:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))} .prac-bar .row{gap:6px;flex-wrap:wrap}
+.pr-dlg .pr-top{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px} .pr-dlg select,.pr-dlg input[type=text]{flex:1 1 140px;min-width:0}
+.pr-rep{display:inline-flex;align-items:center;gap:4px;white-space:nowrap} .pr-rep button{padding:2px 9px;min-width:30px} .pr-rep b{min-width:2.4em;text-align:center;font-family:var(--font-mono);font-size:13px}
+.pr-list{max-height:42vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 8px;margin:6px 0}
+.pr-song{font-weight:600;font-size:13px;color:var(--muted);margin:8px 0 2px} .pr-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.pr-item label{flex:1;min-width:0;display:flex;gap:8px;align-items:center;cursor:pointer} .pr-item label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .pr-item .pr-len{color:var(--muted);font-size:12px;font-family:var(--font-mono)}
+.pr-item .pr-rep b.def{color:var(--muted);font-weight:400} .pr-total{font-weight:600}
 .sug-bar{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-top:3px solid #8b5cf6;background:color-mix(in srgb,#8b5cf6 9%,var(--surface))}
 .sug-bar .row{display:flex;flex-wrap:wrap;gap:6px}
 #sgInfo{color:var(--fg)}
@@ -620,6 +627,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><div class="pick-wrap lane-bm"><button id="secBtn" type="button" class="sec-btn" aria-haspopup="menu" aria-expanded="false" title="Bookmarks: save a passage or open a saved one (sections of the song inside too)"><svg class="bm-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg><span class="bm-txt">Bookmarks</span><span class="bm-n" id="bmCount" hidden></span></button><div class="pick-menu" id="secMenu" role="menu" hidden></div></div><div class="lane-loading" id="laneLoading" hidden role="status" aria-live="polite"></div><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
     <canvas id="ovw" aria-label="Whole song overview: tap or drag to jump"></canvas>
     <div class="rep-offer" id="repOffer" hidden role="status"></div>
+    <div class="prac-bar" id="pracBar" hidden role="status"><span class="small" id="pracInfo"></span><div class="row"><button id="pracPrev" type="button" aria-label="Previous bookmark">⏮</button><button id="pracNext" type="button">Next ⏭</button><button id="pracStop" type="button">Stop practice</button></div></div>
     <div class="sug-bar" id="sugBar" hidden>
       <span class="small" id="sgInfo"></span>
       <div class="row">
@@ -1147,7 +1155,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-31 c';
+const APP_VERSION='2026-10-31 d';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1437,6 +1445,7 @@ function loopActive(){ const L=S.loop; return L.on&&L.a!=null&&L.b!=null&&L.b-L.
 function loopStart(){ return Math.max(0,S.loop.a-S.loop.lead); }
 function inLoop(t){ return S.loop.a!=null&&S.loop.b!=null&&t>=S.loop.a&&t<=S.loop.b; }
 function loopRestart(){
+  if(S.prac&&pracLoopDone()) return;   // practice: after the set repeats, on to the next bookmark
   endTake();
   const L=S.loop;
   if(S.pass.n>=20){ S.passes.push(Math.round(100*S.pass.hit/S.pass.n)); S.tPasses.push(S.timPass.n?Math.round(100*S.timPass.good/S.timPass.n):null); }
@@ -2043,7 +2052,7 @@ async function copySongTo(id,part){
 // "Loading…" while a song opens: on the pitch lane and on the Choose song button
 function songLoading(on,name){ const ov=$('#laneLoading'), gp=$('#guidePick'); ov.hidden=!on; if(on) ov.textContent='Loading'+(name?' '+name:'')+'…';
   const tn=[...gp.childNodes].find(n=>n.nodeType===3); if(tn) tn.textContent=on?'Loading… ':'Choose song'; gp.disabled=on; }
-async function openLibSong(id,auto){ chooseSongHintOff();
+async function openLibSong(id,auto){ chooseSongHintOff(); if(S.prac&&!S.prac.busy) pracStop(true);   // you chose another song: the practice playthrough ends
   const mi=libMetaCache&&libMetaCache.find(x=>x.id===id); songLoading(true,mi&&mi.name);
   try{ return await openLibSongInner(id,auto); } finally{ songLoading(false); }
 }
@@ -4127,7 +4136,7 @@ function step(){
   if(!S.playing) return;
   const now=songTime();
   if(loopActive()&&now>=S.loop.b){ loopRestart(); return; }
-  if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); endTipMaybe(); if((S.pmode==='part'||S.pmode==='partloop'||S.pmode==='shuffle')&&!(S.editMode||S.tap||S.sug)) playNextSong(); return; }   // while editing: stay on this song
+  if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); endTipMaybe(); if((S.pmode==='part'||S.pmode==='partloop'||S.pmode==='shuffle')&&!(S.editMode||S.tap||S.sug||S.prac)) playNextSong(); return; }   // while editing: stay on this song
   let you=NaN; updateTone(now); metSchedule(now); if(S.targetHold){ const v=targetAt(now); keyFollow(isNaN(v)?null:Math.round(v)); }
   if(S.mic){
     const raw=micPitch();
@@ -5431,6 +5440,7 @@ function bmName(a){ const i=lyricIndexAt(a+0.3); let L=i>=0?S.lyrics[i]:null; if
 async function bmAdd(){ if(!S.cur||S.cur.libId==null){ setStatus('Open a song from your library first, then bookmark a passage.',true); return; }
   const rec=await libGet(S.cur.libId), L=S.loop, loop=loopActive(), a=loop?L.a:Math.max(0,Math.round(curT()*10)/10);
   const bm={id:newSugId(),uid:rec&&rec.uid||'',libId:S.cur.libId,song:curSongName(),name:bmName(a),a,b:loop?L.b:null,rate:S.rate||1,win:S.win,created:Date.now()};
+  if(!loop) bm.pe=phraseEnd(a,S.lyrics,S.dur);
   const l=bmGet(); l.push(bm); bmSave(l); setStatus('★ Bookmarked “'+bm.name+'” ('+bmMeta(bm)+'). Open it from Bookmarks, or from Choose song.'); }
 async function bmOpen(bm){ if(S.playing) stop();
   if(!bmMine(bm)){ const lib=await libMeta(), x=lib.find(s=>bm.uid?s.uid===bm.uid:s.id===bm.libId); if(!x){ setStatus('The song of this bookmark is not on this phone any more.',true); return; } if(!(await openLibSong(x.id))) return; }
@@ -5459,6 +5469,7 @@ function openSecMenu(){
   if(S.cur&&S.cur.libId!=null){ const add=document.createElement('button'); add.type='button'; add.setAttribute('role','menuitem'); add.className='pm-bm-add';
     add.innerHTML='<span class="pm-name">'+(loopActive()?'☆ Bookmark this loop':'☆ Bookmark from here')+'</span><span class="pm-meta">'+(loopActive()?fmtT(S.loop.a)+'–'+fmtT(S.loop.b):fmtT(curT()))+'</span>';
     add.addEventListener('click',()=>{ closeSecMenu(); bmAdd(); }); m.appendChild(add);
+    if(bmGet().length){ const pb=document.createElement('button'); pb.type='button'; pb.setAttribute('role','menuitem'); pb.className='pm-bm-add'; pb.innerHTML='<span class="pm-name">▶ Practise bookmarks…</span><span class="pm-meta">all songs</span>'; pb.addEventListener('click',()=>{ closeSecMenu(); pracDialog(); }); m.appendChild(pb); }
     const mine=bmGet().filter(bmMine).sort((x,y)=>x.a-y.a); mine.forEach(bm=>bmRow(m,bm,bm.name,closeSecMenu,openSecMenu));
     if(!mine.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent='No bookmarks in this song yet. Loop a passage (and pick a tempo and zoom), then tap Bookmark this loop.'; m.appendChild(e); }
     if(list.length){ const h=document.createElement('div'); h.className='pm-sep'; m.appendChild(h); }
@@ -5476,6 +5487,83 @@ function finishSecMenu(m){
   m.style.left='0px'; m.hidden=false; $('#secBtn').setAttribute('aria-expanded','true'); const vw=document.documentElement.clientWidth, rr=m.getBoundingClientRect(); if(rr.right>vw-8) m.style.left=Math.round(Math.max(8-rr.left,vw-8-rr.right))+'px';
   const c=m.querySelector('.cur'); if(c) m.scrollTop=Math.max(0,c.offsetTop-m.clientHeight/2+c.offsetHeight/2);   // scroll the menu only, never the page
 }
+// ===== practise bookmarks: a playthrough of chosen bookmarks (any songs), each looped a set number of times; saved as named lists =====
+// a bookmark without a loop plays its phrase: from the bookmark to where the next lyric line starts
+function phraseEnd(a,lyrics,dur){ const T=(lyrics||[]).filter(l=>l.t!=null).map(l=>l.t).sort((x,y)=>x-y); let k=-1; T.forEach((t,i)=>{ if(t<=a+0.3) k=i; });
+  if(k<0||a-T[k]>4){ const j=T.findIndex(t=>t>a+0.3); if(j>=0&&T[j]-a<6) k=j; }
+  let e=k>=0&&k+1<T.length?T[k+1]:a+15; if(e-a<3) e=k+2<T.length?T[k+2]:a+15; e=Math.min(e,a+40,dur||1e9); return Math.round(Math.max(a+3,e)*10)/10; }
+const prEnd=bm=>bm.b!=null?bm.b:(bm.pe!=null?bm.pe:bm.a+15);
+function prLists(){ try{ const l=JSON.parse(localStorage.getItem('pc-prac-lists')||'[]'); return Array.isArray(l)?l:[]; }catch(e){ return []; } }
+function prSave(l){ try{ localStorage.setItem('pc-prac-lists',JSON.stringify(l)); }catch(e){} }
+function prCurId(){ try{ return localStorage.getItem('pc-prac-cur')||''; }catch(e){ return ''; } }
+function prSetCur(id){ try{ localStorage.setItem('pc-prac-cur',id); }catch(e){} }
+const fmtDur=s=>s<60?Math.max(1,Math.round(s))+' s':s<3600?Math.round(s/60)+' min':Math.floor(s/3600)+' h '+Math.round(s%3600/60)+' min';
+// time of one item: each repeat plays the lead-in plus the passage, at the bookmark's tempo
+const prItemSec=(bm,rep)=>rep*((prEnd(bm)-bm.a)+(S.loop.lead||0))/(bm.rate||1);
+function prTotal(items){ let t=0, last=null; items.forEach(x=>{ t+=prItemSec(x.bm,x.rep); const song=x.bm.uid||x.bm.libId; if(last!=null&&song!==last) t+=3; last=song; }); return t; }   // ~3 s to load another song
+async function pracDialog(){ if(S.prac) pracStop(true);
+  const lib=await libMeta(), byU={}, byI={}; lib.forEach(x=>{ if(x.uid) byU[x.uid]=x; byI[x.id]=x; });
+  let all=bmGet().map(bm=>({bm,s:bm.uid?byU[bm.uid]:byI[bm.libId]})).filter(x=>x.s);
+  if(!all.length){ setStatus('No bookmarks yet. Loop a passage and tap ☆ Bookmark this loop first.',true); return; }
+  // point bookmarks made before this version: find where their phrase ends (reads the lyrics of those songs once)
+  const need=all.filter(x=>x.bm.b==null&&x.bm.pe==null);
+  if(need.length){ const bl=bmGet(); for(const id of [...new Set(need.map(x=>x.s.id))]){ const r=await libGet(id).catch(()=>null); if(!r) continue;
+      need.filter(x=>x.s.id===id).forEach(x=>{ const pe=phraseEnd(x.bm.a,r.lyrics,r.dur); x.bm.pe=pe; const o=bl.find(b=>b.id===x.bm.id); if(o) o.pe=pe; }); } bmSave(bl); }
+  all.sort((p,q)=>(p.s.name+'').localeCompare(q.s.name+'')||p.bm.a-q.bm.a);
+  let lists=prLists(), L=lists.find(x=>x.id===prCurId())||lists[0];
+  if(!L){ L={id:newSugId(),name:'My practice',def:3,items:[]}; lists.push(L); prSave(lists); }
+  prSetCur(L.id);
+  const r=await dlg({title:'Practise bookmarks',html:'<div class="pr-dlg"><div class="pr-top"><select id="prSel" class="sel" aria-label="Practice list"></select><button type="button" id="prNew">+ New list</button></div>'
+    +'<div class="pr-top"><input id="prName" type="text" maxlength="40" class="bm-in" aria-label="Name of this list"><button type="button" id="prDel" class="link-btn">Delete list</button></div>'
+    +'<div class="pr-top"><span>Repeat each</span><span class="pr-rep"><button type="button" id="prDefDn" aria-label="Fewer repeats">−</button><b id="prDef"></b><button type="button" id="prDefUp" aria-label="More repeats">+</button></span><span class="small">(− / + on a bookmark for more or fewer)</span></div>'
+    +'<div class="pr-list" id="prList"></div><div class="small"><span class="pr-total" id="prTotal"></span></div></div>',
+    buttons:[{label:'▶ Start',value:'go',primary:true},{label:'Close',value:null}],
+    onOpen:body=>{ const $b=q=>body.querySelector(q);
+      const paintSel=()=>{ $b('#prSel').innerHTML=lists.map(x=>'<option value="'+x.id+'"'+(x.id===L.id?' selected':'')+'>'+esc(x.name)+'</option>').join(''); $b('#prName').value=L.name; $b('#prDel').hidden=lists.length<2; };
+      const save=()=>{ prSave(lists); prSetCur(L.id); };
+      const items=()=>L.items.map(it=>{ const x=all.find(a=>a.bm.id===it.id); return x?{bm:x.bm,rep:it.rep||L.def}:null; }).filter(Boolean);
+      const paint=()=>{ $b('#prDef').textContent=L.def+'×'; const box=$b('#prList'); box.innerHTML=''; let song=null;
+        all.forEach(x=>{ if(x.s.name!==song){ song=x.s.name; const h=document.createElement('div'); h.className='pr-song'; h.textContent=song; box.appendChild(h); }
+          const it=L.items.find(i=>i.id===x.bm.id), row=document.createElement('div'); row.className='pr-item';
+          row.innerHTML='<label><input type="checkbox"'+(it?' checked':'')+'><span></span><span class="pr-len"></span></label><span class="pr-rep"'+(it?'':' hidden')+'><button type="button" aria-label="Fewer repeats">−</button><b></b><button type="button" aria-label="More repeats">+</button></span>';
+          row.querySelector('label span').textContent='★ '+x.bm.name; row.querySelector('.pr-len').textContent=fmtDur((prEnd(x.bm)-x.bm.a)/(x.bm.rate||1))+(x.bm.b==null?' phrase':'')+(x.bm.rate&&x.bm.rate!==1?' · '+Math.round(x.bm.rate*100)+'%':'');
+          const rb=row.querySelector('.pr-rep b'); if(it){ rb.textContent=(it.rep||L.def)+'×'; rb.classList.toggle('def',!it.rep); }
+          row.querySelector('input').addEventListener('change',e=>{ if(e.target.checked) L.items.push({id:x.bm.id,rep:null}); else L.items=L.items.filter(i=>i.id!==x.bm.id); save(); paint(); });
+          const [dn,up]=row.querySelectorAll('.pr-rep button'); const step=d=>{ const i=L.items.find(i=>i.id===x.bm.id); if(!i) return; i.rep=Math.max(1,Math.min(30,(i.rep||L.def)+d)); if(i.rep===L.def) i.rep=null; save(); paint(); };
+          dn.addEventListener('click',()=>step(-1)); up.addEventListener('click',()=>step(1));
+          box.appendChild(row); });
+        const its=items(); $b('#prTotal').textContent=its.length?its.length+' bookmark'+(its.length>1?'s':'')+', '+its.reduce((a,x)=>a+x.rep,0)+' loops · about '+fmtDur(prTotal(its))+(S.loop.lead?' (with '+S.loop.lead+' s lead-in)':''):'Tick the bookmarks you want to practise.';
+        const go=body.parentElement.querySelector('#dlgBtns button.primary'); if(go) go.disabled=!its.length; };
+      $b('#prSel').addEventListener('change',e=>{ L=lists.find(x=>x.id===e.target.value)||L; save(); paintSel(); paint(); });
+      $b('#prNew').addEventListener('click',()=>{ L={id:newSugId(),name:'List '+(lists.length+1),def:L.def,items:[]}; lists.push(L); save(); paintSel(); paint(); $b('#prName').focus(); $b('#prName').select(); });
+      $b('#prName').addEventListener('input',e=>{ L.name=e.target.value.trim()||'Practice list'; save(); const o=$b('#prSel').querySelector('option[value="'+L.id+'"]'); if(o) o.textContent=L.name; });
+      $b('#prDel').addEventListener('click',()=>{ if(lists.length<2) return; lists=lists.filter(x=>x!==L); L=lists[0]; save(); paintSel(); paint(); });
+      $b('#prDefDn').addEventListener('click',()=>{ L.def=Math.max(1,L.def-1); save(); paint(); });
+      $b('#prDefUp').addEventListener('click',()=>{ L.def=Math.min(30,L.def+1); save(); paint(); });
+      paintSel(); paint(); }});
+  if(r.value!=='go') return;
+  const its=L.items.map(it=>{ const x=all.find(a=>a.bm.id===it.id); return x?{bm:x.bm,s:x.s,rep:it.rep||L.def}:null; }).filter(Boolean);
+  if(its.length) pracStart(its,L.name); }
+async function pracStart(items,name){ if(S.editMode||S.tap) closeEditor(true); S.prac={items,name,i:-1,k:0,t0:Date.now(),busy:false}; $('#pracBar').hidden=false; await pracGo(0); }
+async function pracGo(i){ const P=S.prac; if(!P) return; if(i>=P.items.length){ pracStop(false); return; } i=Math.max(0,i);
+  P.i=i; P.k=0; P.busy=true; if(S.playing) stop(); const it=P.items[i], bm=it.bm;
+  if(!bmMine(bm)){ pracInfo('Opening '+it.s.name+'…'); if(!(await openLibSong(it.s.id))){ P.busy=false; pracGo(i+1); return; } if(S.prac!==P) return; }
+  if(bm.win) setWin(bm.win,false);
+  if((bm.rate||1)!==S.rate){ const r=bm.rate||1; $('#tempo').value=String(r); S.rate=r; S.ghost=[]; if(r===1) S.stretch=null; else if(!(await prepareTempo())){ S.rate=1; $('#tempo').value='1'; } if(typeof paintTempo==='function') paintTempo(); }
+  S.loop.a=bm.a; S.loop.b=Math.min(S.dur,prEnd(bm)); S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI();
+  S.pos=loopStart(); updateTime(); draw(); P.busy=false; pracInfo(); if(S.prac===P) play(); }
+// called when a loop comes round again: true = the repeats are done and the next bookmark starts
+function pracLoopDone(){ const P=S.prac; if(!P||P.busy) return false; P.k++; if(P.k<P.items[P.i].rep){ pracInfo(); return false; }
+  stop(); setTimeout(()=>pracGo(P.i+1),300); return true; }
+function pracInfo(msg){ const P=S.prac; if(!P) return; const it=P.items[P.i]; if(!it){ return; }
+  const left=prItemSec(it.bm,Math.max(0,it.rep-P.k))+prTotal(P.items.slice(P.i+1));
+  $('#pracInfo').innerHTML=msg?esc(msg):'<b>Practising '+(P.i+1)+' of '+P.items.length+'</b>: '+esc(it.s.name)+' · ★ '+esc(it.bm.name)+' · repeat '+Math.min(P.k+1,it.rep)+' of '+it.rep+' · about '+fmtDur(left)+' left';
+  $('#pracPrev').disabled=P.i===0; $('#pracNext').textContent=P.i===P.items.length-1?'Finish ⏭':'Next ⏭'; }
+function pracStop(quiet){ const P=S.prac; if(!P) return; S.prac=null; if(S.playing) stop(); $('#pracBar').hidden=true;
+  if(!quiet) setStatus(P.i>=P.items.length-1&&P.k>=P.items[P.items.length-1].rep-1?'Practice done: '+P.items.length+' bookmark'+(P.items.length>1?'s':'')+' in '+fmtDur((Date.now()-P.t0)/1000)+'. Well sung!':'Practice stopped.'); }
+$('#pracNext').addEventListener('click',()=>{ const P=S.prac; if(!P) return; if(P.i>=P.items.length-1){ P.k=P.items[P.i].rep; pracStop(false); } else pracGo(P.i+1); });
+$('#pracPrev').addEventListener('click',()=>{ const P=S.prac; if(P&&P.i>0) pracGo(P.i-1); });
+$('#pracStop').addEventListener('click',()=>pracStop(false));
 // the bookmark button: filled when the open song has bookmarks, with their number
 function paintBmBtn(){ const n=bmGet().filter(bmMine).length, b=$('#secBtn'), c=$('#bmCount'); if(!b) return; b.classList.toggle('has-bm',n>0); c.hidden=!n; c.textContent=n; }
 function closeSecMenu(){ S.secOpen=false; $('#secMenu').hidden=true; $('#secBtn').setAttribute('aria-expanded','false'); }
