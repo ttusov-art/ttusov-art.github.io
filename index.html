@@ -972,6 +972,12 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       </div>
       </div>
       <div class="set-group set-danger"><h3 class="set-h">This device</h3>
+      <div class="field">
+        <label>Move to another phone or browser</label>
+        <span class="small">Saves your bookmarks, settings, analysis history and song links in a small file (no songs). In the new place: open your part link to get the songs, then tap Load my things.</span>
+        <div class="row"><button id="meSave" type="button">Save my things to a file</button><span class="btn">Load my things<input id="meLoad" type="file" accept=".json,application/json" aria-label="Choose a Part Coach file with your things"></span></div>
+        <span class="small" id="meText"></span>
+      </div>
       <div class="field wipe-field">
         <label>Remove Part Coach from this device</label>
         <span class="small">Deletes all songs, backings, recordings, lyrics edits, settings, keys and the downloaded piano from this phone or computer. Nothing on Dropbox or in the choir's inbox is touched; open your share link again to get the songs back.</span>
@@ -1141,7 +1147,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-31 a';
+const APP_VERSION='2026-10-31 b';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -5032,6 +5038,30 @@ $('#edSplit').addEventListener('click',splitAtPlayhead);
 async function restoreAsk(what){ const r=await dlg({title:'Restore '+what+'?',html:'<p class="kv-sub">Every song in the share file replaces the same song on this device, exactly as it was shared: pitch line, lyrics, timing, beat grid and backings. Changes you made here since then are lost. Songs that are not in the file stay as they are.</p>',
   buttons:[{label:'Restore and replace',value:'go',primary:true},{label:'Cancel',value:null}]}); return r.value==='go'; }
 function restoreDone(part){ if(part&&typeof part==='string') unpubClear(part); }
+// ----- members: move bookmarks, settings and links to another phone or browser (a small file; the songs come from the part link) -----
+const ME_SKIP=/^pc-(libmeta2|lastpos|last|hello|mic|delay|pdelay|iosnote|installtip)$/;   // device-specific, or pointing at this phone's song numbers
+async function meSave(){ const t=$('#meText');
+  if(sugUrl()){ const l=(await libList()).filter(c=>c.base&&hasUnsent(c,S.cur&&S.cur.libId===c.id?liveOf():null));
+    if(l.length){ const r=await dlg({title:'Edits not sent yet',html:'<p class="kv-sub">You edited '+esc(l.map(x=>x.name).join(', '))+' but have not sent it as a suggestion. Edits are not in the file and the songs download fresh in the new place, so send them first.</p>',
+        buttons:[{label:'Send them, then save',value:'send',primary:true},{label:'Save without them',value:'skip'},{label:'Cancel',value:null}]});
+      if(!r.value) return;
+      if(r.value==='send'){ let ok=0; for(const c of l){ try{ await postSuggestion(c,S.cur&&S.cur.libId===c.id?liveOf():null); ok++; }catch(e){} } setStatus(ok+' of '+l.length+' sent as suggestions.'); } } }
+  const ls={}; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.startsWith('pc-')&&!ME_SKIP.test(k)) ls[k]=localStorage.getItem(k); }
+  const blob=new Blob([JSON.stringify({app:'part-coach-personal',version:1,created:Date.now(),ls},null,1)],{type:'application/json'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='Part Coach - my things.json'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000);
+  t.textContent='Saved “Part Coach - my things.json” to your downloads.'+(ls['pc-sugkey']||ls['pc-appkey']?' It contains your '+(ls['pc-sugkey']?'review':'approver')+' key, so keep it private.':'')+' In the new place: open your part link first, then Load my things.'; }
+async function meLoad(f){ const t=$('#meText'); let j;
+  try{ j=JSON.parse(await f.text()); }catch(e){ t.textContent='That is not a Part Coach file.'; return; }
+  if(!j||j.app!=='part-coach-personal'||!j.ls){ t.textContent='That is not a “my things” file from Part Coach.'; return; }
+  const n=Array.isArray(JSON.parse(j.ls['pc-bookmarks']||'[]'))?JSON.parse(j.ls['pc-bookmarks']||'[]').length:0;
+  const r=await dlg({title:'Load your things?',html:'<p class="kv-sub">From '+new Date(j.created).toLocaleDateString()+': '+n+' bookmark'+(n===1?'':'s')+', your settings, analysis history and song links. Settings on this phone are replaced; bookmarks are added. The app reloads afterwards.</p>',
+    buttons:[{label:'Load',value:'go',primary:true},{label:'Cancel',value:null}]}); if(r.value!=='go') return;
+  for(const k in j.ls){ if(!k.startsWith('pc-')||ME_SKIP.test(k)) continue;
+    if(k==='pc-bookmarks'){ const have=bmGet(), ids=new Set(have.map(b=>b.id)); let add=[]; try{ add=JSON.parse(j.ls[k])||[]; }catch(e){} add.forEach(b=>{ if(b&&b.id&&!ids.has(b.id)) have.push(b); }); try{ localStorage.setItem(k,JSON.stringify(have)); }catch(e){} continue; }
+    try{ localStorage.setItem(k,j.ls[k]); }catch(e){} }
+  t.textContent='Loaded. Reloading…'; setTimeout(()=>location.reload(),700); }
+$('#meSave').addEventListener('click',meSave);
+$('#meLoad').addEventListener('change',async e=>{ const f=e.target.files&&e.target.files[0]; if(f) await meLoad(f); e.target.value=''; });
 $('#fullBackup').addEventListener('click',()=>backupLibrary(null,$('#fullBackup'),$('#restText')));
 $('#restFile').addEventListener('change',async e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; if(!(await restoreAsk('from this file'))){ e.target.value=''; return; }
   busyShow('Restoring the library…'); try{ restoreDone(await restoreLibrary(f,$('#restText'),false,true)); } finally{ e.target.value=''; await busyHide(null); } });
