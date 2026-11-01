@@ -56,7 +56,9 @@ header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-betw
 .mute-btn[aria-pressed="true"] .mute-lbl{display:inline;font-weight:600;font-size:14px}
 h1{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,4vw,36px);line-height:1.05;margin:0}
 #linkBox,#linkText{scroll-margin-top:16px;scroll-margin-bottom:110px}
-.key-view{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+html:has(.key-view:not([hidden])),body:has(.key-view:not([hidden])){overflow:hidden;overscroll-behavior:none}   /* a pop-up is open: swipes don't scroll the page behind it */
+.key-view *{overscroll-behavior:contain} .pick-menu{overscroll-behavior:contain}
+.key-view{overscroll-behavior:contain;position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px}
 .key-view[hidden]{display:none}
 .kv-card{background:var(--surface);color:inherit;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.3);width:min(680px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:16px 18px}
 .kv-head{display:flex;align-items:center;gap:10px}
@@ -1155,7 +1157,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-10-31 d';
+const APP_VERSION='2026-11-01 a';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -5109,16 +5111,20 @@ $('#micLbl').addEventListener('click',async e=>{ if(e.target===$('#micOn')||!$('
 $('#micOn').addEventListener('change',async e=>{ try{ localStorage.setItem('pc-mic-on',e.target.checked?'1':'0'); }catch(x){} paintMic(); if(e.target.checked){ const ok=await startMic(); if(!ok){ e.target.checked=false; paintMic(); } } else stopMic(); });
 paintMic();
 try{ if($('#micOn').checked) setStatus('Microphone is on: it starts listening when you press Play. To check your pitch while paused, tap the microphone button.'); }catch(e){}
-async function openGuideMenu(){
+async function openGuideMenu(keepBm){ if(keepBm!==true) S.bmMenuOpen=false;   // bookmarks start folded each time the menu opens
   const m=$('#guideMenu'); m.innerHTML='';
   let songs=[]; try{ songs=sortSongs((await libMeta()).filter(x=>partOf(x)===S.part)).map(x=>({id:x.id,name:x.name,dur:x.dur,created:x.created})); }catch(e){}
   if(S.parts.length>1){ const bar=document.createElement('div'); bar.className='pm-parts'; bar.setAttribute('role','group'); bar.setAttribute('aria-label','Part');
     S.parts.forEach(n=>{ const c=document.createElement('button'); c.type='button'; c.textContent=n; if(n===S.part){ c.className='on'; c.setAttribute('aria-pressed','true'); } c.addEventListener('click',e=>{ e.stopPropagation(); setPart(n); openGuideMenu(); }); bar.appendChild(c); }); m.appendChild(bar); }
   const item=(html,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','menuitem'); if(cls) b.className=cls; b.innerHTML=html; b.addEventListener('click',()=>{ closeGuideMenu(); fn(); }); m.appendChild(b); return b; };
   { const lib=await libMeta(), byU={}, byI={}; lib.forEach(x=>{ if(x.uid) byU[x.uid]=x; byI[x.id]=x; });
-    const bms=bmGet().map(bm=>({bm,s:bm.uid?byU[bm.uid]:byI[bm.libId]})).filter(x=>x.s).sort((p,q)=>(p.s.name+'').localeCompare(q.s.name+'')||p.bm.a-q.bm.a);
-    if(bms.length){ const h=document.createElement('div'); h.className='pm-head'; h.textContent='★ Bookmarks'; m.appendChild(h);
-      bms.forEach(({bm,s})=>bmRow(m,bm,s.name+' · '+bm.name,closeGuideMenu,openGuideMenu)); const sp=document.createElement('div'); sp.className='pm-sep'; m.appendChild(sp); } }
+    const bms=bmGet().map(bm=>({bm,s:bm.uid?byU[bm.uid]:byI[bm.libId]})).filter(x=>x.s&&partOf(x.s)===S.part).sort((p,q)=>(p.s.name+'').localeCompare(q.s.name+'')||p.bm.a-q.bm.a);   // only the bookmarks of the part you are in
+    if(bms.length){ const fold=bms.length>3, open=!fold||S.bmMenuOpen;
+      if(fold){ const t=document.createElement('button'); t.type='button'; t.setAttribute('role','menuitem'); t.className='pm-secs'; t.innerHTML='<span class="pm-name">'+(open?'▾ ★ Bookmarks':'▸ ★ Bookmarks')+'</span><span class="pm-meta">'+bms.length+'</span>';
+        t.addEventListener('click',e=>{ e.stopPropagation(); S.bmMenuOpen=!open; openGuideMenu(true); }); m.appendChild(t); }
+      else { const h=document.createElement('div'); h.className='pm-head'; h.textContent='★ Bookmarks'; m.appendChild(h); }
+      if(open) bms.forEach(({bm,s})=>bmRow(m,bm,s.name+' · '+bm.name,closeGuideMenu,()=>openGuideMenu(true)));
+      const sp=document.createElement('div'); sp.className='pm-sep'; m.appendChild(sp); } }
   if(!songs.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent=S.parts.length>1?'No songs in '+S.part+' yet.':'Your library is empty. Add songs from a shared link from your moderator.'; m.appendChild(e); }
   for(const x of songs){ const b=item('<span class="pm-name"></span><span class="pm-meta">'+fmtT(x.dur)+'</span>',S.cur&&S.cur.libId===x.id?'cur':'',()=>openLibSong(x.id)); b.querySelector('.pm-name').textContent=x.name; }
   item('<span class="pm-name">+ Add songs from a shared link…</span>','pm-add',()=>showLinkBox(''));
@@ -5469,7 +5475,7 @@ function openSecMenu(){
   if(S.cur&&S.cur.libId!=null){ const add=document.createElement('button'); add.type='button'; add.setAttribute('role','menuitem'); add.className='pm-bm-add';
     add.innerHTML='<span class="pm-name">'+(loopActive()?'☆ Bookmark this loop':'☆ Bookmark from here')+'</span><span class="pm-meta">'+(loopActive()?fmtT(S.loop.a)+'–'+fmtT(S.loop.b):fmtT(curT()))+'</span>';
     add.addEventListener('click',()=>{ closeSecMenu(); bmAdd(); }); m.appendChild(add);
-    if(bmGet().length){ const pb=document.createElement('button'); pb.type='button'; pb.setAttribute('role','menuitem'); pb.className='pm-bm-add'; pb.innerHTML='<span class="pm-name">▶ Practise bookmarks…</span><span class="pm-meta">all songs</span>'; pb.addEventListener('click',()=>{ closeSecMenu(); pracDialog(); }); m.appendChild(pb); }
+    if(bmGet().some(b=>{ const x=(libMetaCache||[]).find(s=>b.uid?s.uid===b.uid:s.id===b.libId); return x&&partOf(x)===S.part; })){ const pb=document.createElement('button'); pb.type='button'; pb.setAttribute('role','menuitem'); pb.className='pm-bm-add'; pb.innerHTML='<span class="pm-name">▶ Practise bookmarks…</span><span class="pm-meta">'+esc(S.part)+'</span>'; pb.addEventListener('click',()=>{ closeSecMenu(); pracDialog(); }); m.appendChild(pb); }
     const mine=bmGet().filter(bmMine).sort((x,y)=>x.a-y.a); mine.forEach(bm=>bmRow(m,bm,bm.name,closeSecMenu,openSecMenu));
     if(!mine.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent='No bookmarks in this song yet. Loop a passage (and pick a tempo and zoom), then tap Bookmark this loop.'; m.appendChild(e); }
     if(list.length){ const h=document.createElement('div'); h.className='pm-sep'; m.appendChild(h); }
@@ -5503,8 +5509,8 @@ const prItemSec=(bm,rep)=>rep*((prEnd(bm)-bm.a)+(S.loop.lead||0))/(bm.rate||1);
 function prTotal(items){ let t=0, last=null; items.forEach(x=>{ t+=prItemSec(x.bm,x.rep); const song=x.bm.uid||x.bm.libId; if(last!=null&&song!==last) t+=3; last=song; }); return t; }   // ~3 s to load another song
 async function pracDialog(){ if(S.prac) pracStop(true);
   const lib=await libMeta(), byU={}, byI={}; lib.forEach(x=>{ if(x.uid) byU[x.uid]=x; byI[x.id]=x; });
-  let all=bmGet().map(bm=>({bm,s:bm.uid?byU[bm.uid]:byI[bm.libId]})).filter(x=>x.s);
-  if(!all.length){ setStatus('No bookmarks yet. Loop a passage and tap ☆ Bookmark this loop first.',true); return; }
+  let all=bmGet().map(bm=>({bm,s:bm.uid?byU[bm.uid]:byI[bm.libId]})).filter(x=>x.s&&partOf(x.s)===S.part);   // bookmarks of the part you are in (lists keep the others for when you switch back)
+  if(!all.length){ setStatus('No bookmarks in '+S.part+' yet. Loop a passage and tap ☆ Bookmark this loop first.',true); return; }
   // point bookmarks made before this version: find where their phrase ends (reads the lyrics of those songs once)
   const need=all.filter(x=>x.bm.b==null&&x.bm.pe==null);
   if(need.length){ const bl=bmGet(); for(const id of [...new Set(need.map(x=>x.s.id))]){ const r=await libGet(id).catch(()=>null); if(!r) continue;
@@ -5513,7 +5519,7 @@ async function pracDialog(){ if(S.prac) pracStop(true);
   let lists=prLists(), L=lists.find(x=>x.id===prCurId())||lists[0];
   if(!L){ L={id:newSugId(),name:'My practice',def:3,items:[]}; lists.push(L); prSave(lists); }
   prSetCur(L.id);
-  const r=await dlg({title:'Practise bookmarks',html:'<div class="pr-dlg"><div class="pr-top"><select id="prSel" class="sel" aria-label="Practice list"></select><button type="button" id="prNew">+ New list</button></div>'
+  const r=await dlg({title:'Practise bookmarks'+(S.parts.length>1?' · '+S.part:''),html:'<div class="pr-dlg"><div class="pr-top"><select id="prSel" class="sel" aria-label="Practice list"></select><button type="button" id="prNew">+ New list</button></div>'
     +'<div class="pr-top"><input id="prName" type="text" maxlength="40" class="bm-in" aria-label="Name of this list"><button type="button" id="prDel" class="link-btn">Delete list</button></div>'
     +'<div class="pr-top"><span>Repeat each</span><span class="pr-rep"><button type="button" id="prDefDn" aria-label="Fewer repeats">−</button><b id="prDef"></b><button type="button" id="prDefUp" aria-label="More repeats">+</button></span><span class="small">(− / + on a bookmark for more or fewer)</span></div>'
     +'<div class="pr-list" id="prList"></div><div class="small"><span class="pr-total" id="prTotal"></span></div></div>',
