@@ -86,7 +86,8 @@ html:has(.key-view:not([hidden])),html:has(.sheet-view:not([hidden])),html:has(.
 .pr-list{border:1px solid var(--line);border-radius:10px;padding:4px 8px;margin:6px 0}   /* no inner scrolling: the whole window scrolls as one */
 #dlgBtns{position:sticky;bottom:-16px;background:var(--surface);padding-bottom:12px;margin-bottom:-12px;z-index:1}
 .pr-song{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0} .pr-song+.pr-song{border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)} .pr-song .pr-selall,.pr-all button{padding:2px 10px;font-size:12px;font-weight:600}
-.pr-fold{flex:1;min-width:0;display:flex;align-items:center;gap:8px;border:0;background:none;padding:8px 2px;font:inherit;font-weight:600;color:var(--fg);text-align:left;cursor:pointer} .pr-fold .pr-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .pr-cnt{color:var(--muted);font-weight:400;font-size:12px;white-space:nowrap} .pr-arrow{color:var(--muted);width:1em} .pr-all{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:4px}
+.pr-fold{flex:1;min-width:0;display:flex;align-items:center;gap:8px;border:0;background:none;padding:8px 2px;font:inherit;font-weight:600;color:var(--fg);text-align:left;cursor:pointer} .pr-fold .pr-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .pr-cnt{color:var(--muted);font-weight:400;font-size:12px;white-space:nowrap} .pr-arrow{color:var(--muted);width:1em} .pr-resume{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;margin:0 0 8px;border-radius:10px;background:var(--accent-soft)} .pr-resume span{flex:1 1 180px}
+.pr-all{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:4px}
 .pr-song{font-weight:600;font-size:13px;color:var(--muted);margin:8px 0 2px} .pr-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
 .pr-item label{flex:1;min-width:0;display:flex;gap:8px;align-items:center;cursor:pointer} .pr-item label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .pr-item .pr-len{color:var(--muted);font-size:12px;font-family:var(--font-mono)}
 .pr-item .pr-rep b.def{color:var(--muted);font-weight:400} .pr-total{font-weight:600}
@@ -1172,7 +1173,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-04 n';
+const APP_VERSION='2026-11-04 o';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -5589,7 +5590,9 @@ function openSecMenu(){
     add.innerHTML='<span class="pm-name">'+(loopActive()?'☆ Bookmark this loop':'☆ Bookmark from here')+'</span><span class="pm-meta">'+(loopActive()?fmtT(S.loop.a)+'–'+fmtT(S.loop.b):fmtT(curT()))+'</span>';
     add.addEventListener('click',()=>{ closeSecMenu(); bmAdd(); }); m.appendChild(add);
     if(bmGet().some(b=>{ const x=(libMetaCache||[]).find(s=>b.uid?s.uid===b.uid:s.id===b.libId); return x&&partOf(x)===S.part; })){ const pb=document.createElement('button'); pb.type='button'; pb.setAttribute('role','menuitem'); pb.className='pm-bm-add'; pb.innerHTML='<span class="pm-name">▶ Practise bookmarks…</span><span class="pm-meta">'+esc(S.part)+'</span>'; pb.addEventListener('click',()=>{ closeSecMenu(); pracDialog(); }); m.appendChild(pb); }
-    const mine=bmGet().filter(bmMine).sort((x,y)=>x.a-y.a); mine.forEach(bm=>bmRow(m,bm,bm.name,closeSecMenu,openSecMenu));
+    const mine=bmGet().filter(bmMine).sort((x,y)=>x.a-y.a);
+    if(mine.length){ const ps=document.createElement('button'); ps.type='button'; ps.setAttribute('role','menuitem'); ps.className='pm-bm-add'; ps.innerHTML='<span class="pm-name">▶ Practise this song’s bookmarks</span><span class="pm-meta">'+mine.length+'</span>'; ps.addEventListener('click',()=>{ closeSecMenu(); pracThisSong(); }); m.appendChild(ps); }
+    mine.forEach(bm=>bmRow(m,bm,bm.name,closeSecMenu,openSecMenu));
     if(!mine.length){ const e=document.createElement('div'); e.className='pm-empty'; e.textContent='No bookmarks in this song yet. Loop a passage (and pick a tempo and zoom), then tap Bookmark this loop.'; m.appendChild(e); }
     if(list.length){ const h=document.createElement('div'); h.className='pm-sep'; m.appendChild(h); }
     if(list.length&&!S.secOpen){ const t=document.createElement('button'); t.type='button'; t.setAttribute('role','menuitem'); t.className='pm-secs'; t.innerHTML='<span class="pm-name">▸ Sections of the song</span><span class="pm-meta">'+list.length+'</span>';
@@ -5619,7 +5622,8 @@ function prSetCur(id){ try{ localStorage.setItem('pc-prac-cur',id); }catch(e){} 
 const fmtDur=s=>s<60?Math.max(1,Math.round(s))+' s':s<3600?Math.round(s/60)+' min':Math.floor(s/3600)+' h '+Math.round(s%3600/60)+' min';
 // time of one item: each repeat plays the lead-in plus the passage, at the bookmark's tempo
 const prItemSec=(bm,rep)=>rep*((prEnd(bm)-bm.a)+(S.loop.lead||0))/(bm.rate||1);
-function prTotal(items){ let t=0, last=null; items.forEach(x=>{ t+=prItemSec(x.bm,x.rep); const song=x.bm.uid||x.bm.libId; if(last!=null&&song!==last) t+=3; last=song; }); return t; }   // ~3 s to load another song
+function prTotal(items,gap){ let t=0, last=null; items.forEach((x,k)=>{ t+=prItemSec(x.bm,x.rep); if(k>0) t+=gap||0; const song=x.bm.uid||x.bm.libId; if(last!=null&&song!==last) t+=3; last=song; }); return t; }
+function prProgress(){ try{ const p=JSON.parse(localStorage.getItem('pc-prac-progress')||'null'); return p&&Date.now()-p.at<14*864e5?p:null; }catch(e){ return null; } }   // ~3 s to load another song
 async function pracDialog(){ if(S.prac) pracStop(true);
   const lib=await libMeta(), byU={}, byI={}; lib.forEach(x=>{ if(x.uid) byU[x.uid]=x; byI[x.id]=x; });
   let all=bmGet().map(bm=>({bm,s:bm.uid?byU[bm.uid]:byI[bm.libId]})).filter(x=>x.s&&partOf(x.s)===S.part);   // bookmarks of the part you are in (lists keep the others for when you switch back)
@@ -5632,13 +5636,16 @@ async function pracDialog(){ if(S.prac) pracStop(true);
   let lists=prLists(), L=lists.find(x=>x.id===prCurId())||lists[0];
   if(!L){ L={id:newSugId(),name:'My practice',def:3,items:[]}; lists.push(L); prSave(lists); }
   prSetCur(L.id);
-  const r=await dlg({title:'Practise bookmarks'+(S.parts.length>1?' · '+S.part:''),html:'<div class="pr-dlg"><div class="pr-top"><select id="prSel" class="sel" aria-label="Practice list"></select><button type="button" id="prNew">+ New list</button></div>'
-    +'<div class="pr-top"><input id="prName" type="text" maxlength="40" class="bm-in" aria-label="Name of this list"><button type="button" id="prDel" class="link-btn">Delete list</button></div>'
+  const r=await dlg({title:'Practise bookmarks'+(S.parts.length>1?' · '+S.part:''),html:'<div class="pr-dlg"><div class="pr-top"><select id="prSel" class="sel" aria-label="Practice list"></select><button type="button" id="prRen" aria-label="Rename or delete this list" title="Rename or delete this list">✎</button><button type="button" id="prNew">+ New list</button></div>'
+    +'<div class="pr-top" id="prRenRow" hidden><input id="prName" type="text" maxlength="40" class="bm-in" aria-label="Name of this list"><button type="button" id="prRenOk">Done</button><button type="button" id="prDel" class="link-btn">Delete list</button></div>'
+    +'<div class="pr-resume" id="prResume" hidden><span></span><button type="button" class="primary" id="prResumeGo">Continue</button></div>'
     +'<div class="pr-top"><span>Repeat each</span><span class="pr-rep"><button type="button" id="prDefDn" aria-label="Fewer repeats">−</button><b id="prDef"></b><button type="button" id="prDefUp" aria-label="More repeats">+</button></span><span class="small">(− / + on a bookmark for more or fewer)</span></div>'
+    +'<div class="pr-top"><span>Pause between</span><select id="prGap" class="sel" style="width:auto" aria-label="Pause between bookmarks"><option value="0">none</option><option value="2">2 s</option><option value="5">5 s</option><option value="10">10 s</option></select></div>'
     +'<div class="pr-all"><span class="small">All songs:</span><button type="button" id="prAllOn">Select all</button><button type="button" id="prAllOff">Clear</button></div><div class="pr-list" id="prList"></div><div class="small"><span class="pr-total" id="prTotal"></span></div></div>',
     buttons:[{label:'▶ Start',value:'go',primary:true},{label:'Close',value:null}],
-    onOpen:body=>{ const $b=q=>body.querySelector(q);
-      const paintSel=()=>{ $b('#prSel').innerHTML=lists.map(x=>'<option value="'+x.id+'"'+(x.id===L.id?' selected':'')+'>'+esc(x.name)+'</option>').join(''); $b('#prName').value=L.name; $b('#prDel').hidden=lists.length<2; };
+    onOpen:(body,done)=>{ const $b=q=>body.querySelector(q);
+      const paintSel=()=>{ $b('#prSel').innerHTML=lists.map(x=>'<option value="'+x.id+'"'+(x.id===L.id?' selected':'')+'>'+esc(x.name)+'</option>').join(''); $b('#prName').value=L.name; $b('#prDel').hidden=lists.length<2; $b('#prGap').value=String(L.gap==null?2:L.gap);
+        const pg=prProgress(), ok=pg&&pg.listId===L.id&&pg.i>0&&pg.i<pg.ids.length; $b('#prResume').hidden=!ok; if(ok) $b('#prResume span').textContent='Last time you stopped at bookmark '+(pg.i+1)+' of '+pg.ids.length+'.'; };
       const save=()=>{ prSave(lists); prSetCur(L.id); };
       const items=()=>L.items.map(it=>{ const x=all.find(a=>a.bm.id===it.id); return x?{bm:x.bm,rep:it.rep||L.def}:null; }).filter(Boolean);
       const openSongs=new Set(all.filter(x=>bmMine(x.bm)).map(x=>x.s.name));   // songs fold; the one you have open starts unfolded
@@ -5659,22 +5666,38 @@ async function pracDialog(){ if(S.prac) pracStop(true);
           const [dn,up]=row.querySelectorAll('.pr-rep button'); const step=d=>{ const i=L.items.find(i=>i.id===x.bm.id); if(!i) return; i.rep=Math.max(1,Math.min(30,(i.rep||L.def)+d)); if(i.rep===L.def) i.rep=null; save(); paint(); };
           dn.addEventListener('click',()=>step(-1)); up.addEventListener('click',()=>step(1));
           box.appendChild(row); });
-        const its=items(); $b('#prTotal').textContent=its.length?its.length+' bookmark'+(its.length>1?'s':'')+', '+its.reduce((a,x)=>a+x.rep,0)+' loops · about '+fmtDur(prTotal(its))+(S.loop.lead?' (with '+S.loop.lead+' s lead-in)':''):'Tick the bookmarks you want to practise.';
+        const its=items(); $b('#prTotal').textContent=its.length?its.length+' bookmark'+(its.length>1?'s':'')+', '+its.reduce((a,x)=>a+x.rep,0)+' loops · about '+fmtDur(prTotal(its,L.gap==null?2:L.gap))+(S.loop.lead?' (with '+S.loop.lead+' s lead-in)':''):'Tick the bookmarks you want to practise.';
         const go=body.parentElement.querySelector('#dlgBtns button.primary'); if(go) go.disabled=!its.length; if(card) card.scrollTop=keep; };
       $b('#prAllOn').addEventListener('click',()=>setSel(all,true)); $b('#prAllOff').addEventListener('click',()=>setSel(all,false));
       $b('#prSel').addEventListener('change',e=>{ L=lists.find(x=>x.id===e.target.value)||L; save(); paintSel(); paint(); });
-      $b('#prNew').addEventListener('click',()=>{ L={id:newSugId(),name:'List '+(lists.length+1),def:L.def,items:[]}; lists.push(L); save(); paintSel(); paint(); $b('#prName').focus(); $b('#prName').select(); });
+      const renOpen=on=>{ $b('#prRenRow').hidden=!on; if(on){ $b('#prName').focus(); $b('#prName').select(); } };
+      $b('#prRen').addEventListener('click',()=>renOpen($b('#prRenRow').hidden));
+      $b('#prRenOk').addEventListener('click',()=>renOpen(false));
+      $b('#prName').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); renOpen(false); } });
+      $b('#prGap').addEventListener('change',e=>{ L.gap=+e.target.value; save(); paint(); });
+      $b('#prResumeGo').addEventListener('click',()=>done('resume'));
+      $b('#prNew').addEventListener('click',()=>{ L={id:newSugId(),name:'List '+(lists.length+1),def:L.def,gap:L.gap,items:[]}; lists.push(L); save(); paintSel(); paint(); renOpen(true); });
       $b('#prName').addEventListener('input',e=>{ L.name=e.target.value.trim()||'Practice list'; save(); const o=$b('#prSel').querySelector('option[value="'+L.id+'"]'); if(o) o.textContent=L.name; });
-      $b('#prDel').addEventListener('click',()=>{ if(lists.length<2) return; lists=lists.filter(x=>x!==L); L=lists[0]; save(); paintSel(); paint(); });
+      $b('#prDel').addEventListener('click',()=>{ if(lists.length<2) return; lists=lists.filter(x=>x!==L); L=lists[0]; save(); paintSel(); paint(); renOpen(false); });
       $b('#prDefDn').addEventListener('click',()=>{ L.def=Math.max(1,L.def-1); save(); paint(); });
       $b('#prDefUp').addEventListener('click',()=>{ L.def=Math.min(30,L.def+1); save(); paint(); });
       paintSel(); paint(); }});
+  const gap=L.gap==null?2:L.gap;
+  if(r.value==='resume'){ const pg=prProgress(); if(!pg) return; const its=pg.ids.map((id,k)=>{ const x=all.find(a=>a.bm.id===id); return x?{bm:x.bm,s:x.s,rep:pg.reps[k]||L.def}:null; });
+    const start=its.slice(0,pg.i).filter(Boolean).length, list=its.filter(Boolean); if(list.length) pracStart(list,L.name,{gap,listId:L.id,from:Math.min(start,list.length-1)}); return; }
   if(r.value!=='go') return;
   const its=L.items.map(it=>{ const x=all.find(a=>a.bm.id===it.id); return x?{bm:x.bm,s:x.s,rep:it.rep||L.def}:null; }).filter(Boolean);
-  if(its.length) pracStart(its,L.name); }
-async function pracStart(items,name){ if(S.editMode||S.tap) closeEditor(true); S.prac={items,name,i:-1,k:0,t0:Date.now(),busy:false}; $('#pracBar').hidden=false; await pracGo(0); }
+  if(its.length) pracStart(its,L.name,{gap,listId:L.id}); }
+async function pracStart(items,name,o){ o=o||{}; if(S.editMode||S.tap) closeEditor(true); S.prac={items,name,i:-1,k:0,t0:Date.now(),busy:false,gap:o.gap||0,listId:o.listId||null}; $('#pracBar').hidden=false; await pracGo(o.from||0); }
+// the open song's bookmarks, in order, straight away (from the bookmark ribbon)
+async function pracThisSong(){ if(!S.cur||S.cur.libId==null) return; const lib=await libMeta(), s=lib.find(x=>x.id===S.cur.libId); if(!s) return;
+  const mine=bmGet().filter(bmMine).sort((x,y)=>x.a-y.a); if(!mine.length) return;
+  mine.forEach(bm=>{ if(bm.b==null&&bm.pe==null) bm.pe=phraseEnd(bm.a,S.lyrics,S.dur); });
+  const L=prLists().find(x=>x.id===prCurId()), def=L?L.def:3, gap=L&&L.gap!=null?L.gap:2;
+  pracStart(mine.map(bm=>({bm,s,rep:def})),s.name,{gap}); }
 async function pracGo(i){ const P=S.prac; if(!P) return; if(i>=P.items.length){ pracStop(false); return; } i=Math.max(0,i);
   P.i=i; P.k=0; P.busy=true; if(S.playing) stop(); const it=P.items[i], bm=it.bm;
+  if(P.listId){ try{ localStorage.setItem('pc-prac-progress',JSON.stringify({listId:P.listId,ids:P.items.map(x=>x.bm.id),reps:P.items.map(x=>x.rep),i,at:Date.now()})); }catch(e){} }
   if(!bmMine(bm)){ pracInfo('Opening '+it.s.name+'…'); if(!(await openLibSong(it.s.id))){ P.busy=false; pracGo(i+1); return; } if(S.prac!==P) return; }
   if(bm.win) setWin(bm.win,false);
   if((bm.rate||1)!==S.rate){ const r=bm.rate||1; $('#tempo').value=String(r); S.rate=r; S.ghost=[]; if(r===1) S.stretch=null; else if(!(await prepareTempo())){ S.rate=1; $('#tempo').value='1'; } if(typeof paintTempo==='function') paintTempo(); }
@@ -5682,15 +5705,19 @@ async function pracGo(i){ const P=S.prac; if(!P) return; if(i>=P.items.length){ 
   S.pos=loopStart(); updateTime(); draw(); P.busy=false; pracInfo(); if(S.prac===P) play(); }
 // called when a loop comes round again: true = the repeats are done and the next bookmark starts
 function pracLoopDone(){ const P=S.prac; if(!P||P.busy) return false; P.k++; if(P.k<P.items[P.i].rep){ pracInfo(); return false; }
-  stop(); setTimeout(()=>pracGo(P.i+1),300); return true; }
+  stop(); const next=P.items[P.i+1];
+  if(next&&P.gap>0){ let left=P.gap; const tick=()=>{ if(S.prac!==P||P.i!==cur) return; if(left<=0){ pracGo(P.i+1); return; } pracInfo('Breathe… next: ★ '+next.bm.name+' in '+left+' s'); left--; P.gapT=setTimeout(tick,1000); }, cur=P.i; tick(); }
+  else setTimeout(()=>pracGo(P.i+1),300);
+  return true; }
 function pracInfo(msg){ const P=S.prac; if(!P) return; const it=P.items[P.i]; if(!it){ return; }
-  const left=prItemSec(it.bm,Math.max(0,it.rep-P.k))+prTotal(P.items.slice(P.i+1));
+  const rest=P.items.slice(P.i+1), left=prItemSec(it.bm,Math.max(0,it.rep-P.k))+prTotal(rest,P.gap)+(rest.length?P.gap||0:0);
   $('#pracInfo').innerHTML=msg?esc(msg):'<b>Practising '+(P.i+1)+' of '+P.items.length+'</b>: '+esc(it.s.name)+' · ★ '+esc(it.bm.name)+' · repeat '+Math.min(P.k+1,it.rep)+' of '+it.rep+' · about '+fmtDur(left)+' left';
   $('#pracPrev').disabled=P.i===0; $('#pracNext').textContent=P.i===P.items.length-1?'Finish ⏭':'Next ⏭'; }
-function pracStop(quiet){ const P=S.prac; if(!P) return; S.prac=null; if(S.playing) stop(); $('#pracBar').hidden=true;
+function pracStop(quiet){ const P=S.prac; if(!P) return; S.prac=null; clearTimeout(P.gapT); if(S.playing) stop(); $('#pracBar').hidden=true;
+  if(P.listId&&P.i>=P.items.length-1&&P.k>=P.items[P.items.length-1].rep-1){ try{ localStorage.removeItem('pc-prac-progress'); }catch(e){} }   // finished: nothing to continue
   if(!quiet) setStatus(P.i>=P.items.length-1&&P.k>=P.items[P.items.length-1].rep-1?'Practice done: '+P.items.length+' bookmark'+(P.items.length>1?'s':'')+' in '+fmtDur((Date.now()-P.t0)/1000)+'. Well sung!':'Practice stopped.'); }
-$('#pracNext').addEventListener('click',()=>{ const P=S.prac; if(!P) return; if(P.i>=P.items.length-1){ P.k=P.items[P.i].rep; pracStop(false); } else pracGo(P.i+1); });
-$('#pracPrev').addEventListener('click',()=>{ const P=S.prac; if(P&&P.i>0) pracGo(P.i-1); });
+$('#pracNext').addEventListener('click',()=>{ const P=S.prac; if(!P) return; clearTimeout(P.gapT); if(P.i>=P.items.length-1){ P.k=P.items[P.i].rep; pracStop(false); } else pracGo(P.i+1); });
+$('#pracPrev').addEventListener('click',()=>{ const P=S.prac; if(P&&P.i>0){ clearTimeout(P.gapT); pracGo(P.i-1); } });
 $('#pracStop').addEventListener('click',()=>pracStop(false));
 // the bookmark button: filled when the open song has bookmarks, with their number
 function paintBmBtn(){ const n=bmGet().filter(bmMine).length, b=$('#secBtn'), c=$('#bmCount'); if(!b) return; b.classList.toggle('has-bm',n>0); c.hidden=!n; c.textContent=n; }
