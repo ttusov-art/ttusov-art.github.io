@@ -307,7 +307,9 @@ button:disabled{opacity:.5;cursor:not-allowed}
 #sheetHint{flex:1 1 180px}
 .sheet-hintrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;flex-basis:100%}
 #shapesAll{padding:5px 10px;font-size:13px;gap:6px}
-#sheetPlay{padding:5px 12px;min-width:40px;justify-content:center}
+.sheet-nav{display:flex;justify-content:center;align-items:center;gap:14px;padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:var(--surface)}
+.sheet-nav button{min-width:54px;min-height:46px;justify-content:center;padding:8px 12px} #sheetPlay{min-width:72px} #sheetBm{margin-left:10px}
+table.sheet td.tap{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .sheet-acts{display:inline-flex;gap:6px;align-items:center;flex:none}
 #shapesAll[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
 .sheet-parts button{padding:5px 12px;border-radius:999px;font-size:13px}
@@ -335,7 +337,7 @@ table.sheet tr.st-bridge td{background-color:var(--sec-bridge)} table.sheet tr.s
 table.sheet td.lab{padding-left:9px}
 table.sheet td.tap{cursor:pointer}
 table.sheet td.now{box-shadow:inset 0 0 0 2px var(--accent);border-radius:4px;font-weight:700;background-image:linear-gradient(color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--accent) 22%,transparent))}
-table.sheet td.tap:hover{text-decoration:underline dotted;text-underline-offset:3px}
+
 table.sheet .shape{margin-top:6px;font-size:12px;color:var(--muted)}
 table.sheet .shape{position:relative}
 table.sheet .shape canvas{display:block}
@@ -518,7 +520,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
   :root{color-scheme:light!important}
   html,body{background:#fff!important;overflow:visible!important;height:auto!important}
   #sheetView{position:static!important;display:block!important;background:#fff!important;color:#000!important}
-  #sheetView .sheet-bar>*:not(#sheetTitle){display:none!important}
+  #sheetView .sheet-bar>*:not(#sheetTitle),#sheetNav{display:none!important}
   #sheetView .sheet-bar{border:0!important;padding:0 0 6mm!important;position:static!important;background:#fff!important}
   #sheetTitle{font-size:18pt;color:#000}
   .sheet-body{overflow:visible!important;padding:0!important;height:auto!important}
@@ -605,9 +607,10 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <button id="sheetPrint" type="button" title="Print the lyrics sheet on A4 paper (or save it as a PDF)">Print</button>
     <button id="sheetClose" type="button">Close</button>
     <div class="sheet-parts" id="sheetParts" role="group" aria-label="Parts to show"></div>
-    <span class="sheet-hintrow"><span class="small" id="sheetHint">Tap a line of your part to see the shape of its melody.</span><span class="sheet-acts"><button id="shapesAll" type="button" aria-pressed="false" title="Show or hide the melody shape of every line"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15c3 0 3-6 6-6s3 8 6 8 3-5 6-5"/></svg><span id="shapesAllLbl">Show all shapes</span></button><button id="sheetPlay" type="button" class="primary" aria-label="Play" title="Play / pause"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg></button></span></span>
+    <span class="sheet-hintrow"><span class="small" id="sheetHint">Tap a line of your part to see the shape of its melody.</span><span class="sheet-acts"><button id="shapesAll" type="button" aria-pressed="false" title="Show or hide the melody shape of every line"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15c3 0 3-6 6-6s3 8 6 8 3-5 6-5"/></svg><span id="shapesAllLbl">Show all shapes</span></button></span></span>
   </div>
   <div class="sheet-body"><table class="sheet" id="sheetTable"></table></div>
+  <div class="sheet-nav" id="sheetNav"><button id="sheetPrevPh" type="button" aria-label="Previous phrase" title="Previous phrase"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6l-8 6 8 6z" fill="currentColor"/><path d="M6 6v12"/></svg></button><button id="sheetPlay" type="button" class="primary" aria-label="Play" title="Play / pause (Space)"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg></button><button id="sheetNextPh" type="button" aria-label="Next phrase" title="Next phrase"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l8 6-8 6z" fill="currentColor"/><path d="M18 6v12"/></svg></button><button id="sheetBm" type="button" aria-label="Bookmark this loop or phrase" title="Bookmark the loop, or the phrase you are in"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg></button></div>
 </div>
 <div class="wrap">
   <header>
@@ -1157,7 +1160,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-01 c';
+const APP_VERSION='2026-11-04 a';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1413,7 +1416,7 @@ async function prepareTempo(){
   finally{ sel.disabled=false; $('#play').disabled=false; }
 }
 // play button label, mirrored on the editor's play button
-function setPlayLbl(t){ $('#playLbl').innerHTML=t==='Play'?'<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg>':'<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4.2" height="15" rx="1" fill="currentColor"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1" fill="currentColor"/></svg>'; $('#play').setAttribute('aria-label',t); $('#play').title=t+' (Space)'; if(S.tap){ S.lyrBarKey=null; setTimeout(()=>updateLyricBar(songTime()),0); } { const sp=document.getElementById('sheetPlay'); if(sp){ sp.innerHTML=t==='Play'?'<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg>':'<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4.2" height="15" rx="1" fill="currentColor"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1" fill="currentColor"/></svg>'; sp.setAttribute('aria-label',t); } } const b=document.getElementById('edPlay'); if(b) b.textContent=(t==='Play'?'▶ ':'⏸ ')+t; }
+function setPlayLbl(t){ $('#playLbl').innerHTML=t==='Play'?'<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg>':'<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4.2" height="15" rx="1" fill="currentColor"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1" fill="currentColor"/></svg>'; $('#play').setAttribute('aria-label',t); $('#play').title=t+' (Space)'; if(S.tap){ S.lyrBarKey=null; setTimeout(()=>updateLyricBar(songTime()),0); } { const sp=document.getElementById('sheetPlay'); if(sp){ sp.innerHTML=t==='Play'?'<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg>':'<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4.2" height="15" rx="1" fill="currentColor"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1" fill="currentColor"/></svg>'; sp.setAttribute('aria-label',t); } } const b=document.getElementById('edPlay'); if(b) b.textContent=(t==='Play'?'▶ ':'⏸ ')+t; }
 // ===== loop =====
 function loopWholeSong(){
   if(!S.dur) return;
@@ -4973,6 +4976,34 @@ $('#lyrBack').addEventListener('click',e=>{ e.stopPropagation(); tapBack(); });
 $('#lyrSkip').addEventListener('click',e=>{ e.stopPropagation(); tapSkip(); });
 $('#lyrUndo').addEventListener('click',e=>{ e.stopPropagation(); tapUndo(); });
 $('#sheetOpen3').addEventListener('click',e=>{ e.stopPropagation(); const sc=$('.sheet-body'); openSheet(); sc.scrollTop=0; S.sheetNow=null; S.sheetSec=null; requestAnimationFrame(()=>sheetFollow(true)); });
+// ----- lyrics sheet navigation: previous / next phrase, play, bookmark; long-press a line to loop or bookmark it -----
+function sheetPhrases(){ const a=[...document.querySelectorAll('#sheetTable td.tap')].map(td=>({a:+td.dataset.a,b:+td.dataset.b,td})).filter(x=>isFinite(x.a)).sort((x,y)=>x.a-y.a);
+  if(a.length) return a; return S.lyrics.filter(l=>l.t!=null).map(l=>({a:l.t,b:null,td:null})).sort((x,y)=>x.a-y.a); }
+function phraseGo(dir){ const P=sheetPhrases(); if(!P.length){ setStatus('No timed lines to jump between yet.',true); return; }
+  const lead=S.playing?0.6:0, t=songTime(); let k=-1; P.forEach((p,i)=>{ if(p.a<=t+lead+0.05) k=i; });
+  let j; if(dir<0) j=k<0?0:(t-P[k].a>1.5?k:Math.max(0,k-1)); else j=Math.min(P.length-1,k+1);   // back: to the start of this phrase, or the one before if you are at its start
+  const to=P[j].a; if(S.loop.on&&S.loop.a!=null&&(to<S.loop.a||to>S.loop.b)){ S.loop.on=false; $('#loopOn').checked=false; updateLoopUI(); }
+  seek(Math.max(0,to-lead)); sheetFollow(true); }
+function phraseEndOf(p,P){ const n=P.find(x=>x.a>p.a+0.05); let b=isFinite(p.b)&&p.b>p.a?p.b+0.3:(n?n.a:p.a+8); if(n&&b>n.a) b=n.a; return Math.min(S.dur,Math.round(b*100)/100); }
+function loopPhrase(p){ const P=sheetPhrases(); S.loop.a=Math.max(0,Math.round(p.a*100)/100); S.loop.b=phraseEndOf(p,P); S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); seek(loopStart()); draw(); }
+async function sheetLineMenu(td){ const p={a:+td.dataset.a,b:+td.dataset.b,td}, P=sheetPhrases(), end=phraseEndOf(p,P), txt=(td.firstChild&&td.firstChild.nodeType===3?td.firstChild.textContent:td.innerText.split('\n')[0]).trim();
+  try{ navigator.vibrate&&navigator.vibrate(25); }catch(e){}
+  const r=await dlg({title:'This line',html:'<p class="kv-sub">“'+esc(txt.length>60?txt.slice(0,58)+'…':txt)+'” · '+fmtT(p.a)+'–'+fmtT(end)+'</p>',buttons:[{label:'Loop and bookmark',value:'bm',primary:true},{label:'Loop it',value:'loop'},{label:'Cancel',value:null}]});
+  if(!r.value) return; loopPhrase(p); setStatus('Looping '+fmtT(S.loop.a)+'–'+fmtT(S.loop.b)+'. Press Play.'); if(r.value==='bm') await bmAdd(); }
+async function sheetBookmark(){ if(loopActive()) return bmAdd();
+  const P=sheetPhrases(), t=songTime(); let p=null; P.forEach(x=>{ if(x.a<=t+0.05) p=x; }); if(!p&&P.length) p=P[0];
+  if(p){ loopPhrase(p); } return bmAdd(); }
+$('#sheetPrevPh').addEventListener('click',()=>phraseGo(-1));
+$('#sheetNextPh').addEventListener('click',()=>phraseGo(1));
+$('#sheetBm').addEventListener('click',sheetBookmark);
+{ let lp=null; const tb=$('#sheetTable');
+  tb.addEventListener('contextmenu',e=>{ if(e.target.closest('td.tap')) e.preventDefault(); });
+  tb.addEventListener('pointerdown',e=>{ const td=e.target.closest('td.tap'); if(!td||e.button>0) return; clearTimeout(lp&&lp.t);
+    lp={td,x:e.clientX,y:e.clientY,fired:false,t:setTimeout(()=>{ if(lp&&lp.td===td){ lp.fired=true; sheetLineMenu(td); } },550)}; });
+  const cancel=()=>{ if(lp&&!lp.fired){ clearTimeout(lp.t); lp=null; } };
+  tb.addEventListener('pointermove',e=>{ if(lp&&!lp.fired&&Math.hypot(e.clientX-lp.x,e.clientY-lp.y)>10) cancel(); });
+  tb.addEventListener('pointerup',cancel); tb.addEventListener('pointercancel',cancel); $('.sheet-body').addEventListener('scroll',cancel,{passive:true});
+  tb.addEventListener('click',e=>{ if(lp&&lp.fired){ e.stopImmediatePropagation(); e.preventDefault(); lp=null; } },true); }   // a long press is not also a tap
 $('#sheetTable').addEventListener('click',e=>{ const td=e.target.closest('td.tap'); if(td) toggleShape(td); });
 $('#sheetTable').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.matches('td.tap')){ e.preventDefault(); toggleShape(e.target); } });
 $('#sheetSmaller').addEventListener('click',()=>setSheetType({fs:sheetType().fs-1}));
