@@ -452,6 +452,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .use-bars{display:flex;align-items:flex-end;gap:2px;height:48px;margin-top:6px} .use-bars i{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:1px;opacity:.85} .use-bars i.z{background:var(--line)}
 .use-axis{display:flex;justify-content:space-between}
 .new-ver.use-note{top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:14px;width:min(560px,calc(100% - 24px));box-sizing:border-box;justify-content:flex-end} .new-ver.use-note span{flex:1 1 100%}
+.back-toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:80;padding:10px 16px;border-radius:999px;background:var(--fg);color:var(--bg);font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);white-space:nowrap}
 .new-ver{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);padding:10px 14px;border-radius:12px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px;color:var(--fg)}
 .ana-row{gap:8px;margin-top:10px;align-items:center}
 .ana-box{display:flex;flex-direction:column;gap:8px;margin-top:10px}
@@ -566,6 +567,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 </script>
 <div class="new-ver use-note" id="useNote" hidden role="status"><span>May Part Coach count this phone? Once a day it would send only a random number for this phone and the date, no names and nothing about your singing. The moderator uses this to see whether the app is worth the effort: if nobody uses it, there is no point in keeping the songs up to date. You can change this any time in Settings.</span><button id="useNoteOk" type="button" class="primary">Yes, count it</button><button id="useNoteNo" type="button">No, thanks</button></div>
 <div class="new-ver use-note" id="iosNote" hidden role="status"><span><b>Keep your songs on this iPhone:</b> Safari deletes them after about a week without opening Part Coach. Add it to your Home Screen and they stay.</span><button id="iosNoteHow" type="button" class="primary">Show me how</button><button id="iosNoteX" type="button">Later</button></div>
+<div class="back-toast" id="backToast" hidden role="status">Press back again to close Part Coach</div>
 <div class="new-ver" id="newVer" hidden role="status"><span id="newVerText">A new version of Part Coach is ready.</span><button id="newVerGo" type="button" class="primary">Reload</button><button id="newVerX" type="button" class="link-btn" aria-label="Later">Later</button></div>
 <script>window.BOOT=[]; setTimeout(()=>{ const b=document.getElementById('bootView'); if(b) b.remove(); },25000);   // safety: never stuck</script>
 <div class="key-view" id="keyView" hidden role="dialog" aria-modal="true" aria-labelledby="kvName">
@@ -1166,7 +1168,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-04 h';
+const APP_VERSION='2026-11-04 i';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4869,6 +4871,23 @@ $('#warmVoice').addEventListener('change',async e=>{ try{ localStorage.setItem('
 $('#reportBtn').addEventListener('click',reportSpot);
 $('#hsResume').checked=hsResume();
 $('#hsResume').addEventListener('change',e=>{ try{ localStorage.setItem('pc-hsresume',e.target.checked?'1':'0'); }catch(x){} if(!S.playing&&!S.review){ if(e.target.checked) mediaOff(); else { clearTimeout(S.keepOffT); try{ S.keep&&S.keep.pause(); }catch(x){} } } });
+// ----- the phone's Back button: closes an open window or menu first; on the main screen it asks for a second press before leaving the app -----
+{ let armed=false, lastBack=0, toastT=null;
+  const arm=()=>{ if(armed) return; armed=true; try{ history.pushState({pcGuard:1},''); }catch(e){} };   // after the first tap: browsers only honour this after you have used the page
+  ['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,arm,{once:true,capture:true}));
+  const closeTop=()=>{ const vis=id=>{ const e=document.getElementById(id); return e&&!e.hidden; };
+    if(vis('dlgView')){ $('#dlgView')._done&&$('#dlgView')._done(null); return true; }
+    if(vis('keyView')){ closeKeyView(); return true; }
+    if(vis('guideMenu')){ closeGuideMenu(); return true; }
+    if(vis('secMenu')){ closeSecMenu(); return true; }
+    if(vis('sheetView')){ $('#sheetClose').click(); return true; }
+    return false; };
+  window.addEventListener('popstate',()=>{ if(!armed) return;
+    if(closeTop()){ try{ history.pushState({pcGuard:1},''); }catch(e){} return; }
+    const now=Date.now();
+    if(now-lastBack<2000){ armed=false; $('#backToast').hidden=true; try{ if(S.playing) stop(); savePos(); }catch(e){} history.back(); return; }   // second press: really leave
+    lastBack=now; try{ history.pushState({pcGuard:1},''); }catch(e){}
+    $('#backToast').hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>{ $('#backToast').hidden=true; },2000); }); }
 $('#newVerGo').addEventListener('click',()=>{ try{ if(S.playing) stop(); savePos(); }catch(e){} location.reload(); });
 $('#newVerX').addEventListener('click',()=>{ S.verDismissed=S.verRemote; $('#newVer').hidden=true; });
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkAppVersion(); });
