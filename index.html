@@ -1173,7 +1173,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-04 q';
+const APP_VERSION='2026-11-04 s';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1247,7 +1247,7 @@ async function readZip(ab){
 }
 
 // ===== guide loading =====
-function setTarget(times,midis,orig){ S.ovwImg=null; S.tT=times; S.tM=midis; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()}; S.tMorig=orig&&orig.length===midis.length?new Float32Array(orig):Float32Array.from(midis); S.undo=[]; S.sel=null; if(typeof updateSelInfo==='function') updateSelInfo(); S.viewManual=false; computeView(); }
+function setTarget(times,midis,orig){ S.ovwImg=null; S.stripTok=(S.stripTok||0)+1; S.tT=times; S.tM=midis; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()}; S.tMorig=orig&&orig.length===midis.length?new Float32Array(orig):Float32Array.from(midis); S.undo=[]; S.sel=null; if(typeof updateSelInfo==='function') updateSelInfo(); S.viewManual=false; computeView(); }
 // voice ranges: where the pitch tracker looks for notes (file analysis and live microphone)
 const RANGES={
   low:{label:'Low voice (bass, baritone, tenor)',fmin:70,fmax:700,sr:11025,lp:2800,mic:[70,800]},
@@ -2957,7 +2957,7 @@ async function sugCancel(){ const s=S.sug; if(!s) return; if(S.playing) stop();
   sugRestore(s); setStatus(s.mode==='approve'?'Cancelled. Nothing was sent; the suggestion is still waiting.':'Review cancelled. Nothing was changed; the suggestion stays in the inbox.'); }
 // back to the song as it was before the review (nothing saved)
 function sugRestore(s){ S.tM=Float32Array.from(s.snap.tM); S.lyrics=s.snap.lyrics.map(l=>({t:l.t,text:l.text})); S.undo.length=Math.min(S.undo.length,s.snap.undo);
-  S.sug=null; $('#sugBar').hidden=true; S.ovwImg=null; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
+  S.sug=null; $('#sugBar').hidden=true; S.ovwImg=null; S.stripTok=(S.stripTok||0)+1; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
   $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); renderLyrics(true); S.lyrBarKey=null; updateSelInfo(); paintSuggest(); draw(); }
 // lane overlay: the suggested notes in violet, lyric times as violet marks
 function drawSug(g,xOf,yOf,w,h,col){ const s=S.sug; if(!s) return; const SC='#8b5cf6';
@@ -2996,7 +2996,7 @@ function swapStep(u,word){ if(u&&u.lyrAll){ const back={lyrAll:S.lyrics.map(l=>(
   const back=Float32Array.from(S.tM); S.tM=u; targetEdited(word==='undone'?'Undone.':'Redone.'); return back; }
 function edRedo(){ if(!S.redo.length) return; const u=S.redo.pop(); const back=swapStep(u,'redone'); S.undo.push(back); if(S.undo.length>30) S.undo.shift(); paintRedo(); updateSelInfo(); S.repSeen=back; repHide(); }
 let edSaveTimer=null;
-function targetEdited(msg){ S.ovwImg=null; if(S.sel) S.selEdited=true; paintSuggest(); if(S.editMode&&!S.sug&&!S.gating&&!S.repApplying){ clearTimeout(S.repT); S.repT=setTimeout(repCheckNotes,500); }
+function targetEdited(msg){ S.ovwImg=null; S.stripTok=(S.stripTok||0)+1; if(S.sel) S.selEdited=true; paintSuggest(); if(S.editMode&&!S.sug&&!S.gating&&!S.repApplying){ clearTimeout(S.repT); S.repT=setTimeout(repCheckNotes,500); }
   if(!S.gating&&S.gateBase){ S.gateBase=null; const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } }   // another edit: the slider starts again from the line as it is now
   S.onsets=computeOnsets(); S.tim={next:0,res:new Map()};
   computeViewKeep(); updateSelInfo(); draw();
@@ -3192,6 +3192,7 @@ function selectFragmentAt(t){
   S.sel={a:S.tT[a],b:S.tT[b]}; updateSelInfo(); draw();
 }
 function setEditMode(on){
+  S.stripTok=(S.stripTok||0)+1;   // leaving the editor: redraw the cached graph tiles from the edited line
   if(on){ timingTried(); edSnapTake(); }
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
   $('#editBar').hidden=!on; if(on) $('#laneHint').textContent=(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'); else if(typeof LANE_HINT==='string') $('#laneHint').innerHTML=LANE_HINT;
@@ -3651,7 +3652,7 @@ function startTap(){ if(setupActive()&&!S.setup.tapped){ S.setup.tapped=true; se
   try{ const c=ensureCtx(); if(c.state!=='running') c.resume(); }catch(e){}   // wake the audio now, so the first play starts without a delay
   requestAnimationFrame(()=>{ const y=$('#lyrBar').getBoundingClientRect().top+window.scrollY-6; window.scrollTo({top:Math.max(0,y),behavior:'smooth'}); });
 }
-function stopTap(){ if(!S.tap) return; S.tap=null; edLaneClass(); setTimeout(setupPulse,0); $('#edLyrBox').hidden=true; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrTapBtns').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
+function stopTap(){ if(!S.tap) return; S.tap=null; S.stripTok=(S.stripTok||0)+1; edLaneClass(); setTimeout(setupPulse,0); $('#edLyrBox').hidden=true; $('#lyrUndo').hidden=true; $('#lyrSkip').hidden=true; $('#lyrTapBtns').hidden=true; $('#lyrBar').classList.remove('tap'); $('#lyrTap').textContent='Tap to time'; $('#edTimeBtn').textContent='Time lyrics'; $('#edTimeBtn').setAttribute('aria-pressed','false'); S.lyrBarKey=null; updateLyricBar(songTime()); }
 function tapNow(){
   if(!S.tap||S.review||S.tap.i>=S.lyrics.length) return;
   // playing: allow for reaction time; paused: the playhead was placed by hand, use it as it is
@@ -4372,7 +4373,7 @@ const ovw=document.getElementById('ovw'), og=ovw.getContext('2d');
 new ResizeObserver(()=>{ S.ovwW=ovw.clientWidth; }).observe(ovw);
 function drawOverview(t0,t1,cs){
   const col=colOf, dpr=laneDpr(), W=S.ovwW||ovw.clientWidth||300, H=34;   // width from the resize watcher: reading it every frame forces the browser to re-lay out the page
-  if(ovw.width!==Math.round(W*dpr)){ ovw.width=Math.round(W*dpr); ovw.height=Math.round(H*dpr); S.ovwImg=null; }
+  if(ovw.width!==Math.round(W*dpr)){ ovw.width=Math.round(W*dpr); ovw.height=Math.round(H*dpr); S.ovwImg=null; S.stripTok=(S.stripTok||0)+1; }
   og.setTransform(dpr,0,0,dpr,0,0); og.clearRect(0,0,W,H);
   const dur=S.dur||0; if(!dur) return; const X=t=>Math.max(0,Math.min(W,t/dur*W));
   // melody outline, cached until the line changes
@@ -4403,7 +4404,66 @@ function lyrFit(g,text,room){ const key=g.font+'|'+text+'|'+Math.floor(room/6); 
 // colours of the graph, read once from the page styles (re-read when the phone switches light/dark)
 const COLC=new Map(); let COLCS=null;
 function colOf(k){ let v=COLC.get(k); if(v===undefined){ if(!COLCS) COLCS=getComputedStyle(document.documentElement); v=COLCS.getPropertyValue(k).trim(); COLC.set(k,v); } return v; }
-function colReset(){ COLC.clear(); COLCS=null; S.ovwImg=null; }
+function colReset(){ COLC.clear(); COLCS=null; S.ovwImg=null; S.stripTok=(S.stripTok||0)+1; }
+// the still parts of the graph (background rows, beat grid, target line) are drawn by these, either straight onto the screen
+// or once into a wide hidden picture that is then slid along as the song plays (much less drawing per frame)
+function laneBgDraw(c,xOf,t0,t1,X0,W,h,lo,hi,rh,yOf,now){ const col=colOf;
+  c.fillStyle=col('--lane-bg'); c.fillRect(0,0,W,h);
+  for(let m=lo;m<=hi;m++){
+    const pc=((m%12)+12)%12;
+    if(BLACK.includes(pc)){ c.fillStyle=col('--lane-black'); c.fillRect(X0,yOf(m)-rh/2,W-X0,rh); }
+    else if(pc===0||pc===5){ c.fillStyle=pc===0?col('--lane-c'):col('--lane-line'); c.fillRect(X0,Math.round(yOf(m)+rh/2)-(pc===0?1:0.5),W-X0,pc===0?1:1); }
+  }
+  // seconds grid
+  if(S.beat){
+    const vd=visDiv(now), showQ=vd===4, cb=col('--beat'), ch=col('--halfbeat'), bars=hasBars();
+    beatsIn(t0,t1,4,(t,k,s)=>{ const showHalf=vd>=2, x=Math.round(xOf(t))+0.5; if(x<=X0) return;
+      if(k%4===0){ const bar=bars&&barPos(k/4,s)===0; c.fillStyle=cb; if(bar){ c.globalAlpha=1; c.fillRect(x-0.5,0,2,h); } else c.fillRect(x,0,1,h); } else if(k%2===0){ if(showHalf){ c.fillStyle=ch; c.fillRect(x,0,1,h); } }
+      else if(showQ){ c.fillStyle=ch; c.globalAlpha=0.55; c.fillRect(x,0,1,h); c.globalAlpha=1; } });
+    // tempo changes: a dashed line with the new tempo
+    beatSegs().forEach(s=>{ if(!s.i||s.t0<t0||s.t0>t1) return; const x=Math.round(xOf(s.t0))+0.5; if(x<=X0) return;
+      c.save(); c.strokeStyle=col('--accent'); c.lineWidth=2; c.setLineDash([5,4]); c.beginPath(); c.moveTo(x,0); c.lineTo(x,h); c.stroke(); c.restore();
+      c.font='600 11px system-ui,sans-serif'; c.fillStyle=col('--accent'); c.textAlign='left'; c.textBaseline='top'; c.fillText(Math.round(s.ref.bpm)+' BPM',x+4,3); });
+  } else {
+    c.fillStyle=col('--lane-line');
+    for(let s=Math.ceil(t0);s<=t1;s++){ const x=Math.round(xOf(s))+0.5; if(x>X0) c.fillRect(x,0,1,h); }
+  }
+}
+function laneTargetDraw(c,xOf,t0,t1,rh,yOf){ const col=colOf;
+  // target band
+  if(S.tT){
+    c.lineCap='round'; c.lineJoin='round';
+    let a=0,b=S.tT.length-1; while(b-a>1){ const m=(a+b)>>1; if(S.tT[m]<t0-0.5) a=m; else b=m; }
+    for(const pass of [0,1]){
+      c.strokeStyle=pass?col('--target-edge'):col('--target'); c.lineWidth=pass?2:Math.max(6,rh*0.9);
+      c.beginPath(); let pen=false;
+      for(let i=a;i<S.tT.length&&S.tT[i]<=t1+0.5;i++){
+        const m=S.tM[i]; if(isNaN(m)){ pen=false; continue; }
+        const x=xOf(S.tT[i]), y=yOf(m);
+        if(pen) c.lineTo(x,y); else { c.moveTo(x,y); pen=true; }
+      }
+      c.stroke();
+    }
+  }
+}
+// the song is cut into tiles one screen wide; each is drawn once and reused. Only a tile that is needed now is drawn at once;
+// the next one ahead is drawn in a quiet frame, one at a time, so there is never a long pause for drawing
+const LTILES={key:'',span:0,map:new Map()};
+function laneTile(k,lay,w,h,dpr,lo,hi,rh,yOf,now,pps){ const id=k+lay; let t=LTILES.map.get(id); if(t) return t;
+  const span=LTILES.span, a=k*span, Wc=Math.ceil(span*pps)+2, cv=document.createElement('canvas'); cv.width=Math.ceil(Wc*dpr); cv.height=Math.round(h*dpr);
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); const xs=t=>(t-a)*pps;
+  if(lay==='b') laneBgDraw(c,xs,a-1.5,a+span+0.3,-9999,Wc,h,lo,hi,rh,yOf,now); else laneTargetDraw(c,xs,a-0.3,a+span+0.3,rh,yOf);
+  t={cv,a,w:cv.width/dpr}; LTILES.map.set(id,t); return t; }
+function laneTiles(g,lay,xOf,t0,t1,w,h,dpr,lo,hi,rh,yOf,now,pps){
+  const key=[w,h,dpr,lo,hi,S.win,S.tT&&S.tT.length,S.stripTok||0,S.beat?JSON.stringify(S.beat):'',visDiv(now),S.dur].join('|');
+  if(key!==LTILES.key){ LTILES.key=key; LTILES.span=t1-t0; LTILES.map.clear(); }
+  const span=LTILES.span, k0=Math.floor(t0/span), k1=Math.floor(t1/span);
+  g.save(); g.beginPath(); g.rect(LABELW,0,w-LABELW,h); g.clip();
+  for(let k=k0;k<=k1;k++){ const t=laneTile(k,lay,w,h,dpr,lo,hi,rh,yOf,now,pps); g.drawImage(t.cv,Math.round(xOf(t.a)),0,t.w,h); }
+  g.restore();
+  if(lay==='t'){ // after both layers: draw at most one tile ahead, and forget tiles far behind
+    for(const kk of [k1+1,k1+2]){ let made=false; for(const L of ['b','t']) if(!LTILES.map.has(kk+L)){ laneTile(kk,L,w,h,dpr,lo,hi,rh,yOf,now,pps); made=true; break; } if(made) break; }
+    if(LTILES.map.size>16) for(const id of [...LTILES.map.keys()]){ const kk=parseInt(id,10); if(kk<k0-1||kk>k1+3) LTILES.map.delete(id); } } }
 function draw(){
   const cs=null, col=colOf;
   const dpr=laneDpr(), w=canvas.width/dpr, h=canvas.height/dpr;
@@ -4411,26 +4471,9 @@ function draw(){
   const {lo,hi}=S.view, rows=hi-lo+1, rh=(h-8)/rows, yOf=m=>4+(hi+0.5-m)*rh;
   const now=visTime(), pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3, xOf=t=>headX+(t-now)*pps;
   const t0=now-(headX-LABELW)/pps, t1=now+(w-headX)/pps;
-  g.fillStyle=col('--lane-bg'); g.fillRect(0,0,w,h);
-  for(let m=lo;m<=hi;m++){
-    const pc=((m%12)+12)%12;
-    if(BLACK.includes(pc)){ g.fillStyle=col('--lane-black'); g.fillRect(LABELW,yOf(m)-rh/2,w,rh); }
-    else if(pc===0||pc===5){ g.fillStyle=pc===0?col('--lane-c'):col('--lane-line'); g.fillRect(LABELW,Math.round(yOf(m)+rh/2)-(pc===0?1:0.5),w,pc===0?1:1); }
-  }
-  // seconds grid
-  if(S.beat){
-    const vd=visDiv(now), showQ=vd===4, cb=col('--beat'), ch=col('--halfbeat'), bars=hasBars();
-    beatsIn(t0,t1,4,(t,k,s)=>{ const showHalf=vd>=2, x=Math.round(xOf(t))+0.5; if(x<=LABELW) return;
-      if(k%4===0){ const bar=bars&&barPos(k/4,s)===0; g.fillStyle=cb; if(bar){ g.globalAlpha=1; g.fillRect(x-0.5,0,2,h); } else g.fillRect(x,0,1,h); } else if(k%2===0){ if(showHalf){ g.fillStyle=ch; g.fillRect(x,0,1,h); } }
-      else if(showQ){ g.fillStyle=ch; g.globalAlpha=0.55; g.fillRect(x,0,1,h); g.globalAlpha=1; } });
-    // tempo changes: a dashed line with the new tempo
-    beatSegs().forEach(s=>{ if(!s.i||s.t0<t0||s.t0>t1) return; const x=Math.round(xOf(s.t0))+0.5; if(x<=LABELW) return;
-      g.save(); g.strokeStyle=col('--accent'); g.lineWidth=2; g.setLineDash([5,4]); g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); g.restore();
-      g.font='600 11px system-ui,sans-serif'; g.fillStyle=col('--accent'); g.textAlign='left'; g.textBaseline='top'; g.fillText(Math.round(s.ref.bpm)+' BPM',x+4,3); });
-  } else {
-    g.fillStyle=col('--lane-line');
-    for(let s=Math.ceil(t0);s<=t1;s++){ const x=Math.round(xOf(s))+0.5; if(x>LABELW) g.fillRect(x,0,1,h); }
-  }
+  const useStrip=!S.editMode&&!S.sug&&!S.tap&&!S.noStrip&&!!S.tT&&S.dur>0;   // editing redraws everything live, so every change shows at once
+  if(useStrip){ g.fillStyle=col('--lane-bg'); g.fillRect(0,0,w,h); laneTiles(g,'b',xOf,t0,t1,w,h,dpr,lo,hi,rh,yOf,now,pps); }
+  else laneBgDraw(g,xOf,t0,t1,LABELW,w,h,lo,hi,rh,yOf,now);
   // loop region
   const L=S.loop;
   if(L.a!=null||L.b!=null){
@@ -4456,21 +4499,7 @@ function draw(){
     for(let i=a0;i<S.tT.length&&S.tT[i]<=t1+0.5;i++){ const m=S.tMorig[i]; if(isNaN(m)){ pen=false; continue; } const x=xOf(S.tT[i]), y=yOf(m); if(pen) g.lineTo(x,y); else { g.moveTo(x,y); pen=true; } }
     g.stroke(); g.setLineDash([]);
   }
-  // target band
-  if(S.tT){
-    g.lineCap='round'; g.lineJoin='round';
-    let a=0,b=S.tT.length-1; while(b-a>1){ const m=(a+b)>>1; if(S.tT[m]<t0-0.5) a=m; else b=m; }
-    for(const pass of [0,1]){
-      g.strokeStyle=pass?col('--target-edge'):col('--target'); g.lineWidth=pass?2:Math.max(6,rh*0.9);
-      g.beginPath(); let pen=false;
-      for(let i=a;i<S.tT.length&&S.tT[i]<=t1+0.5;i++){
-        const m=S.tM[i]; if(isNaN(m)){ pen=false; continue; }
-        const x=xOf(S.tT[i]), y=yOf(m);
-        if(pen) g.lineTo(x,y); else { g.moveTo(x,y); pen=true; }
-      }
-      g.stroke();
-    }
-  }
+  if(useStrip) laneTiles(g,'t',xOf,t0,t1,w,h,dpr,lo,hi,rh,yOf,now,pps); else laneTargetDraw(g,xOf,t0,t1,rh,yOf);
   // note starts: faint ticks ahead, coloured markers once scored
   if(S.onsets.length){
     const gcol={good:col('--good'),near:col('--near'),off:col('--off')};
@@ -4535,25 +4564,29 @@ function draw(){
   g.fillStyle=col('--warm'); g.fillRect(Math.round(headX)-1,0,2,h);
   // labels
   // labels drawn as a piano keyboard: white keys, dark black keys, a line between neighbouring white keys
-  g.fillStyle=col('--key-white'); g.fillRect(0,0,LABELW,h);
-  for(let m=lo;m<=hi;m++){ const pc=((m%12)+12)%12, y=yOf(m);
-    if(BLACK.includes(pc)){ g.fillStyle=col('--key-black'); g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); }
-    else if(pc===0||pc===5){ g.fillStyle=col('--lane-c'); g.fillRect(0,Math.round(y+rh/2)-0.5,LABELW,1); } }
   const tgNow=targetAt(now), hit=isNaN(tgNow)?null:Math.round(tgNow);
-  if(S.kbNote!=null&&S.kbNote>=lo&&S.kbNote<=hi){ const y=yOf(S.kbNote); g.fillStyle=col('--accent'); g.globalAlpha=0.55; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; }
+  const keyLabel=(c,m,on)=>{ const pc=((m%12)+12)%12, bk=BLACK.includes(pc); if(!(on||rh>=13||(!bk&&rh>=8)||pc===0)) return;
+    c.textAlign='right'; c.textBaseline='middle'; c.font=(pc===0||on?'600 ':'400 ')+Math.min(11,Math.max(9,rh-3))+'px '+col('--font-mono');
+    c.fillStyle=on&&!bk?col('--key-hit-ink'):bk?col('--key-black-ink'):pc===0?col('--key-c-ink'):col('--key-ink'); c.fillText(noteName(m),LABELW-6,yOf(m)+0.5); };
+  // the keyboard on the left, drawn once (with its note names) and reused until the view or the colours change
+  { const kk=[lo,hi,h,dpr,S.stripTok||0].join('|');
+    if(!S.kbImg||S.kbImg.key!==kk){ const cv=document.createElement('canvas'); cv.width=Math.ceil(LABELW*dpr); cv.height=Math.round(h*dpr); const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0);
+      c.fillStyle=col('--key-white'); c.fillRect(0,0,LABELW,h);
+      for(let m=lo;m<=hi;m++){ const pc=((m%12)+12)%12, y=yOf(m);
+        if(BLACK.includes(pc)){ c.fillStyle=col('--key-black'); c.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); }
+        else if(pc===0||pc===5){ c.fillStyle=col('--lane-c'); c.fillRect(0,Math.round(y+rh/2)-0.5,LABELW,1); } }
+      c.fillStyle=col('--line'); c.fillRect(LABELW-1,0,1,h); for(let m=lo;m<=hi;m++) keyLabel(c,m,false); S.kbImg={cv,key:kk}; }
+    g.drawImage(S.kbImg.cv,0,0,LABELW,h); }
+  const lit=[];   // rows painted over below get their note name drawn again on top
+  if(S.kbNote!=null&&S.kbNote>=lo&&S.kbNote<=hi){ const y=yOf(S.kbNote); g.fillStyle=col('--accent'); g.globalAlpha=0.55; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; lit.push(S.kbNote); }
   { const ab=document.getElementById('kbAuto'); if(ab&&ab.hidden===!!S.viewManual) ab.hidden=!S.viewManual; }
   const dotM=S.playing?(S.playYou&&!S.review?S.playYou.m:NaN):S.live;
   if(!isNaN(dotM)){ const lm=Math.round(dotM), tgL=targetAt(now), gc=isNaN(tgL)?col('--you-idle'):col('--'+grade(centsDiff(dotM,tgL)));
-    if(lm>=lo&&lm<=hi){ const y=yOf(lm); g.fillStyle=gc; g.globalAlpha=0.5; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; }
+    if(lm>=lo&&lm<=hi){ const y=yOf(lm); g.fillStyle=gc; g.globalAlpha=0.5; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; lit.push(lm); }
     const yy=yOf(dotM); if(yy>0&&yy<h){ g.fillStyle=gc; g.beginPath(); g.arc(headX,yy,7,0,Math.PI*2); g.fill(); g.strokeStyle=col('--lane-bg'); g.lineWidth=2; g.stroke(); } }
-  if(hit!=null&&hit>=lo&&hit<=hi){ const y=yOf(hit); g.fillStyle=col('--key-hit'); g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.fillStyle=col('--accent'); g.fillRect(0,y-rh/2+0.5,3,rh-1); }
-  g.fillStyle=col('--line'); g.fillRect(LABELW-1,0,1,h);
-  g.textAlign='right'; g.textBaseline='middle';
-  for(let m=lo;m<=hi;m++){
-    const pc=((m%12)+12)%12, bk=BLACK.includes(pc), on=m===hit; if(!(on||rh>=13||(!bk&&rh>=8)||pc===0)) continue;
-    g.font=(pc===0||on?'600 ':'400 ')+Math.min(11,Math.max(9,rh-3))+'px '+col('--font-mono');
-    g.fillStyle=on&&!bk?col('--key-hit-ink'):bk?col('--key-black-ink'):pc===0?col('--key-c-ink'):col('--key-ink'); g.fillText(noteName(m),LABELW-6,yOf(m)+0.5);
-  }
+  if(hit!=null&&hit>=lo&&hit<=hi){ const y=yOf(hit); g.fillStyle=col('--key-hit'); g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.fillStyle=col('--accent'); g.fillRect(0,y-rh/2+0.5,3,rh-1); lit.push(hit); }
+  [...new Set(lit)].forEach(m=>{ if(m===hit) return; const pc=((m%12)+12)%12; if(!BLACK.includes(pc)&&m!==hit){ /* the name stays readable through the light tint */ } keyLabel(g,m,false); });
+  if(hit!=null&&hit>=lo&&hit<=hi) keyLabel(g,hit,true);
 }
 
 // drag to scrub
@@ -4851,7 +4884,7 @@ function sugMark(){ const s=S.sug; s.hist.push({k:s.k,tM:Float32Array.from(S.tM)
 function sugUndo(){ const s=S.sug; if(!s||!s.hist.length) return; const h=s.hist.pop(); if(S.playing) stop();
   const lyrDiff=JSON.stringify(h.lyrics)!==JSON.stringify(S.lyrics.map(l=>({t:l.t,text:l.text})));
   S.tM=h.tM; S.lyrics=h.lyrics; s.changes.forEach((c,i)=>{ c.state=h.states[i]; }); S.undo.length=Math.min(S.undo.length,h.undo);
-  S.ovwImg=null; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()}; if(lyrDiff){ $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); renderLyrics(true); S.lyrBarKey=null; }
+  S.ovwImg=null; S.stripTok=(S.stripTok||0)+1; S.onsets=computeOnsets(); S.tim={next:0,res:new Map()}; if(lyrDiff){ $('#lyrText').value=S.lyrics.map(l=>l.text).join('\n'); renderLyrics(true); S.lyrBarKey=null; }
   updateSelInfo(); sugGo(h.k); setStatus('Decision taken back.'); }
 $('#sgAcc').addEventListener('click',()=>{ sugMark(); sugAccept(S.sug.changes[S.sug.k]); sugNextOpen(); });
 $('#sgRej').addEventListener('click',()=>{ sugMark(); S.sug.changes[S.sug.k].state='rej'; sugNextOpen(); });
