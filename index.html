@@ -231,7 +231,7 @@ html:has(.key-view:not([hidden])),body:has(.key-view:not([hidden])){overflow:hid
 .tr-row2>button,.tr-row2>label{width:100%;justify-content:center;min-width:0;white-space:nowrap;padding-left:6px;padding-right:6px}
 /* bookmarks: a ribbon in the top right corner of the pitch lane */
 .lane-wrap.editing .lane-bm{display:none}
-.pick-wrap.lane-bm{position:absolute;top:6px;right:6px;z-index:5} .lane-bm .sec-btn{padding:7px 8px;background:color-mix(in srgb,var(--surface) 88%,transparent);opacity:.95;gap:4px} .lane-bm .bm-txt{display:none}
+.pick-wrap.lane-bm{position:absolute;top:6px;right:6px;z-index:5;display:flex;gap:6px;align-items:flex-start} .lane-bm .trail-btn[aria-pressed="false"]{opacity:.55} .lane-bm .trail-btn[aria-pressed="true"]{color:var(--accent)} .lane-bm .sec-btn{padding:7px 8px;background:color-mix(in srgb,var(--surface) 88%,transparent);opacity:.95;gap:4px} .lane-bm .bm-txt{display:none}
 .lane-bm .sec-btn svg{width:18px;height:18px} .lane-bm .sec-btn[aria-expanded="true"]{opacity:1;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
 .tr-tools{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,.9fr);gap:8px} .tr-tools>button,.tr-tools>label,.tr-tools .pick-wrap>button{width:100%;height:100%;justify-content:center;min-width:0;white-space:nowrap;padding-left:6px;padding-right:6px}
 .tr-tools .pick-wrap>button{gap:5px}
@@ -629,7 +629,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 
   <section class="panel lane">
     <div class="lyr" id="lyrBar" hidden tabindex="-1"><div class="lyr-text"><div class="lyr-next lyr-prev" id="lyrPrev" hidden></div><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div><button id="sheetOpen3" class="lyr-sheet acc-btn" type="button" hidden aria-label="Open the lyrics sheet" title="Lyrics sheet"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 12h6M10 15.5h6M10 19h4"/></svg><span>Sheet</span></button><button id="sheetFold" class="sheet-fold" type="button" hidden aria-label="Hide the Sheet button" title="Hide the Sheet button (more room for the lyrics)">›</button></div>
-    <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><div class="pick-wrap lane-bm"><button id="secBtn" type="button" class="sec-btn" aria-haspopup="menu" aria-expanded="false" title="Bookmarks: save a passage or open a saved one (sections of the song inside too)"><svg class="bm-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg><span class="bm-txt">Bookmarks</span><span class="bm-n" id="bmCount" hidden></span></button><div class="pick-menu" id="secMenu" role="menu" hidden></div></div><div class="lane-loading" id="laneLoading" hidden role="status" aria-live="polite"></div><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
+    <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><div class="pick-wrap lane-bm"><button id="trailBtn" type="button" class="sec-btn trail-btn" aria-pressed="true" title="Show my pitch line while playing (key: L). Off: only the dot at the playhead; your singing is still recorded for Analyse." aria-label="Show my pitch line while playing"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 15c2.5 0 3-6 5.5-6s3 8 5.5 8 3-10 5.5-10c1.3 0 2 1 3.5 1"/></svg></button><button id="secBtn" type="button" class="sec-btn" aria-haspopup="menu" aria-expanded="false" title="Bookmarks: save a passage or open a saved one (sections of the song inside too)"><svg class="bm-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg><span class="bm-txt">Bookmarks</span><span class="bm-n" id="bmCount" hidden></span></button><div class="pick-menu" id="secMenu" role="menu" hidden></div></div><div class="lane-loading" id="laneLoading" hidden role="status" aria-live="polite"></div><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
     <canvas id="ovw" aria-label="Whole song overview: tap or drag to jump"></canvas>
     <div class="rep-offer" id="repOffer" hidden role="status"></div>
     <div class="prac-bar" id="pracBar" hidden role="status"><span class="small" id="pracInfo"></span><div class="row"><button id="pracPrev" type="button" aria-label="Previous bookmark">⏮</button><button id="pracNext" type="button">Next ⏭</button><button id="pracStop" type="button">Stop practice</button></div></div>
@@ -1165,7 +1165,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-04 c';
+const APP_VERSION='2026-11-04 d';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4164,10 +4164,10 @@ function step(){
     if(!isNaN(you)&&tSung>=0){
       const tg=targetAt(tSung); let c=null;
       if(!isNaN(tg)){ const d=centsDiff(you,tg); c=grade(d); S.stat.n++; S.stat.sum+=d; if(c==='good') S.stat.hit++; if(loopActive()&&inLoop(tSung)){ S.pass.n++; S.pass.sum+=d; if(c==='good') S.pass.hit++; } }
-      S.pts.push({t:tSung,m:you,c});
-    } else if(tSung>=0) S.pts.push({t:tSung,m:NaN,c:null});
+      S.pts.push({t:tSung,m:you,c}); S.playYou={m:you,c};
+    } else { S.playYou=null; if(tSung>=0) S.pts.push({t:tSung,m:NaN,c:null}); }
     scoreOnsets(tSung);
-  }
+  } else S.playYou=null;
   // readout
   const tgShow=targetAt(now-(S.delay+ANA_LAG)*S.rate);
   $('#rTarget').textContent=isNaN(tgShow)?'–':noteName(Math.round(tgShow));
@@ -4448,8 +4448,9 @@ function draw(){
       if(r.g!=='good'){ const lab=r.off===null?'×':(r.off>0?'+':'−')+Math.round(Math.abs(r.off)*1000); g.fillText(lab,x,y-rh*1.4); }
     }
   }
+  const trailOn=S.showTrail||!S.playing||!!S.review;   // switched off: hidden while playing, still recorded for Analyse and for looking at after you stop
   // previous loop pass (faint)
-  if(S.ghost.length){
+  if(trailOn&&S.ghost.length){
     g.strokeStyle=col('--ghost'); g.lineWidth=3; g.lineCap='round'; let pv=null;
     for(const p of S.ghost){ if(isNaN(p.m)||p.t<t0-0.2||p.t>t1){ pv=null; continue; }
       if(pv&&p.t-pv.t<0.12&&Math.abs(p.m-pv.m)<1.5){ g.beginPath(); g.moveTo(xOf(pv.t),yOf(pv.m)); g.lineTo(xOf(p.t),yOf(p.m)); g.stroke(); }
@@ -4459,7 +4460,7 @@ function draw(){
   g.lineWidth=3; g.lineCap='round';
   const colors={good:col('--good'),near:col('--near'),off:col('--off'),none:col('--you-idle')};
   let prev=null;
-  for(const p of (S.review?S.review.take.pts:S.pts)){
+  for(const p of (!trailOn?[]:S.review?S.review.take.pts:S.pts)){
     if(p.t<t0-0.2||p.t>t1){ prev=null; continue; }
     if(isNaN(p.m)){ prev=null; continue; }
     if(prev&&p.t-prev.t<0.12&&Math.abs(p.m-prev.m)<1.5){
@@ -4502,9 +4503,10 @@ function draw(){
   const tgNow=targetAt(now), hit=isNaN(tgNow)?null:Math.round(tgNow);
   if(S.kbNote!=null&&S.kbNote>=lo&&S.kbNote<=hi){ const y=yOf(S.kbNote); g.fillStyle=col('--accent'); g.globalAlpha=0.55; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; }
   { const ab=document.getElementById('kbAuto'); if(ab&&ab.hidden===!!S.viewManual) ab.hidden=!S.viewManual; }
-  if(!S.playing&&!isNaN(S.live)){ const lm=Math.round(S.live), tgL=targetAt(now), gc=isNaN(tgL)?col('--you-idle'):col('--'+grade(centsDiff(S.live,tgL)));
+  const dotM=S.playing?(S.playYou&&!S.review?S.playYou.m:NaN):S.live;
+  if(!isNaN(dotM)){ const lm=Math.round(dotM), tgL=targetAt(now), gc=S.playing?col('--'+(S.playYou.c||'you-idle')):isNaN(tgL)?col('--you-idle'):col('--'+grade(centsDiff(dotM,tgL)));
     if(lm>=lo&&lm<=hi){ const y=yOf(lm); g.fillStyle=gc; g.globalAlpha=0.5; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; }
-    const yy=yOf(S.live); if(yy>0&&yy<h){ g.fillStyle=gc; g.beginPath(); g.arc(headX,yy,7,0,Math.PI*2); g.fill(); g.strokeStyle=col('--lane-bg'); g.lineWidth=2; g.stroke(); } }
+    const yy=yOf(dotM); if(yy>0&&yy<h){ g.fillStyle=gc; g.beginPath(); g.arc(headX,yy,7,0,Math.PI*2); g.fill(); g.strokeStyle=col('--lane-bg'); g.lineWidth=2; g.stroke(); } }
   if(hit!=null&&hit>=lo&&hit<=hi){ const y=yOf(hit); g.fillStyle=col('--key-hit'); g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.fillStyle=col('--accent'); g.fillRect(0,y-rh/2+0.5,3,rh-1); }
   g.fillStyle=col('--line'); g.fillRect(LABELW-1,0,1,h);
   g.textAlign='right'; g.textBaseline='middle';
@@ -5632,6 +5634,12 @@ $('#pracStop').addEventListener('click',()=>pracStop(false));
 // the bookmark button: filled when the open song has bookmarks, with their number
 function paintBmBtn(){ const n=bmGet().filter(bmMine).length, b=$('#secBtn'), c=$('#bmCount'); if(!b) return; b.classList.toggle('has-bm',n>0); c.hidden=!n; c.textContent=n; }
 function closeSecMenu(){ S.secOpen=false; $('#secMenu').hidden=true; $('#secBtn').setAttribute('aria-expanded','false'); }
+// your pitch line while playing: on or off (the dot at the playhead stays; singing is always recorded)
+S.showTrail=(()=>{ try{ return localStorage.getItem('pc-trail')!=='0'; }catch(e){ return true; } })();
+function setTrail(on){ S.showTrail=on; try{ localStorage.setItem('pc-trail',on?'1':'0'); }catch(e){} $('#trailBtn').setAttribute('aria-pressed',String(on)); draw(); setStatus(on?'Your pitch line is shown while you sing.':'Pitch line hidden while playing: follow the dot. Your singing is still recorded; stop to see it, or use Analyse.'); }
+$('#trailBtn').setAttribute('aria-pressed',String(S.showTrail));
+$('#trailBtn').addEventListener('click',e=>{ e.stopPropagation(); setTrail(!S.showTrail); });
+document.addEventListener('keydown',e=>{ if((e.key==='l'||e.key==='L')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName||'')&&$('#dlgView').hidden){ e.preventDefault(); setTrail(!S.showTrail); } });
 $('#secBtn').addEventListener('click',e=>{ e.stopPropagation(); $('#secMenu').hidden?openSecMenu():closeSecMenu(); });
 document.addEventListener('click',e=>{ if(!$('#secMenu').hidden&&!e.target.closest('#secMenu')&&!e.target.closest('#secBtn')) closeSecMenu(); });
 let wheelAcc=0, wheelTimer=null;
