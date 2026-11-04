@@ -1173,7 +1173,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-04 p';
+const APP_VERSION='2026-11-04 q';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2337,7 +2337,7 @@ function beatsIn(a,b,div,fn){ // every grid point (beat / div) from a to b: fn(t
 }
 function hasBars(){ return !!S.beat&&(S.beat.bar!=null||(S.beat.changes||[]).some(c=>c.bar!=null)); }
 // snap step: the smallest beat line on screen (see visDiv)
-function lanePps(){ const c=document.getElementById('lane'); return ((c&&c.clientWidth)||600)-LABELW>0?(((c&&c.clientWidth)||600)-LABELW)/S.win:50; }
+function lanePps(){ let cw=S.laneCW; if(!cw){ const c=document.getElementById('lane'); cw=(c&&c.clientWidth)||600; } return cw-LABELW>0?(cw-LABELW)/S.win:50; }   // width remembered by size(), not re-measured many times a frame
 // the smallest beat lines on screen (1 = beats, 2 = eighths, 4 = sixteenths); everything snaps to them
 function visDiv(t){ if(!S.beat) return 1; const P=beatP(t), pps=lanePps(); if(S.altHeld||S.win<=1.0001||pps*P/4>=24) return 4; if(pps*P/2>=12) return 2; return 1; }
 function fineSnap(){ return !!S.beat&&visDiv()===4; }
@@ -4365,11 +4365,13 @@ function showResult(){
 // ===== drawing =====
 const canvas=$('#lane'), g=canvas.getContext('2d'); const LABELW=44;
 function laneH(){ return Math.max(260,Math.min(window.innerHeight*0.5,460)); }
-function size(){ const dpr=window.devicePixelRatio||1, w=canvas.clientWidth||canvas.parentElement.clientWidth, h=laneH(); canvas.style.height=h+'px'; canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr); }
+const laneDpr=()=>Math.min(2,window.devicePixelRatio||1);   // the pitch graph is drawn at most 2× sharp: on very sharp phone screens the extra pixels cost a lot of drawing time and are not visible
+function size(){ const dpr=laneDpr(), w=canvas.clientWidth||canvas.parentElement.clientWidth, h=laneH(); S.laneCW=canvas.clientWidth||0; canvas.style.height=h+'px'; canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr); }
 // ===== song overview bar =====
 const ovw=document.getElementById('ovw'), og=ovw.getContext('2d');
+new ResizeObserver(()=>{ S.ovwW=ovw.clientWidth; }).observe(ovw);
 function drawOverview(t0,t1,cs){
-  const col=k=>cs.getPropertyValue(k).trim(), dpr=window.devicePixelRatio||1, W=ovw.clientWidth||300, H=34;
+  const col=colOf, dpr=laneDpr(), W=S.ovwW||ovw.clientWidth||300, H=34;   // width from the resize watcher: reading it every frame forces the browser to re-lay out the page
   if(ovw.width!==Math.round(W*dpr)){ ovw.width=Math.round(W*dpr); ovw.height=Math.round(H*dpr); S.ovwImg=null; }
   og.setTransform(dpr,0,0,dpr,0,0); og.clearRect(0,0,W,H);
   const dur=S.dur||0; if(!dur) return; const X=t=>Math.max(0,Math.min(W,t/dur*W));
@@ -4395,9 +4397,16 @@ function drawOverview(t0,t1,cs){
   og.strokeStyle=col('--accent'); og.lineWidth=1; og.strokeRect(X(t0)+0.5,0.5,Math.max(2,X(t1)-X(t0))-1,H-1);
   og.fillStyle=col('--warm'); og.fillRect(Math.round(X(visTime()))-1,0,2,H);
 }
+// lyric labels on the graph: shortened to fit, remembered so it isn't measured letter by letter every frame
+const LYRFIT=new Map();
+function lyrFit(g,text,room){ const key=g.font+'|'+text+'|'+Math.floor(room/6); let r=LYRFIT.get(key); if(r) return r; let t=text; while(t.length>1&&g.measureText(t).width>room) t=t.slice(0,-2)+'…'; r={t,w:g.measureText(t).width}; if(LYRFIT.size>3000) LYRFIT.clear(); LYRFIT.set(key,r); return r; }
+// colours of the graph, read once from the page styles (re-read when the phone switches light/dark)
+const COLC=new Map(); let COLCS=null;
+function colOf(k){ let v=COLC.get(k); if(v===undefined){ if(!COLCS) COLCS=getComputedStyle(document.documentElement); v=COLCS.getPropertyValue(k).trim(); COLC.set(k,v); } return v; }
+function colReset(){ COLC.clear(); COLCS=null; S.ovwImg=null; }
 function draw(){
-  const cs=getComputedStyle(document.documentElement), col=k=>cs.getPropertyValue(k).trim();
-  const dpr=window.devicePixelRatio||1, w=canvas.width/dpr, h=canvas.height/dpr;
+  const cs=null, col=colOf;
+  const dpr=laneDpr(), w=canvas.width/dpr, h=canvas.height/dpr;
   g.setTransform(dpr,0,0,dpr,0,0);
   const {lo,hi}=S.view, rows=hi-lo+1, rh=(h-8)/rows, yOf=m=>4+(hi+0.5-m)*rh;
   const now=visTime(), pps=(w-LABELW)/S.win, headX=LABELW+(w-LABELW)*0.3, xOf=t=>headX+(t-now)*pps;
@@ -4513,8 +4522,7 @@ function draw(){
       if(x>=LABELW){ g.fillStyle=tickCol; g.fillRect(Math.round(x)-(movable?1:0),LY.tick,movable?2:1,22); }
       const xn=k+1<timed.length?xOf(timed[k+1].t):w, room=Math.max(0,Math.min(w,xn)-x-10);
       if(room<24){ S.lyrHits.push({i:S.lyrics.indexOf(L),x,x1:x+10}); continue; }
-      let txt=L.text; while(txt.length>1&&g.measureText(txt).width>room-8) txt=txt.slice(0,-2)+'…';
-      const tw=g.measureText(txt).width, x0=Math.max(LABELW+2,x);
+      const fit=lyrFit(g,L.text,room-8), txt=fit.t, tw=fit.w, x0=Math.max(LABELW+2,x);
       g.fillStyle=col('--lyr-bg'); g.fillRect(x0+3,LY.box,tw+8,17);
       if(drag){ g.strokeStyle=col('--accent'); g.lineWidth=1.5; g.strokeRect(x0+3.5,LY.box+0.5,tw+7,16); }
       g.fillStyle=col('--fg'); g.fillText(txt,x0+7,LY.txt);
@@ -5786,7 +5794,7 @@ try{ if(localStorage.getItem('pc-ignoreoct')==='1'){ $('#ignoreOct').checked=tru
 try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
 try{ const d=localStorage.getItem('pc-delay'); if(d){ $('#delay').value=d; S.delay=+d/1000; $('#delayV').textContent=d+' ms'; } }catch(x){}
 new ResizeObserver(()=>{ size(); draw(); }).observe(canvas);
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{ colReset(); draw(); });
 document.addEventListener('visibilitychange',async()=>{
   if(document.hidden) return;
   updateTime(); draw();
