@@ -102,6 +102,7 @@ html:has(.key-view:not([hidden])),body:has(.key-view:not([hidden])){overflow:hid
 .readout{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;padding:0}
 .readout>div{padding:10px 14px;display:flex;flex-direction:column;min-width:0}
 .readout>div+div{border-left:1px solid var(--line)}
+.readout.no-score{grid-template-columns:repeat(3,minmax(0,1fr))} .readout.no-score>.rd-score{display:none}   /* pitch line off: no scores either */
 #rTargetBox{cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;border-radius:8px 0 0 8px}
 /* the two pressable boxes: the value sits in a pill with an icon, so it reads as a button */
 .readout b.rd-pill{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;max-width:100%;padding:2px 10px 2px 11px;margin-top:2px;border:1px solid color-mix(in srgb,var(--accent) 25%,var(--line));border-radius:8px;background:var(--accent-soft);color:var(--accent);transition:background .12s,color .12s}
@@ -622,14 +623,14 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <div id="rTargetBox" role="button" tabindex="0" title="Press to hear the target note; hold while playing to hear the tune follow the line"><span>Target note</span><b id="rTarget" class="rd-pill rd-hear">–</b></div>
     <div class="you-cell"><span>You</span><div class="you-row"><b id="rYou">–</b><label class="btn icon-btn mic-btn guide-on" for="micOn" id="micLbl" title="Sing with microphone: on"><input id="micOn" type="checkbox" checked aria-label="Sing with microphone"><svg class="ic-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/><path d="M8 22h8"/></svg><svg class="ic-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1"/><path d="M19 10v1a7 7 0 0 1-.9 3.4"/><path d="M5 10v1a7 7 0 0 0 11 5.7"/><path d="M12 18v4"/><path d="M8 22h8"/><path d="M3 3l18 18"/></svg><span class="dot" id="micDot"></span></label></div></div>
     <div id="rKeyBox" role="button" tabindex="0" title="The key of the song: press to see its notes on a piano"><span>Key</span><b id="rKey" class="rd-pill rd-keys">–</b></div>
-    <div><span>Off by</span><b id="rCents">–</b></div>
-    <div><span>On pitch</span><b id="rScore">–</b></div>
-    <div><span>On time</span><b id="rTime">–</b></div>
+    <div class="rd-score"><span>Off by</span><b id="rCents">–</b></div>
+    <div class="rd-score"><span>On pitch</span><b id="rScore">–</b></div>
+    <div class="rd-score"><span>On time</span><b id="rTime">–</b></div>
   </section>
 
   <section class="panel lane">
     <div class="lyr" id="lyrBar" hidden tabindex="-1"><div class="lyr-text"><div class="lyr-next lyr-prev" id="lyrPrev" hidden></div><div class="lyr-now" id="lyrNow"></div><div class="lyr-next" id="lyrNext"></div></div><button id="sheetOpen3" class="lyr-sheet acc-btn" type="button" hidden aria-label="Open the lyrics sheet" title="Lyrics sheet"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 12h6M10 15.5h6M10 19h4"/></svg><span>Sheet</span></button><button id="sheetFold" class="sheet-fold" type="button" hidden aria-label="Hide the Sheet button" title="Hide the Sheet button (more room for the lyrics)">›</button></div>
-    <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><div class="pick-wrap lane-bm"><button id="trailBtn" type="button" class="sec-btn trail-btn" aria-pressed="true" title="Show my pitch line while playing (key: L). Off: only the dot at the playhead; your singing is still recorded for Analyse." aria-label="Show my pitch line while playing"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 15c2.5 0 3-6 5.5-6s3 8 5.5 8 3-10 5.5-10c1.3 0 2 1 3.5 1"/></svg></button><button id="secBtn" type="button" class="sec-btn" aria-haspopup="menu" aria-expanded="false" title="Bookmarks: save a passage or open a saved one (sections of the song inside too)"><svg class="bm-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg><span class="bm-txt">Bookmarks</span><span class="bm-n" id="bmCount" hidden></span></button><div class="pick-menu" id="secMenu" role="menu" hidden></div></div><div class="lane-loading" id="laneLoading" hidden role="status" aria-live="polite"></div><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
+    <div class="lane-wrap"><canvas id="lane" aria-label="Target pitch line and your sung pitch"></canvas><div class="pick-wrap lane-bm"><button id="trailBtn" type="button" class="sec-btn trail-btn" aria-pressed="true" title="Show my pitch line and scores (key: L). Off: only the dot at the playhead; your singing is still recorded for Analyse." aria-label="Show my pitch line and scores"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 15c2.5 0 3-6 5.5-6s3 8 5.5 8 3-10 5.5-10c1.3 0 2 1 3.5 1"/></svg></button><button id="secBtn" type="button" class="sec-btn" aria-haspopup="menu" aria-expanded="false" title="Bookmarks: save a passage or open a saved one (sections of the song inside too)"><svg class="bm-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg><span class="bm-txt">Bookmarks</span><span class="bm-n" id="bmCount" hidden></span></button><div class="pick-menu" id="secMenu" role="menu" hidden></div></div><div class="lane-loading" id="laneLoading" hidden role="status" aria-live="polite"></div><button id="kbUp" class="kb-arrow" type="button" aria-label="Show higher notes" title="Show higher notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button id="kbDown" class="kb-arrow" type="button" aria-label="Show lower notes" title="Show lower notes"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><button id="kbAuto" type="button" hidden title="Back to the automatic note range">Auto</button></div>
     <canvas id="ovw" aria-label="Whole song overview: tap or drag to jump"></canvas>
     <div class="rep-offer" id="repOffer" hidden role="status"></div>
     <div class="prac-bar" id="pracBar" hidden role="status"><span class="small" id="pracInfo"></span><div class="row"><button id="pracPrev" type="button" aria-label="Previous bookmark">⏮</button><button id="pracNext" type="button">Next ⏭</button><button id="pracStop" type="button">Stop practice</button></div></div>
@@ -1165,7 +1166,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-04 e';
+const APP_VERSION='2026-11-04 f';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4445,6 +4446,7 @@ function draw(){
     for(let k=lowerOnset(t0-0.2);k<S.onsets.length&&S.onsets[k].t<=t1;k++){
       const o=S.onsets[k], x=xOf(o.t), y=yOf(o.m), r=S.tim.res.get(k);
       if(x<LABELW) continue;
+      if(r&&!S.showTrail&&!S.review){ if(S.timMarks!=='off'){ g.fillStyle=col('--lane-c'); g.fillRect(Math.round(x),y-rh*0.9,1.5,rh*1.8); } continue; }   // pitch line off: no timing verdicts either
       if(!r){ if(S.timMarks==='off') continue; g.fillStyle=col('--lane-c'); g.fillRect(Math.round(x),y-rh*0.9,1.5,rh*1.8); continue; }
       if(S.timMarks==='off'){ continue; }
       if(S.timMarks==='gentle'){ const yy=y-rh*0.9-4; g.beginPath(); g.arc(x,yy,2.6,0,Math.PI*2);
@@ -4454,7 +4456,7 @@ function draw(){
       if(r.g!=='good'){ const lab=r.off===null?'×':(r.off>0?'+':'−')+Math.round(Math.abs(r.off)*1000); g.fillText(lab,x,y-rh*1.4); }
     }
   }
-  const trailOn=S.showTrail||!S.playing||!!S.review;   // switched off: hidden while playing, still recorded for Analyse and for looking at after you stop
+  const trailOn=S.showTrail||!!S.review;   // switched off: hidden (also when paused) until switched on again; still recorded for Analyse
   // previous loop pass (faint)
   if(trailOn&&S.ghost.length){
     g.strokeStyle=col('--ghost'); g.lineWidth=3; g.lineCap='round'; let pv=null;
@@ -5642,8 +5644,9 @@ function paintBmBtn(){ const n=bmGet().filter(bmMine).length, b=$('#secBtn'), c=
 function closeSecMenu(){ S.secOpen=false; $('#secMenu').hidden=true; $('#secBtn').setAttribute('aria-expanded','false'); }
 // your pitch line while playing: on or off (the dot at the playhead stays; singing is always recorded)
 S.showTrail=(()=>{ try{ return localStorage.getItem('pc-trail')!=='0'; }catch(e){ return true; } })();
-function setTrail(on){ S.showTrail=on; try{ localStorage.setItem('pc-trail',on?'1':'0'); }catch(e){} $('#trailBtn').setAttribute('aria-pressed',String(on)); draw(); setStatus(on?'Your pitch line is shown while you sing.':'Pitch line hidden while playing: follow the dot. Your singing is still recorded; stop to see it, or use Analyse.'); }
-$('#trailBtn').setAttribute('aria-pressed',String(S.showTrail));
+function setTrail(on){ S.showTrail=on; try{ localStorage.setItem('pc-trail',on?'1':'0'); }catch(e){} paintTrail(); draw(); setStatus(on?'Your pitch line and scores are shown again.':'Pitch line and scores hidden: follow the dot. Your singing is still recorded; turn the line on again to see it, or use Analyse.'); }
+function paintTrail(){ $('#trailBtn').setAttribute('aria-pressed',String(S.showTrail)); $('.readout').classList.toggle('no-score',!S.showTrail); }
+paintTrail();
 $('#trailBtn').addEventListener('click',e=>{ e.stopPropagation(); setTrail(!S.showTrail); });
 document.addEventListener('keydown',e=>{ if((e.key==='l'||e.key==='L')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName||'')&&$('#dlgView').hidden){ e.preventDefault(); setTrail(!S.showTrail); } });
 $('#secBtn').addEventListener('click',e=>{ e.stopPropagation(); $('#secMenu').hidden?openSecMenu():closeSecMenu(); });
