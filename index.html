@@ -452,6 +452,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .use-bars{display:flex;align-items:flex-end;gap:2px;height:48px;margin-top:6px} .use-bars i{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:1px;opacity:.85} .use-bars i.z{background:var(--line)}
 .use-axis{display:flex;justify-content:space-between}
 .new-ver.use-note{top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:14px;width:min(560px,calc(100% - 24px));box-sizing:border-box;justify-content:flex-end} .new-ver.use-note span{flex:1 1 100%}
+.lane-hint{display:block;font-size:14px;line-height:1.5;color:var(--fg);margin-top:6px} .lane-hint ol,.lane-hint ul{margin:4px 0 10px;padding-left:20px} .lane-hint li{margin:2px 0} .lane-hint p{margin:6px 0} .lane-hint[hidden]{display:none}
 .back-toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:80;padding:10px 16px;border-radius:999px;background:var(--fg);color:var(--bg);font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);white-space:nowrap}
 .new-ver{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);padding:10px 14px;border-radius:12px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px;color:var(--fg)}
 .ana-row{gap:8px;margin-top:10px;align-items:center}
@@ -712,7 +713,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           </div>
       </div>
       <div class="end-tip" id="endTip" hidden role="status"><span class="small">Heard a wrong note or a lyric out of time? Fix it with the pencil <b>✎</b> above (words: in the Lyrics editor), then tap Suggest my edits. Every fix helps the whole choir.</span><div class="row"><button id="endTipGo" type="button" class="primary">Show me</button><button id="endTipOff" type="button" class="link-btn">Don't show again</button><button id="endTipX" type="button" class="link-btn" aria-label="Close the tip">Close</button></div></div>
-      <div class="row hint-row"><div class="hint-top"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span class="time" id="time">0:00 / 0:00</span></div><span id="laneHint" hidden>Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag the A and B tabs at the top to make the loop longer or shorter. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.</span><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
+      <div class="row hint-row"><div class="hint-top"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span class="time" id="time">0:00 / 0:00</span></div><div id="laneHint" class="lane-hint" hidden><b>Getting started</b><ol><li><b>Open the link</b> for your part that the moderator shared. The app downloads that part’s songs to your phone (you can choose which ones).</li><li><b>Choose a song</b> and press <b>Play</b>. You hear the voice of your part and the backing, each with its own volume.</li><li><b>Turn on the microphone</b> to see your own pitch as you sing. The readouts show the target note, how far off you are, and how much of the time you were on pitch and on time.</li></ol><b>Useful things to try</b><ul><li><b>Loop</b> a difficult passage, slow it down with the <b>tempo</b> (BPM) button, and <b>bookmark</b> it to come back later.</li><li><b>Key</b> opens a playable piano keyboard (several fingers at once, with a sustain pedal).</li><li><b>Analyse</b> listens to a run-through and points out the places worth practising.</li><li><b>Warm-up</b>: a short session of scales, arpeggios and sirens in your part’s range.</li><li><b>Lyrics</b> follow along, with a countdown before each entry after a long rest.</li></ul><p><b>Found a mistake?</b> Tap the pencil ✎. You can fix a wrong note (<b>Edit target line</b>) or the timing of a lyric line (<b>Time lyrics</b>) and send it as a suggestion. If you can hear that something is off but don’t know what, tap <b>⚑ Sounds off</b> to mark the spot for someone else to check. Suggestions are anonymous, and editing and suggesting is very welcome: it makes the songs better for everyone.</p><p><b>Updates:</b> when the moderator publishes new or corrected songs, tap <b>Update</b>. When a new version of the app itself is out, a banner offers to reload.</p></div><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
     </div>
   </section>
 
@@ -1168,7 +1169,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-04 i';
+const APP_VERSION='2026-11-04 j';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3188,7 +3189,7 @@ function selectFragmentAt(t){
 function setEditMode(on){
   if(on){ timingTried(); edSnapTake(); }
   S.editMode=on; if(on) setEdFold(true); $('#editBtn').setAttribute('aria-pressed',String(on)); $('#editBtn').textContent=on?'Done editing':'Edit target line';
-  $('#editBar').hidden=!on; $('#laneHint').textContent=on?(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'):'Tap the lane to play or pause. Hold to set loop start, then end; hold inside a loop to clear it, hold outside it to start a new one. Drag the A and B tabs at the top to make the loop longer or shorter. Drag to move back or forward, also while playing. Pinch to zoom. Tap or slide over the keys to hear notes; ▲ ▼ move the keyboard, pinch it to show more notes. Use the strip below the lane, or Bookmarks (saved passages and the song’s sections), to get anywhere fast.'+(matchMedia('(pointer:fine)').matches?' Keys: Space play/pause, ← → one beat back/forward.':'');
+  $('#editBar').hidden=!on; if(on) $('#laneHint').textContent=(matchMedia('(pointer:fine)').matches?'Right-drag (or middle-drag) to select, starting on the row of the note you want to add; right-click selects half a beat; a long press also selects. Click plays and pauses, drag moves along the song. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Zoom in (or hold Alt) for quarter beats. Keys: ← → move half a beat, Shift+← → select from the playhead, Ctrl+← → jump half a screen, Space play/pause, ↑ ↓ semitone (Shift: octave), Enter fill, Delete remove, Ctrl+Z undo, Esc clear.':'The lane works as when practising: tap plays and pauses, drag moves along the song, two fingers zoom. Long-press to select a beat (start on the row of the note you want to add); keep holding and drag to select more, or long-press elsewhere to extend. A long press inside the selection starts a new one. Drag a selection’s edge handle to stretch it. Drag a lyric label at the bottom to move it. Two fingers: move and zoom. Tap a key to hear it; ▲ ▼ or a pinch on the keyboard change the note range.'); else if(typeof LANE_HINT==='string') $('#laneHint').innerHTML=LANE_HINT;
   if(!on) S.sel=null; updateSelInfo(); draw(); S.lyrBarKey=null; updateLyricBar(songTime()); edLaneClass();
 }
 // bookmarks are hidden while an editor is open
@@ -5187,7 +5188,8 @@ $('#addLib').addEventListener('click',e=>addCurrentToLib(e.currentTarget));
 $('#sepFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) separateSong(f).finally(()=>e.target.value=''); });
 $('#sepCancel').addEventListener('click',cancelSeparation);
 initParts().then(renderLib);
-if(matchMedia('(pointer:fine)').matches) $('#laneHint').textContent+=' Keys: Space play/pause, ← → one beat back/forward.';
+if(matchMedia('(pointer:fine)').matches) $('#laneHint').insertAdjacentHTML('beforeend','<p><b>Keys:</b> Space play/pause, ← → one beat back/forward, L pitch line on/off, M mute.</p>');
+var LANE_HINT=$('#laneHint').innerHTML;
 $('#appVer').textContent='Part Coach version '+APP_VERSION; $('#verMark').textContent=APP_VERSION.split(' ').pop(); $('#verMark').title='Version '+APP_VERSION;
 $('#loopOn').addEventListener('change',e=>{ S.loop.on=e.target.checked; S.passes=[]; S.tPasses=[]; S.ghost=[]; S.pass={n:0,hit:0,sum:0}; if(S.loop.on&&S.playing){ const t=songTime(); if(t<loopStart()||t>=S.loop.b) loopRestart(); } updateLoopUI(); draw(); });
 $('#lead').addEventListener('change',e=>{ S.loop.lead=+e.target.value; });
@@ -5742,19 +5744,28 @@ document.addEventListener('visibilitychange',async()=>{
 // ===== warm-up (made by the app: 5-note scales, arpeggios, sirens) =====
 function warmupPlan(rk){ const o=rk==='high'?12:0, P=[]; // items: {m, b (beats), to (glide target)} ; rest: {rest:b}
   const lines=[];
-  const rep=(text,notes)=>{ lines.push({text,at:P.length}); notes.forEach(n=>P.push(n)); };
+  const rep=(text,notes,root)=>{ lines.push({text,at:P.length}); P.push({chord:root,b:2},{rest:1}); notes.forEach(n=>P.push(n)); };   // like a teacher: the chord first, then you sing
   for(const k of [0,1,2,3,4,5,4,2,0]){ const r=48+o+k, sc=[0,2,4,5,7,5,4,2,0];
-    rep('“ma” · scale from '+noteName(r),sc.map((d,i)=>({m:r+d,b:i===8?2:1})).concat([{rest:2}])); }
+    rep('“ma” · scale from '+noteName(r),sc.map((d,i)=>({m:r+d,b:i===8?2:1})).concat([{rest:2}]),r); }
   P.push({rest:4});
   for(const k of [0,1,2,3,2,0]){ const r=45+o+k, ar=[0,4,7,12,7,4,0], bb=[1,1,1,2,1,1,2];
-    rep('“mi” · arpeggio from '+noteName(r),ar.map((d,i)=>({m:r+d,b:bb[i]})).concat([{rest:3}])); }
+    rep('“mi” · arpeggio from '+noteName(r),ar.map((d,i)=>({m:r+d,b:bb[i]})).concat([{rest:3}]),r); }
   P.push({rest:4});
-  for(let n=0;n<2;n++){ const r=48+o; rep('“oo” · siren: slide up and down',[{m:r,b:8,to:r+12},{m:r+12,b:8,to:r},{rest:4}]); }
+  for(let n=0;n<2;n++){ const r=48+o; rep('“oo” · siren: slide up and down',[{m:r,b:8,to:r+12},{m:r+12,b:8,to:r},{rest:4}],r); }
   return {P,lines}; }
 function warmVoice(){ try{ const v=localStorage.getItem('pc-warmvoice'); return ['bright','ah','oo'].includes(v)?v:'bright'; }catch(e){ return 'bright'; } }
 async function makeWarmup(rk){
   const sr=22050, beat=0.5, lead=2.0, {P,lines}=warmupPlan(rk);
   const total=lead+P.reduce((a,x)=>a+(x.rest||x.b),0)*beat+1, oc=new OfflineAudioContext(1,Math.ceil(total*sr),sr);
+  // the chords go on their own track (the Backing button), played with the piano recordings when they are on the phone, else a simple piano-like tone
+  const cc=new OfflineAudioContext(1,Math.ceil(total*sr),sr), cbus=cc.createGain(); cbus.gain.value=0.55; cbus.connect(cc.destination);
+  const chordNotes=r=>[r-12,r,r+4,r+7];
+  const need=[...new Set(P.filter(x=>x.chord!=null).flatMap(x=>chordNotes(x.chord)))], smp={};
+  const nearest=m=>{ let best=null; for(const g of GRAND_NOTES){ if(best==null||Math.abs(g-m)<Math.abs(best-m)) best=g; } return best; };
+  try{ await Promise.race([Promise.all([...new Set(need.map(nearest))].map(async g=>{ smp[g]=await grandLoad(g); })),new Promise((_,no)=>setTimeout(()=>no(new Error('slow')),6000))]); }catch(e){}
+  const playChordNote=(m,st,dur)=>{ const g=nearest(m), buf=smp[g], gn=cc.createGain(), v=m<48?0.55:0.4;
+    if(buf){ const src=cc.createBufferSource(); src.buffer=buf; src.playbackRate.value=Math.pow(2,(m-g)/12); gn.gain.setValueAtTime(v,st); gn.gain.setValueAtTime(v,st+dur-0.15); gn.gain.linearRampToValueAtTime(0,st+dur+0.35); src.connect(gn).connect(cbus); src.start(st); src.stop(st+dur+0.4); return; }
+    [1,2,3,4].forEach((h,k)=>{ const o=cc.createOscillator(); o.type='sine'; o.frequency.value=m2f(m)*h; const hg=cc.createGain(), a=v*[0.6,0.25,0.1,0.05][k]; hg.gain.setValueAtTime(0,st); hg.gain.linearRampToValueAtTime(a,st+0.01); hg.gain.exponentialRampToValueAtTime(a*0.25,st+dur); hg.gain.linearRampToValueAtTime(0,st+dur+0.3); o.connect(hg).connect(cbus); o.start(st); o.stop(st+dur+0.35); }); };
   // the voice: bright (sawtooth, as before), warm "ah" (vowel formants around 700 and 1150 Hz, gentle vibrato) or soft "oo" (rounded, few overtones)
   const kind=warmVoice(), vib=oc.createOscillator(); vib.frequency.value=kind==='bright'?5.4:5.0; const vg=oc.createGain(); vg.gain.value=kind==='bright'?14:kind==='ah'?11:8; vib.connect(vg); vib.start(0);
   const bus=oc.createGain(); bus.connect(oc.destination); let vf;
@@ -5766,6 +5777,7 @@ async function makeWarmup(rk){
   const seg=[], lyr=[]; let t=lead;
   P.forEach((x,i)=>{ const L=lines.find(l=>l.at===i); if(L) lyr.push({text:L.text,t:+t.toFixed(3)});
     if(x.rest){ t+=x.rest*beat; return; }
+    if(x.chord!=null){ chordNotes(x.chord).forEach(m=>playChordNote(m,t,x.b*beat)); t+=x.b*beat; return; }
     const d=x.b*beat, st=t, en=t+d-(x.to!=null?0.02:0.08);
     const osc=oc.createOscillator(); osc.type=kind==='bright'?'sawtooth':'triangle'; osc.frequency.setValueAtTime(m2f(x.m),st); if(x.to!=null) osc.frequency.exponentialRampToValueAtTime(m2f(x.to),en); vg.connect(osc.detune);
     const at=kind==='bright'?0.05:0.09, gn=oc.createGain(); gn.gain.setValueAtTime(0,st); gn.gain.linearRampToValueAtTime(1,st+at); gn.gain.setValueAtTime(1,en-0.06); gn.gain.linearRampToValueAtTime(0,en);
@@ -5773,17 +5785,18 @@ async function makeWarmup(rk){
   const tt=[], mm=[]; let j=0;
   for(let x=0;x<total;x+=0.01){ tt.push(+x.toFixed(2)); while(j<seg.length-1&&x>=seg[j].en) j++; const g=seg[j]; let v=NaN;
     if(g&&x>=g.st+0.03&&x<g.en-0.04) v=g.to!=null?g.m+(g.to-g.m)*(x-g.st)/(g.en-g.st):g.m; mm.push(v); }
-  return {buf:await oc.startRendering(),tt:Float32Array.from(tt),mm:Float32Array.from(mm),lyrics:lyr,lead,bpm:1/beat*60};
+  const [buf,chords]=await Promise.all([oc.startRendering(),cc.startRendering()]);
+  return {buf,chords,tt:Float32Array.from(tt),mm:Float32Array.from(mm),lyrics:lyr,lead,bpm:1/beat*60};
 }
 async function openWarmup(auto){
   try{ stop(); if(S.tap) stopTap(); if(S.editMode) setEditMode(false); ensureCtx(); const rk=rangeKey(S.part);
     if(!auto) setStatus('Making the warm-up…');
     const w=await makeWarmup(rk);
-    S.guideBuf=w.buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
+    S.guideBuf=w.buf; S.backBuf=w.chords; S.curBackBlob=null; $('#backName').textContent='Warm-up chords'; $('#backClear').hidden=true;
     S.cur={libId:null,fromFile:false,warmup:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=true;
     S.beat={bpm:w.bpm,offset:w.lead,auto:false,bar:w.lead,bpb:4}; S.beatTok++; S.pendingKey=null; S.lyrics=w.lyrics; S.openRec=null;
     setTarget(w.tt,w.mm); songReady('Warm-up ('+(rk==='high'?'high':'low')+' voice)','Warm-up');
-    setStatus((auto?'':'Warm-up ready. ')+'About 2 minutes: 5-note scales on “ma”, arpeggios on “mi”, then sirens on “oo”, each a little higher. Press Play and sing along. Tip: turn on Tone for a piano guide.');
+    setStatus((auto?'':'Warm-up ready. ')+'About 2½ minutes: 5-note scales on “ma”, arpeggios on “mi”, then sirens on “oo”, each a little higher, with a chord before each one (Backing turns the chords on or off). Press Play and sing along.');
     if(!auto) window.scrollTo({top:0,behavior:'smooth'});
     return true;
   }catch(e){ setStatus('Could not make the warm-up: '+((e&&e.message)||'unknown error')+'.',true); return false; } }
