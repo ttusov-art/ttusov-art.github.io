@@ -1166,7 +1166,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-04 f';
+const APP_VERSION='2026-11-04 g';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1577,6 +1577,15 @@ function libDb(){ return new Promise((res,rej)=>{ try{ if(S.wiping) throw new Er
 async function idbDo(store,mode,fn){ const db=await libDb(); return await new Promise((res,rej)=>{ const tx=db.transaction(store,mode), st=tx.objectStore(store); let out; const q=fn(st); if(q) q.onsuccess=()=>{ out=q.result; }; tx.oncomplete=()=>res(out); tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error||new Error('storage full')); }); }
 const libList=()=>idbDo('songs','readonly',st=>st.getAll()).catch(()=>[]);
 const libGet=id=>idbDo('songs','readonly',st=>st.get(id));
+// a light list of the songs: reads one song at a time and keeps only what checks need (no audio, no pitch lines), so phones with big libraries don't run out of memory
+let lightP=null, lightAt=0, lightGen=-1;
+function libListLight(){ if(!lightP||lightGen!==libWriteGen||Date.now()-lightAt>3000){ lightGen=libWriteGen; lightAt=Date.now(); lightP=libListLightRead(); } return lightP.then(l=>l.map(x=>({...x}))); }   // several checks at once share one read
+async function libListLightRead(){ const db=await libDb().catch(()=>null); if(!db) return [];
+  return await new Promise(res=>{ const out=[]; let tx; try{ tx=db.transaction('songs','readonly'); }catch(e){ res(out); return; }
+    const rq=tx.objectStore('songs').openCursor(); rq.onsuccess=()=>{ const c=rq.result; if(!c) return; const x=c.value;
+      out.push({light:true,id:x.id,uid:x.uid,part:x.part,name:x.name,created:x.created,updated:x.updated,ord:x.ord,dur:x.dur,sr:x.sr,hop:x.hop,t0:x.t0,delBacks:x.delBacks,
+        backs:backsOf(x).map(b=>({name:b.name,sep:b.sep,blob:{size:b.blob?b.blob.size:0}})),pcm:x.pcm?{byteLength:x.pcm.byteLength||0}:null,base:x.base?{updated:x.base.updated}:null}); c.continue(); };
+    tx.oncomplete=()=>res(out); tx.onerror=()=>res(out); }); }
 const newUid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 // a light copy of the library (names and details, no audio) kept in memory, so menus and lists open at once
 let libMetaCache=null, libMetaP=null, libMetaGen=0;
@@ -1589,16 +1598,17 @@ function libMeta(){ if(libMetaCache) return Promise.resolve(libMetaCache);
     if(m){ libMetaCache=m; const gen=libMetaGen;   // check quietly (keys only, no audio) that the saved list still matches the library
       idbDo('songs','readonly',st=>st.getAllKeys()).then(keys=>{ if(gen!==libMetaGen||!libMetaCache) return; const a=keys.map(String).sort().join(','), b=libMetaCache.map(x=>String(x.id)).sort().join(','); if(a!==b){ metaChanged(); libMeta().then(()=>renderLib()); } }).catch(()=>{});
       return Promise.resolve(libMetaCache); } }
-  if(!libMetaP){ const gen=libMetaGen; libMetaP=libList().then(l=>{ const m=l.map(metaOf); if(gen===libMetaGen){ libMetaCache=m; metaKeep(); } libMetaP=null; return m; }); } return libMetaP; }
+  if(!libMetaP){ const gen=libMetaGen; libMetaP=libListLight().then(l=>{ const m=l.map(metaOf); if(gen===libMetaGen){ libMetaCache=m; metaKeep(); } libMetaP=null; return m; }); } return libMetaP; }
 function metaChanged(){ libMetaGen++; libMetaCache=null; libMetaP=null; clearTimeout(metaChanged.t); metaChanged.t=setTimeout(()=>libMeta(),400); }   // fallback: re-read quietly
 function metaSaved(rec,id){ if(!libMetaCache||id==null){ metaChanged(); return; } libMetaGen++; const m=metaOf({...rec,id}), i=libMetaCache.findIndex(x=>x.id===id); if(i>=0) libMetaCache[i]=m; else libMetaCache.push(m); metaKeep(); }
-const libPutRaw=rec=>idbDo('songs','readwrite',st=>st.put(rec)).then(r=>{ metaSaved(rec,rec.id!=null?rec.id:r); return r; });
+let libWriteGen=0;
+const libPutRaw=rec=>idbDo('songs','readwrite',st=>st.put(rec)).then(r=>{ libWriteGen++; metaSaved(rec,rec.id!=null?rec.id:r); return r; });
 // song order per part: songs you put in order have ord 0,1,2…; songs never ordered (new ones) come first, newest first
 const songKey=x=>x.ord!=null?x.ord:-(x.created||0)/1000;
 const sortSongs=a=>a.sort((x,y)=>songKey(x)-songKey(y)||(y.created||0)-(x.created||0));
-async function saveSongOrder(list){ for(let k=0;k<list.length;k++){ const x=list[k]; if(x.ord!==k){ x.ord=k; await libPutRaw(x); } } }   // raw put: the order is not a change to the song itself
+async function saveSongOrder(list){ for(let k=0;k<list.length;k++){ const x=list[k]; if(x.ord!==k){ x.ord=k; const full=x.light?await libGet(x.id):x; if(full){ full.ord=k; await libPutRaw(full); } } } }   // raw put: the order is not a change to the song itself
 const libPut=rec=>{ if(!rec.uid) rec.uid=newUid(); rec.updated=Date.now(); return libPutRaw(rec); };
-const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id)).then(r=>{ if(libMetaCache){ libMetaGen++; libMetaCache=libMetaCache.filter(x=>x.id!==id); metaKeep(); } else metaChanged(); return r; });
+const libDel=id=>idbDo('songs','readwrite',st=>st.delete(id)).then(r=>{ libWriteGen++; if(libMetaCache){ libMetaGen++; libMetaCache=libMetaCache.filter(x=>x.id!==id); metaKeep(); } else metaChanged(); return r; });
 function backsOf(s){ if(!s) return []; if(Array.isArray(s.backs)) return s.backs; if(s.backBlob) return [{name:s.backName||'Backing',blob:s.backBlob}]; return []; }
 async function libSetBacks(id,backs,sel){ const s=await libGet(id); if(!s) return; s.backs=backs; s.backSel=sel; delete s.backBlob; delete s.backName; await libPut(s); }
 async function libAddBacking(id,name,blob,sep){
@@ -1738,7 +1748,7 @@ function ownWhat(c){ const at=x=>x==null?'untimed':fmtT1(x);   // the diff runs 
   if(c.k==='del') return 'You added the lyric line “'+c.oldText+'”'+(c.old!=null?' at '+fmtT1(c.old):'');
   return 'Lyric “'+c.text+'” moved: '+at(c.t)+' → '+at(c.old); }
 async function openOwnEdits(name){ if(S.sug){ setStatus('Finish the review that is open first.',true); return; }
-  const part=S.part, rec0=(await libList()).find(x=>x.name===name&&partOf(x)===part); if(!rec0){ setStatus('That song is not in '+part+' any more.',true); return; }
+  const part=S.part, l0=(await libListLight()).find(x=>x.name===name&&partOf(x)===part), rec0=l0?await libGet(l0.id):null; if(!rec0){ setStatus('That song is not in '+part+' any more.',true); return; }
   busyShow('Finding your changes…'); let pub=null;
   try{ pub=await ownPub(rec0); }catch(e){ pub=null; }
   if(!pub||pub.none){ await busyHide(null);
@@ -1847,24 +1857,25 @@ async function backupLibrary(fixedName,btn0,txt0){
   const btn=btn0||$('#shareMake'), txt=txt0||$('#shareText'); btn.disabled=true;
   try{
     const sharePart=fixedName?S.part:null;
-    const songs=(await libList()).filter(x=>!sharePart||partOf(x)===sharePart); if(!songs.length){ txt.textContent=sharePart?'There are no songs in '+sharePart+' yet.':'The library is empty.'; return; }
+    const songs=(await libListLight()).filter(x=>!sharePart||partOf(x)===sharePart);   // read in full one at a time below if(!songs.length){ txt.textContent=sharePart?'There are no songs in '+sharePart+' yet.':'The library is empty.'; return; }
     const entries=[], man={app:'part-coach',version:1,created:Date.now(),part:sharePart,songs:[]};
     for(const s0 of songs){
-      let s=s0; if(!s.uid){ s.uid=newUid(); await libPutRaw(s); }
+      let s=await libGet(s0.id); if(!s) continue; if(!s.uid){ s.uid=newUid(); await libPutRaw(s); } s0.uid=s.uid;
       const dir='songs/'+s.uid+'/', m={uid:s.uid,part:partOf(s),beat:s.beat||null,musicKey:s.musicKey||null,view:s.view||null,sheet:s.sheet||null,name:s.name,created:s.created,updated:s.updated||s.created,ord:s.ord,dur:s.dur,sr:s.sr,hop:s.hop,t0:s.t0,backSel:s.backSel,lyrics:s.lyrics||[],files:{}};
-      entries.push({name:dir+'vocals.pcm',data:s.pcm}); m.files.pcm=dir+'vocals.pcm';
+      entries.push({name:dir+'vocals.pcm',data:new Blob([s.pcm])}); m.files.pcm=dir+'vocals.pcm';   // a Blob, so the browser can keep it out of memory
       if(s.contour){ entries.push({name:dir+'contour.f32',data:f32buf(s.contour)}); m.files.contour=dir+'contour.f32'; }
       if(s.contourOrig){ entries.push({name:dir+'contour-original.f32',data:f32buf(s.contourOrig)}); m.files.contourOrig=dir+'contour-original.f32'; }
       if(s.tt){ entries.push({name:dir+'times.f32',data:f32buf(s.tt)}); m.files.tt=dir+'times.f32'; }
       m.backs=backsOf(s).map((b,i)=>{ const f=dir+'backing'+i+'.'+blobExt(b.blob,b.name); entries.push({name:f,data:b.blob}); return {name:b.name,sep:!!b.sep,type:b.blob.type||'',size:b.blob.size,file:f}; });
       man.songs.push(m);
+      if(sharePart){ if(s.base||s.sentHash||s.sent){ delete s.base; delete s.sentHash; delete s.sent; }   // you make the share file: these songs are yours
+        if(s.contour) s.pub={at:man.created,contour:Float32Array.from(toF32(s.contour)),lyrics:(s.lyrics||[]).map(l=>({t:l.t,text:l.text}))};   // what the choir gets: "your own edits" are compared with it
+        await libPutRaw(s); }
     }
     if(sharePart) man.order=sortSongs(songs.slice()).map(x=>x.uid);
     else man.bookmarks=bmGet();   // a whole-library backup (for moving to another browser or phone) also keeps your bookmarks; share files never do   // the running order (uids were filled in above)
     if(sharePart){ try{ const o=ownerParts(); if(!o.includes(sharePart)){ o.push(sharePart); localStorage.setItem('pc-owner-parts',JSON.stringify(o)); } }catch(e){}
-      for(const x of songs){ if(x.base||x.sentHash||x.sent){ delete x.base; delete x.sentHash; delete x.sent; }   // you make the share file: these songs are yours
-        if(x.contour) x.pub={at:man.created,contour:Float32Array.from(toF32(x.contour)),lyrics:(x.lyrics||[]).map(l=>({t:l.t,text:l.text}))};   // what the choir gets: "your own edits" are compared with it
-        await libPutRaw(x); } }
+    }
     entries.unshift({name:'part-coach-backup.json',data:new TextEncoder().encode(JSON.stringify(man))});
     const zip=await zipBlob(entries,p=>{ txt.textContent='Preparing the backup… '+Math.round(p*100)+'%'; });
     const d=new Date(), name=fixedName||'Part Coach library '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zip';
@@ -1888,10 +1899,10 @@ async function restoreLibrary(file,out,askBig,force,opts){   // force: every son
     const z=await openZip(file), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
     const man=JSON.parse(await mb.text()); if(man.app!=='part-coach') throw new Error('this is not a Part Coach backup file');
     if(!man.part&&Array.isArray(man.bookmarks)&&man.bookmarks.length){ const l=bmGet(), have=new Set(l.map(b=>b.id)); man.bookmarks.forEach(b=>{ if(b&&b.id&&!have.has(b.id)) l.push(b); }); bmSave(l); }   // bookmarks from a whole-library backup
-    const existing=await libList(), byUid={}; existing.forEach(s=>{ if(s.uid) byUid[s.uid]=s; });
+    const existing=await libListLight(), byUid={}; existing.forEach(s=>{ if(s.uid) byUid[s.uid]=s; });   // light list; each song is read in full only when it is replaced
     const shared=!!out&&!!man.part&&!isOwnerPart(man.part), verOf=c=>c?(c.base&&shared?c.base.updated:(c.updated||c.created)):0;
     if(shared){ // songs with edits not sent yet that this update would replace: ask first
-      const conf=man.songs.map(m=>byUid[m.uid]).filter((c,k)=>c&&c.base&&(man.songs[k].updated||man.songs[k].created)>c.base.updated&&hasUnsent(c,S.cur&&S.cur.libId===c.id?liveOf():null));
+      const conf=[]; for(let k=0;k<man.songs.length;k++){ const l=byUid[man.songs[k].uid]; if(!(l&&l.base&&(man.songs[k].updated||man.songs[k].created)>l.base.updated)) continue; const c=await libGet(l.id); if(c&&hasUnsent(c,S.cur&&S.cur.libId===c.id?liveOf():null)) conf.push(c); }
       if(conf.length){ const ch=await askUnsent(conf);
         if(ch==='later'){ txt.textContent='Update postponed. Send or discard your edits, then tap Update again.'; return false; }
         if(ch==='send'){ for(const c of conf){ try{ await postSuggestion(c,S.cur&&S.cur.libId===c.id?liveOf():null); }catch(e){} } } } }
@@ -1908,7 +1919,7 @@ async function restoreLibrary(file,out,askBig,force,opts){   // force: every son
     let added=0,updated=0,skipped=0,i=0; const updIds=[];
     for(const m of man.songs){
       i++; txt.textContent='Restoring song '+i+' of '+man.songs.length+'…';
-      const cur=byUid[m.uid];
+      const cur=byUid[m.uid]?await libGet(byUid[m.uid].id):undefined;
       if(!cur&&shared&&skipDeleted(m,man)) continue;   // you deleted it and restoring is off
       if(!cur&&shared&&!force&&(only?!only.has(m.uid):isSkipped(m.uid))) continue;   // not chosen for this phone
       if(cur&&!force&&!wantsBacksBack(cur,m)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
@@ -1938,7 +1949,7 @@ async function restoreLibrary(file,out,askBig,force,opts){   // force: every son
       for(const u of Object.keys(sk)) if(sk[u].part===man.part&&!man.songs.some(m=>m.uid===u)){ delete sk[u]; ch=true; }   // no longer shared
       if(ch) skipSave(sk); }
     let reordered=false; if(Array.isArray(man.order)&&man.order.length){ // the sharer's running order
-      const all=await libList(), part=man.part, mine=sortSongs(all.filter(x=>partOf(x)===part)), byU={}; mine.forEach(x=>{ if(x.uid) byU[x.uid]=x; });
+      const all=await libListLight(), part=man.part, mine=sortSongs(all.filter(x=>partOf(x)===part)), byU={}; mine.forEach(x=>{ if(x.uid) byU[x.uid]=x; });
       const ordered=man.order.map(u=>byU[u]).filter(Boolean), rest=mine.filter(x=>!ordered.includes(x));
       const next=rest.concat(ordered); if(next.some((x,k)=>x.ord!==k)){ reordered=next.some((x,k)=>x!==mine[k]); await saveSongOrder(next); } }   // only a real change of order is reported
     if(man.part&&out){ S.part=man.part; partsSave(); }
@@ -2009,7 +2020,7 @@ async function newPart(){ const n=cleanPartName(prompt('Name of the new part (fo
 async function renamePart(){
   const old=S.part, n=cleanPartName(prompt('New name for '+old+':',old)); if(!n||n===old) return;
   if(S.parts.includes(n)){ setStatus('There is already a part called '+n+'.',true); return; }
-  for(const x of await libList()) if(partOf(x)===old){ x.part=n; await libPut(x); }
+  for(const l of await libListLight()) if(partOf(l)===old){ const x=await libGet(l.id); if(x){ x.part=n; await libPut(x); } }
   S.parts[S.parts.indexOf(old)]=n; S.part=n; const L=shareLinks(); if(L[old]){ L[n]=L[old]; delete L[old]; try{ localStorage.setItem('pc-sharelinks',JSON.stringify(L)); }catch(e){} }
   { const N=shareNames(); if(N[old]){ N[n]=N[old]; delete N[old]; try{ localStorage.setItem('pc-sharenames',JSON.stringify(N)); }catch(e){} } }
   partsSave(); renderLib();
@@ -2050,7 +2061,7 @@ function renderAdmSongs(songs){ const box=$('#admSongs'); if(!box) return; $('#a
 // copy a song (audio, pitch line, lyrics, timing, sheet, backings, beat grid) into another part
 async function copySongTo(id,part){
   const src=await libGet(id); if(!src) return;
-  const same=(await libList()).find(x=>partOf(x)===part&&x.name===src.name);
+  const sameL=(await libListLight()).find(x=>partOf(x)===part&&x.name===src.name), same=sameL?await libGet(sameL.id):null;
   const data={...src}; delete data.id; delete data.uid; delete data.updated; delete data.ord; data.part=part;
   if(same){
     if(!confirm(part+' already has “'+src.name+'”. Replace its pitch line, lyrics, timing and backings with this one?')) return;
@@ -2571,8 +2582,8 @@ function appKey(){ try{ return localStorage.getItem('pc-appkey')||''; }catch(e){
 function devTag(){ try{ let d=localStorage.getItem('pc-dev'); if(!d){ d=newSugId(); localStorage.setItem('pc-dev',d); } return d; }catch(e){ return ''; } }
 // an update arrived for this song: suggestions the moderator had already accepted are now in it
 // accepted after an update already arrived: if that update came after the suggestion and the song now matches it, it is already in
-async function checkAlreadyPublished(l){ const recs=await libList();
-  for(const x of l){ if(x.pub||!(x.status==='accepted'||x.status==='partly')) continue; const r=recs.find(y=>y.uid===x.uid); if(!r||!r.base) continue;
+async function checkAlreadyPublished(l){ const recs=await libListLight();
+  for(const x of l){ if(x.pub||!(x.status==='accepted'||x.status==='partly')) continue; const lr=recs.find(y=>y.uid===x.uid); if(!lr||!lr.base) continue; const r=await libGet(lr.id); if(!r||!r.base) continue;
     if(r.base.updated>x.at&&(x.status==='partly'||!diffCount(songDiff(r,null)))) x.pub=true; } }
 function markPublished(uid){ const l=sugList(); let ch=false; l.forEach(x=>{ if(x.uid===uid&&(x.status==='accepted'||x.status==='partly')&&!x.pub){ x.pub=true; ch=true; } }); if(ch) sugListSave(l); }
 function sugList(){ try{ return JSON.parse(localStorage.getItem('pc-sugs')||'[]'); }catch(e){ return []; } }
@@ -2632,7 +2643,7 @@ async function pollSugStatus(){ const url=sugUrl(); if(!url) return; await flush
   paintSuggest(); }
 // the moderator did not use a suggestion: put the member's copy back to the shared version where it still holds what was sent (newer edits stay)
 async function undoDeclined(entry){
-  const sent=entry.sent; if(!sent) return; const rec=(await libList()).find(x=>x.uid===entry.uid); if(!rec||!rec.base) return;
+  const sent=entry.sent; if(!sent) return; const lr=(await libListLight()).find(x=>x.uid===entry.uid); if(!lr||!lr.base) return; const rec=await libGet(lr.id); if(!rec||!rec.base) return;
   const open=S.cur&&S.cur.libId===rec.id&&S.tM, cur=open?Float32Array.from(S.tM):Float32Array.from(toF32(rec.contour)), base=toF32(rec.base.contour);
   let changed=0;
   for(const n of sent.notes||[]){ const v=unrle(n.m); for(let k=0;k<v.length;k++){ const i=n.i0+k; if(i>=cur.length) break; const a=cur[i], b=v[k]; if((isNaN(a)&&isNaN(b))||Math.abs(a-b)<0.005){ cur[i]=base[i]; changed++; } } }
@@ -5116,7 +5127,7 @@ function restoreDone(part){ if(part&&typeof part==='string') unpubClear(part); }
 // ----- members: move bookmarks, settings and links to another phone or browser (a small file; the songs come from the part link) -----
 const ME_SKIP=/^pc-(libmeta2|lastpos|last|hello|mic|delay|pdelay|iosnote|installtip)$/;   // device-specific, or pointing at this phone's song numbers
 async function meSave(){ const t=$('#meText');
-  if(sugUrl()){ const l=(await libList()).filter(c=>c.base&&hasUnsent(c,S.cur&&S.cur.libId===c.id?liveOf():null));
+  if(sugUrl()){ const l=[]; for(const x of (await libListLight()).filter(c=>c.base)){ const c=await libGet(x.id); if(c&&hasUnsent(c,S.cur&&S.cur.libId===c.id?liveOf():null)) l.push(c); }
     if(l.length){ const r=await dlg({title:'Edits not sent yet',html:'<p class="kv-sub">You edited '+esc(l.map(x=>x.name).join(', '))+' but have not sent it as a suggestion. Edits are not in the file and the songs download fresh in the new place, so send them first.</p>',
         buttons:[{label:'Send them, then save',value:'send',primary:true},{label:'Save without them',value:'skip'},{label:'Cancel',value:null}]});
       if(!r.value) return;
@@ -5199,7 +5210,7 @@ async function openGuideMenu(keepBm){ if(keepBm!==true) S.bmMenuOpen=false;   //
 }
 async function moveSong(id,dir){
   unpubMark(S.part,'Song order','changed');
-  const m=$('#admSongs'), list=sortSongs((await libList()).filter(x=>partOf(x)===S.part)), i=list.findIndex(x=>x.id===id), j=i+dir;
+  const m=$('#admSongs'), list=sortSongs((await libListLight()).filter(x=>partOf(x)===S.part)), i=list.findIndex(x=>x.id===id), j=i+dir;
   if(i<0||j<0||j>=list.length) return;
   const r0=m.querySelector('[data-sid="'+id+'"]'), top0=r0?r0.getBoundingClientRect().top:null;
   [list[i],list[j]]=[list[j],list[i]]; await saveSongOrder(list);
@@ -5276,7 +5287,7 @@ function setShared(url,part,slug){ const list=getShared().filter(x=>x.url!==url&
 async function sharedChanges(url){
   const rf=await remoteFile(directUrl(url)); if(!rf) return null;
   const z=await openZip(rf), mb=await z.get('part-coach-backup.json'); if(!mb) throw new Error('this is not a Part Coach backup file');
-  const man=JSON.parse(await mb.text()), local=await libList(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
+  const man=JSON.parse(await mb.text()), local=await libListLight(), byUid={}; local.forEach(x=>{ if(x.uid) byUid[x.uid]=x; });
   let added=0,updated=0; for(const m of man.songs){ const c=byUid[m.uid]; if(!c){ if(!skipDeleted(m,man)&&!isSkipped(m.uid)) added++; } else if(wantsBacksBack(c,m)||(memberBase(c,man.part)?c.base.updated:(c.updated||c.created))<(m.updated||m.created)) updated++; }
   let reordered=false; if(Array.isArray(man.order)&&man.part){ const mine=sortSongs(local.filter(x=>partOf(x)===man.part)).map(x=>x.uid).filter(u=>man.order.includes(u)), theirs=man.order.filter(u=>mine.includes(u)); reordered=mine.join()!==theirs.join(); }
   if(man.part&&!isOwnerPart(man.part)) await rememberBases(z,man,byUid);
@@ -5284,7 +5295,8 @@ async function sharedChanges(url){
 }
 // songs shared before suggestions existed: remember their shared version now, so members' edits can be suggested
 async function rememberBases(z,man,byUid){ let n=0;
-  for(const m of man.songs){ const cur=byUid[m.uid], mv=m.updated||m.created; if(!cur||cur.base||(cur.updated||cur.created)<mv) continue;   // newer on the share: the update itself sets it
+  for(const m of man.songs){ let cur=byUid[m.uid]; const mv=m.updated||m.created; if(!cur||cur.base||(cur.updated||cur.created)<mv) continue;   // newer on the share: the update itself sets it
+    if(cur.light){ cur=await libGet(cur.id); if(!cur) continue; }
     const same=(cur.updated||cur.created)===mv; let c0=same?toF32(cur.contour):null;
     if(!c0&&m.files.contour){ try{ c0=new Float32Array(await (await z.get(m.files.contour)).arrayBuffer()); }catch(e){ continue; } }
     if(!c0) continue; cur.base={updated:mv,contour:Float32Array.from(c0),lyrics:(same?cur.lyrics||[]:m.lyrics||[]).map(l=>({t:l.t,text:l.text}))}; await libPutRaw(cur); n++; }
