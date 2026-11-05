@@ -953,6 +953,11 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         <div class="field-row"><input id="zoom" type="range" min="0.5" max="30" step="0.5" value="8"><span class="val" id="zoomV">8 s</span></div>
       </div>
       <label class="check" for="lyrShow"><input id="lyrShow" type="checkbox" checked>Show lyrics above the pitch lane</label>
+      <div class="field">
+        <label for="fbLevel">Feedback</label>
+        <select id="fbLevel" class="sel"><option value="gentle">Gentle: close is good enough</option><option value="normal">Normal</option><option value="strict">Strict: for polishing</option></select>
+        <details class="more-info"><summary>More info</summary><span class="small">How close counts as good. <b>Gentle</b>: within ¾ of a semitone, and note starts within 0.15 s. <b>Normal</b>: within half a semitone and 0.08 s. <b>Strict</b>: within a third of a semitone and 0.06 s. In all three, singing a note a moment early or late is not counted as a wrong note, and fast passages with many short notes (where the target line is least exact) are judged more loosely. Changes apply from your next run.</span></details>
+      </div>
       <label class="check" for="ignoreOct"><input id="ignoreOct" type="checkbox">Ignore octave (count the right note in any octave)</label>
       <div class="field">
         <label for="timMarks">Timing marks on the pitch lane</label>
@@ -1181,7 +1186,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-05 d';
+const APP_VERSION='2026-11-05 e';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3244,9 +3249,9 @@ function evalOnset(o){
   for(;i<P.length&&P[i].t<=o.t+0.8;i++){
     const p=P[i]; if(isNaN(p.m)){ runStart=null; continue; } attempted=true;
     if(p.t>o.t+0.5||first!==null) continue;
-    if(Math.abs(centsDiff(p.m,o.m))<=75){ if(runStart===null) runStart=p.t; if(p.t-runStart>=0.05) first=runStart; } else runStart=null;
+    if(Math.abs(centsDiff(p.m,o.m))<=Math.max(75,FB().good)){ if(runStart===null) runStart=p.t; if(p.t-runStart>=0.05) first=runStart; } else runStart=null;
   }
-  if(first!==null){ const off=first-o.t, a=Math.abs(off); return {off,g:a<=0.08?'good':a<=0.2?'near':'off'}; }
+  if(first!==null){ const off=first-o.t, a=Math.abs(off), f=FB(); return {off,g:a<=f.tg?'good':a<=f.tn?'near':'off'}; }
   return attempted?{off:null,g:'off'}:null;
 }
 function scoreOnsets(tSung){
@@ -3269,7 +3274,7 @@ function timingSummary(){
     const ms=Math.round(med/S.rate*100)*10;
     if(Math.abs(ms)>=60&&mad<=0.15){ fix=`<br><span class="small">Your note starts were ${ms>0?'late':'early'} by a similar amount almost everywhere, which usually means the delay setting is off rather than your singing.</span> <button type="button" class="fix-delay" data-ms="${ms}">${ms>0?'Add':'Remove'} ${Math.abs(ms)} ms ${ms>0?'to':'from'} Delay compensation</button>`; } }
   S.delayFixHtml=fix;   // shown on its own, outside the numbers
-  return `<br><b>${pct}%</b> of ${s.n} note starts were on time (within 80 ms). ${tend}${w}`;
+  return `<br><b>${pct}%</b> of ${s.n} note starts were on time (within ${Math.round(FB().tg*1000)} ms). ${tend}${w}`;
 }
 
 // ===== lyrics =====
@@ -3865,7 +3870,7 @@ function setTakeDelay(k,newDelay){
   const shift=-d*k.rate; // song-time shift of the voice
   k.delay=newDelay; k.song0+=shift; k.song1+=shift;
   let n=0,hit=0;
-  for(const p of k.pts){ p.t+=shift; if(isNaN(p.m)){ p.c=null; continue; } const tg=targetAt(p.t); if(isNaN(tg)){ p.c=null; continue; } const c=grade(centsDiff(p.m,tg)); p.c=c; n++; if(c==='good') hit++; }
+  for(const p of k.pts){ p.t+=shift; if(isNaN(p.m)){ p.c=null; continue; } const tg=tgNear(p.t,p.m); if(isNaN(tg)){ p.c=null; continue; } const c=grade(centsDiff(p.m,tg),busyAt(p.t)?FB().busy:1); p.c=c; n++; if(c==='good') hit++; }
   k.score=n>=20?Math.round(100*hit/n):null;
 }
 let alignTimer=null;
@@ -4146,7 +4151,16 @@ function centsDiff(you,target){
   if(S.ignoreOct){ d=((d%1200)+1800)%1200-600; }
   return d;
 }
-function grade(d){ const a=Math.abs(d); return a<=50?'good':a<=100?'near':'off'; }
+// how strict the feedback is (Settings → Feedback): pitch window in cents, timing window in seconds, how far the target may be shifted in time to meet you, and what counts as a solid phrase
+const FBL={gentle:{good:75,near:150,tg:0.15,tn:0.3,win:0.15,busy:1.7,solid:0.6},normal:{good:50,near:100,tg:0.08,tn:0.2,win:0.08,busy:1.5,solid:0.75},strict:{good:35,near:70,tg:0.06,tn:0.15,win:0.03,busy:1.2,solid:0.85}};
+S.fbLevel=(()=>{ try{ const v=localStorage.getItem('pc-feedback'); return FBL[v]?v:'normal'; }catch(e){ return 'normal'; } })();
+const FB=()=>FBL[S.fbLevel]||FBL.normal;
+function grade(d,wide){ const a=Math.abs(d)/(wide||1), f=FB(); return a<=f.good?'good':a<=f.near?'near':'off'; }
+// fast, wordy passages: short notes, where the smoothed target line is least exact; judged more loosely
+function busyAt(t){ const O=S.onsets; if(!O||O.length<2) return false; const k=lowerOnset(t+0.001)-1; if(k<0||k+1>=O.length) return false; return O[k+1].t-O[k].t<0.25; }
+// the target near t that is closest to what you sing (a little early or late is not a wrong note)
+function tgNear(t,you){ const w=FB().win; let best=targetAt(t); if(!w||isNaN(you)) return best;
+  for(const dt of [-w,-w/2,w/2,w]){ const v=targetAt(t+dt); if(!isNaN(v)&&(isNaN(best)||Math.abs(centsDiff(you,v))<Math.abs(centsDiff(you,best)))) best=v; } return best; }
 
 // ===== main loop =====
 function tick(){ beatSegCheck();
@@ -4204,8 +4218,8 @@ function step(){
     if(!isNaN(raw)&&ok.length>=3){ you=median(ok); }
     const tSung=now-(S.delay+ANA_LAG)*S.rate;
     if(!isNaN(you)&&tSung>=0){
-      const tg=targetAt(tSung); let c=null;
-      if(!isNaN(tg)){ const d=centsDiff(you,tg); c=grade(d); S.stat.n++; S.stat.sum+=d; if(c==='good') S.stat.hit++; if(loopActive()&&inLoop(tSung)){ S.pass.n++; S.pass.sum+=d; if(c==='good') S.pass.hit++; } }
+      const tg=tgNear(tSung,you); let c=null;
+      if(!isNaN(tg)){ const d=centsDiff(you,tg); c=grade(d,busyAt(tSung)?FB().busy:1); S.stat.n++; S.stat.sum+=d; if(c==='good') S.stat.hit++; if(loopActive()&&inLoop(tSung)){ S.pass.n++; S.pass.sum+=d; if(c==='good') S.pass.hit++; } }
       S.pts.push({t:tSung,m:you,c}); dotFeed(you);
     } else { dotFeed(NaN); if(tSung>=0) S.pts.push({t:tSung,m:NaN,c:null}); }
     scoreOnsets(tSung);
@@ -4374,12 +4388,12 @@ function checkPhrases(a,b){ const out=[], T=S.tT, M=S.tM; if(!T) return out;
 function checkScore(ph){ const P=S.pts.filter(p=>p.t>=ph.a&&p.t<ph.b), tgd=P.filter(p=>!isNaN(targetAt(p.t))), sung=tgd.filter(p=>!isNaN(p.m));
   const cover=tgd.length?sung.length/tgd.length:0, good=sung.length?sung.filter(p=>p.c==='good').length/sung.length:0;
   const devs=sung.map(p=>anaDev(p.m,targetAt(p.t))*100).filter(d=>Math.abs(d)<400), mean=devs.length?devs.reduce((x,y)=>x+y,0)/devs.length:0;
-  const tim=((S.timStat&&S.timStat.list)||[]).filter(x=>x.t>=ph.a&&x.t<ph.b&&x.off!=null), bad=tim.filter(x=>Math.abs(x.off)>0.12), toff=tim.length?tim.reduce((x,y)=>x+y.off,0)/tim.length:0, badF=tim.length?bad.length/tim.length:0;
-  const score=cover<0.3?cover*0.5:0.75*good*Math.min(1,cover/0.7)+0.25*(1-badF);
+  const tim=((S.timStat&&S.timStat.list)||[]).filter(x=>x.t>=ph.a&&x.t<ph.b&&x.off!=null), bad=tim.filter(x=>Math.abs(x.off)>FB().tg*1.5), toff=tim.length?tim.reduce((x,y)=>x+y.off,0)/tim.length:0, badF=tim.length?bad.length/tim.length:0;
+  const score=cover<0.3?cover*0.5:0.75*good*Math.min(1,cover/0.7)+0.25*(1-badF);   // good = share of your singing graded good (with the Feedback setting's window)
   // in words: the main reason, and the note it shows most on
   const why=[]; let worst=null;
   if(cover<0.5) why.push(cover<0.15?'you were silent here':'you lost the line here (much of it not heard)');
-  else if(good<0.7){ if(Math.abs(mean)>=25) why.push((mean<0?'a bit flat':'a bit sharp')+' (about '+Math.round(Math.abs(mean))+' cents '+(mean<0?'low':'high')+')'); else why.push('some notes wandered off the pitch');
+  else if(good<FB().solid-0.05){ if(Math.abs(mean)>=Math.max(25,FB().good*0.5)) why.push((mean<0?'a bit flat':'a bit sharp')+' (about '+Math.round(Math.abs(mean))+' cents '+(mean<0?'low':'high')+')'); else why.push('some notes wandered off the pitch');
     for(const n of anaNotes(ph.a,ph.b)){ const q=sung.filter(p=>p.t>=n.t0&&p.t<=n.t1).map(p=>anaDev(p.m,n.tg)); if(q.length<5) continue; const md=q.reduce((x,y)=>x+y,0)/q.length; if(!worst||Math.abs(md)>Math.abs(worst.d)) worst={d:md,m:n.tg,t:n.t0}; }
     if(worst&&Math.abs(worst.d)>=0.35){ const hi=anaNotes(ph.a,ph.b).every(n=>n.tg<=worst.m+0.01); why.push('most on '+(hi?'the high note ':'the ')+noteName(Math.round(worst.m))+' ('+(worst.d<0?'flat':'sharp')+')'); } else worst=null; }
   if(tim.length>=2&&badF>=0.4) why.push(toff>0?'came in late (about '+Math.round(toff*1000)+' ms)':'came in early (about '+Math.round(-toff*1000)+' ms)');
@@ -4387,23 +4401,23 @@ function checkScore(ph){ const P=S.pts.filter(p=>p.t>=ph.a&&p.t<ph.b), tgd=P.fil
 function checkSecOf(t){ let lab=''; for(const x of songSections()) if(x.sec&&x.t<=t+0.05) lab=x.label; return lab; }
 function checkHist(){ try{ return JSON.parse(localStorage.getItem('pc-checkups')||'{}')||{}; }catch(e){ return {}; } }
 const checkKey=()=>S.curUid||(S.cur&&S.cur.libId!=null?'id'+S.cur.libId:'');
-const tlOf=sc=>sc>=0.75?'good':sc>=0.55?'ok':'weak';
+const tlOf=sc=>sc>=FB().solid?'good':sc>=FB().solid-0.2?'ok':'weak';
 // the report: overall in one line, then the phrases to work on with Listen / Loop, and Save as practice list
 function checkReport(a,b,full){ const box=$('#anaBox'), ph=checkPhrases(a,b).map(checkScore);
   const heard=ph.filter(x=>x.cover>=0.15);
   if(heard.length<2){ box.innerHTML='<p class="small">Too little singing to judge. Sing along with the microphone on (at least a few phrases), then try again.</p>'; box.hidden=false; $('#result').hidden=false; return; }
-  const solid=heard.filter(x=>x.score>=0.75).length, pct=Math.round(100*solid/heard.length), weak=heard.filter(x=>x.score<0.75).sort((x,y)=>x.score-y.score).slice(0,4);
+  const SOL=FB().solid, solid=heard.filter(x=>x.score>=SOL).length, pct=Math.round(100*solid/heard.length), weak=heard.filter(x=>x.score<SOL).sort((x,y)=>x.score-y.score).slice(0,4);
   const key=checkKey(), H=checkHist(), list=H[key]||[], prev=[...list].reverse().find(r=>r.a<b&&r.b>a);
   const was=t=>prev&&(prev.ph.find(x=>Math.abs(x.t-t)<0.3)||null);
   const mood=pct>=85?'Great run':pct>=65?'Good run':pct>=45?'Getting there':'A tough one', unheard=ph.length-heard.length;
   let html='<div class="ck-head"><div class="ck-top"><b>'+mood+': '+solid+' of '+heard.length+' phrases solid.</b><button type="button" class="link-btn" id="ckClose">Close</button></div>'+(unheard?'<span class="small">'+unheard+' phrase'+(unheard>1?'s':'')+' not heard (not sung, or too quiet) '+(unheard>1?'are':'is')+' left out.</span>':'')+(prev?'<span class="small ana-prog">Last check-up ('+new Date(prev.at).toLocaleDateString()+'): '+Math.round(100*prev.solid/Math.max(1,prev.total))+'% → now '+pct+'%'+(pct>Math.round(100*prev.solid/Math.max(1,prev.total))?' ✓':'')+'</span>':'')+'</div>';
-  const better=prev?heard.filter(x=>{ const w=was(x.a); return w&&w.s<0.75&&x.score>=0.75; }).slice(0,3):[];
+  const better=prev?heard.filter(x=>{ const w=was(x.a); return w&&w.s<SOL&&x.score>=SOL; }).slice(0,3):[];
   if(better.length) html+='<p class="small ana-prog">✓ Better than last time: '+better.map(x=>'“'+esc(x.text.length>28?x.text.slice(0,26)+'…':x.text)+'”').join(', ')+'.</p>';
   if(!weak.length) html+='<div class="ana-item good"><b>✓ Every phrase was solid</b><span class="small">Try it without the guide voice (Voice off), or a little faster.</span></div>';
   else html+='<p class="small">Work on '+(weak.length>1?'these '+weak.length:'this one')+':</p>';
   weak.forEach((x,i)=>{ const sec=checkSecOf(x.a), w=was(x.a);
     html+='<div class="ana-item ck-item tl-'+tlOf(x.score)+'"><b>'+(i+1)+'. '+(sec?esc(sec)+', ':'')+'“'+esc(x.text.length>40?x.text.slice(0,38)+'…':x.text)+'” <span class="small">'+fmtT(x.a)+'</span></b>'+
-      '<span>'+esc(x.why.length?x.why.join('; ').replace(/^./,c=>c.toUpperCase())+'.':'A little unsure overall.')+'</span>'+(w&&w.s<0.75?'<span class="small">Also weak last time.</span>':'')+
+      '<span>'+esc(x.why.length?x.why.join('; ').replace(/^./,c=>c.toUpperCase())+'.':'A little unsure overall.')+'</span>'+(w&&w.s<SOL?'<span class="small">Also weak last time.</span>':'')+
       '<div class="row"><button type="button" data-ck-l="'+i+'">▶ Listen</button><button type="button" data-ck-o="'+i+'">Loop it</button></div></div>'; });
   if(weak.length) html+='<div class="row"><button type="button" class="primary" id="ckSave">Save as practice list</button><span class="small">Bookmarks for these phrases, ready in Practise bookmarks.</span></div>';
   if(weak.length) html+='<p class="small">Loop a phrase and practise it: this report stays here (quick practice runs don’t replace it) until you close it or do a new check-up.</p><p class="small ana-prog" id="ckPractice" hidden></p>';
@@ -4470,7 +4484,7 @@ function showResult(){
   const pct=Math.round(100*S.stat.hit/S.stat.n), avg=Math.round(S.stat.sum/S.stat.n), secs=Math.round(S.stat.n/60);
   const tend=Math.abs(avg)<10?'Your average was right on the target.':avg>0?`On average you were ${avg} cents sharp (too high).`:`On average you were ${-avg} cents flat (too low).`;
   S.delayFixHtml='';
-  let nums=`<b>${pct}%</b> of the compared time was within 50 cents of the target. ${tend} <span class="small">(${secs} s of singing compared${S.ignoreOct?', octave ignored':''})</span>`+timingSummary();
+  let nums=`<b>${pct}%</b> of the compared time was within ${FB().good} cents of the target. ${tend} <span class="small">(${secs} s of singing compared${S.ignoreOct?', octave ignored':''})</span>`+timingSummary();
   if(S.passes.length) nums+='<br>Loop passes (pitch): '+S.passes.join('% · ')+'%.';
   // the words first: the phrase report button and (when it applies) the delay advice; the numbers behind a link, opening right under it
   $('#resultText').innerHTML='<div class="row ana-row"><button id="anaBtn" type="button" class="primary">Which phrases to work on?</button><span class="small">Your weakest phrases in this run, in words, ready to loop or save.</span></div>'+
@@ -5940,6 +5954,8 @@ $('#keySound').addEventListener('change',e=>{ S.keySound=e.target.value; try{ lo
   b.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); stepR(); saveView(); } });
   b.addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false}); });
 $('#kbAuto').addEventListener('click',()=>{ S.viewManual=false; computeView(); draw(); saveView(); setStatus('Note range set back to automatic.'); });
+$('#fbLevel').value=S.fbLevel;
+$('#fbLevel').addEventListener('change',e=>{ S.fbLevel=FBL[e.target.value]?e.target.value:'normal'; try{ localStorage.setItem('pc-feedback',S.fbLevel); }catch(x){} setStatus('Feedback: '+e.target.selectedOptions[0].textContent+'. It applies from your next run.'); });
 $('#ignoreOct').addEventListener('change',e=>{ S.ignoreOct=e.target.checked; try{ localStorage.setItem('pc-ignoreoct',e.target.checked?'1':'0'); }catch(x){} });
 try{ if(localStorage.getItem('pc-ignoreoct')==='1'){ $('#ignoreOct').checked=true; S.ignoreOct=true; } }catch(x){}
 try{ const mid=localStorage.getItem('pc-mic'); if(mid) S.micId=mid; }catch(x){}
