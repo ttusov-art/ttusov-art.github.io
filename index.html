@@ -462,6 +462,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .ana-row{gap:8px;margin-top:10px;align-items:center}
 .ck-secs-top{display:flex;justify-content:space-between;align-items:center;margin-top:6px} .ck-secs{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-top:6px}
 .ck-sec{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:8px 10px;text-align:left} .ck-sec.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)} .ck-sec.on .small{color:inherit;opacity:.85}
+.ck-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .ck-head{display:flex;flex-direction:column;gap:2px} .ck-item.tl-weak{border-left:4px solid var(--off)} .ck-item.tl-ok{border-left:4px solid var(--near)} .ck-item .row{gap:6px;margin-top:4px}
 table.sheet td.tap.tl-good{box-shadow:inset 4px 0 0 var(--good)} table.sheet td.tap.tl-ok{box-shadow:inset 4px 0 0 var(--near)} table.sheet td.tap.tl-weak{box-shadow:inset 4px 0 0 var(--off)} table.sheet td.tap.tl-good.now{box-shadow:inset 4px 0 0 var(--good),inset 0 0 0 2px var(--accent)} table.sheet td.tap.tl-ok.now{box-shadow:inset 4px 0 0 var(--near),inset 0 0 0 2px var(--accent)} table.sheet td.tap.tl-weak.now{box-shadow:inset 4px 0 0 var(--off),inset 0 0 0 2px var(--accent)}
 .ana-box{display:flex;flex-direction:column;gap:8px;margin-top:10px}
@@ -1179,7 +1180,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-05 b';
+const APP_VERSION='2026-11-05 c';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1364,11 +1365,11 @@ async function play(){ S.dotS=null; S.playYou=null; if(!$('#endTip').hidden) end
   beginTake();
   startTone();
   S.playing=true;
-  S.pts=S.pts.filter(p=>p.t<S.pos-0.02); S.micHist=[]; S.runFrom=S.pos; S.anaMarks=null; $('#anaBox')&&($('#anaBox').hidden=true);
+  S.pts=S.pts.filter(p=>p.t<S.pos-0.02); S.micHist=[]; S.runFrom=S.pos; S.anaMarks=null; if(!S.ckKeep) $('#anaBox')&&($('#anaBox').hidden=true);   // a check-up report stays while you practise its phrases
   if(S.pos<0.5){ S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; }
   S.tim.next=lowerOnset(S.pos-S.delay*S.rate+0.05); for(const k of [...S.tim.res.keys()]) if(k>=S.tim.next) S.tim.res.delete(k);
   S.timPass={n:0,good:0};
-  setPlayLbl('Pause'); $('#result').hidden=true;
+  setPlayLbl('Pause'); if(!S.ckKeep) $('#result').hidden=true;
   setStatus(S.mic?'Listening. Sing along with the target line.':'Playing without the microphone.');
   startBg(); mediaOn();
   try{ if(navigator.wakeLock&&!document.hidden) S.wake=await navigator.wakeLock.request('screen'); }catch(e){}
@@ -1556,7 +1557,7 @@ function stop(){
   setPlayLbl('Play');
   try{ S.wake&&S.wake.release(); }catch(e){} S.wake=null;
   stopBg(); mediaOff();
-  S.runTo=S.pos; showResult(); updateTime(); draw();
+  S.runTo=S.pos; if(S.ckKeep) checkPracticeLine(); else showResult(); updateTime(); draw();   // practising from a report: a quick run, the report is not replaced
 }
 function startTone(){
   stopTone(); const c=S.ctx;
@@ -1577,7 +1578,7 @@ function updateTone(now){
   if(m!==T.m){ T.o.frequency.setTargetAtTime(m2f(m),c.currentTime,isNaN(T.m)?0.001:0.015); if(isNaN(T.m)) T.env.gain.setTargetAtTime(1,c.currentTime,0.01); T.m=m; }
 }
 function seek(t){ const was=S.playing; if(was) stop(); S.pos=Math.max(0,Math.min(S.dur,t)); if(was) play(); else { updateTime(); draw(); } }
-function resetRun(clearPts){ if(clearPts){ S.pts=[]; S.tim.res=new Map(); } S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; $('#rScore').textContent='–'; $('#rTime').textContent='–'; $('#result').hidden=true; }
+function resetRun(clearPts){ S.ckKeep=false; if(clearPts){ S.pts=[]; S.tim.res=new Map(); } S.stat={n:0,hit:0,sum:0}; S.timStat={n:0,good:0,sum:0,list:[]}; $('#rScore').textContent='–'; $('#rTime').textContent='–'; $('#result').hidden=true; }
 function updateTime(){ beatSegCheck(); sheetFollow(); $('#time').textContent=fmtT(songTime())+' / '+fmtT(S.dur); if(!S.playing){ const m=targetNoteNear(songTime()); $('#rTarget').textContent=m==null?'–':noteName(m); } }
 // the target note at t, or the next one coming up (for the Target box)
 function targetNoteNear(t){ if(!S.tT) return null; const v=targetAt(t); if(!isNaN(v)) return Math.round(v);
@@ -4393,7 +4394,7 @@ function checkReport(a,b,full){ const box=$('#anaBox'), ph=checkPhrases(a,b).map
   const key=checkKey(), H=checkHist(), list=H[key]||[], prev=[...list].reverse().find(r=>r.a<b&&r.b>a);
   const was=t=>prev&&(prev.ph.find(x=>Math.abs(x.t-t)<0.3)||null);
   const mood=pct>=85?'Great run':pct>=65?'Good run':pct>=45?'Getting there':'A tough one', unheard=ph.length-heard.length;
-  let html='<div class="ck-head"><b>'+mood+': '+solid+' of '+heard.length+' phrases solid.</b>'+(unheard?'<span class="small">'+unheard+' phrase'+(unheard>1?'s':'')+' not heard (not sung, or too quiet) '+(unheard>1?'are':'is')+' left out.</span>':'')+(prev?'<span class="small ana-prog">Last check-up ('+new Date(prev.at).toLocaleDateString()+'): '+Math.round(100*prev.solid/Math.max(1,prev.total))+'% → now '+pct+'%'+(pct>Math.round(100*prev.solid/Math.max(1,prev.total))?' ✓':'')+'</span>':'')+'</div>';
+  let html='<div class="ck-head"><div class="ck-top"><b>'+mood+': '+solid+' of '+heard.length+' phrases solid.</b><button type="button" class="link-btn" id="ckClose">Close</button></div>'+(unheard?'<span class="small">'+unheard+' phrase'+(unheard>1?'s':'')+' not heard (not sung, or too quiet) '+(unheard>1?'are':'is')+' left out.</span>':'')+(prev?'<span class="small ana-prog">Last check-up ('+new Date(prev.at).toLocaleDateString()+'): '+Math.round(100*prev.solid/Math.max(1,prev.total))+'% → now '+pct+'%'+(pct>Math.round(100*prev.solid/Math.max(1,prev.total))?' ✓':'')+'</span>':'')+'</div>';
   const better=prev?heard.filter(x=>{ const w=was(x.a); return w&&w.s<0.75&&x.score>=0.75; }).slice(0,3):[];
   if(better.length) html+='<p class="small ana-prog">✓ Better than last time: '+better.map(x=>'“'+esc(x.text.length>28?x.text.slice(0,26)+'…':x.text)+'”').join(', ')+'.</p>';
   if(!weak.length) html+='<div class="ana-item good"><b>✓ Every phrase was solid</b><span class="small">Try it without the guide voice (Voice off), or a little faster.</span></div>';
@@ -4403,17 +4404,22 @@ function checkReport(a,b,full){ const box=$('#anaBox'), ph=checkPhrases(a,b).map
       '<span>'+esc(x.why.length?x.why.join('; ').replace(/^./,c=>c.toUpperCase())+'.':'A little unsure overall.')+'</span>'+(w&&w.s<0.75?'<span class="small">Also weak last time.</span>':'')+
       '<div class="row"><button type="button" data-ck-l="'+i+'">▶ Listen</button><button type="button" data-ck-o="'+i+'">Loop it</button></div></div>'; });
   if(weak.length) html+='<div class="row"><button type="button" class="primary" id="ckSave">Save as practice list</button><span class="small">Bookmarks for these phrases, ready in Practise bookmarks.</span></div>';
+  if(weak.length) html+='<p class="small">Loop a phrase and practise it: this report stays here (quick practice runs don’t replace it) until you close it or do a new check-up.</p><p class="small ana-prog" id="ckPractice" hidden></p>';
   html+='<button type="button" class="link-btn" id="ckNums" aria-expanded="false">Show the numbers</button><div id="ckNumsBox"></div>';
   box.innerHTML=html; box.hidden=false; $('#result').hidden=false; $('#resultText').hidden=true; $('#result h2').textContent=full?'Check-up':'Last run';   // the words first; the numbers on request
   box.querySelector('#ckNums').addEventListener('click',e=>{ const rt=$('#resultText'); box.querySelector('#ckNumsBox').appendChild(rt); { const ar=rt.querySelector('.ana-row'); if(ar) ar.hidden=true; } rt.hidden=!rt.hidden; e.target.textContent=rt.hidden?'Show the numbers':'Hide the numbers'; e.target.setAttribute('aria-expanded',String(!rt.hidden)); });   // opens right under the link
   box.querySelectorAll('[data-ck-o]').forEach(bt=>bt.addEventListener('click',()=>{ const x=weak[+bt.dataset.ckO]; if(S.playing) stop(); S.loop.a=x.a; S.loop.b=Math.min(S.dur,x.b); S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); seek(loopStart()); setStatus('Looping “'+x.text+'”. Press Play.'); window.scrollTo({top:0,behavior:'smooth'}); }));
   box.querySelectorAll('[data-ck-l]').forEach(bt=>bt.addEventListener('click',()=>checkListen(weak[+bt.dataset.ckL])));
+  S.ckKeep=true; S.ckTakes=S.takes.slice();   // keep the report (and the recordings it refers to) while you practise
+  box.querySelector('#ckClose').addEventListener('click',()=>{ S.ckKeep=false; $('#result').hidden=true; setStatus('Report closed.'); });
   const sv=box.querySelector('#ckSave'); if(sv) sv.addEventListener('click',()=>checkSave(weak,sv));
   // remember this check-up (for "compared with last time" and the coloured lyrics)
   if(key){ list.push({at:Date.now(),a,b,solid,total:heard.length,full:!!full,ph:heard.map(x=>({t:+x.a.toFixed(2),e:+x.b.toFixed(2),s:+x.score.toFixed(2)}))}); H[key]=list.slice(-6); try{ localStorage.setItem('pc-checkups',JSON.stringify(H)); }catch(e){} }
   setTimeout(()=>$('#result').scrollIntoView({behavior:'smooth',block:'start'}),100); }
+// quick practice under a report: just the loop passes, as a small line
+function checkPracticeLine(){ const el=$('#ckPractice'); if(!el) return; if(S.passes.length){ el.textContent='Practice loops (on pitch): '+S.passes.slice(-6).join('% · ')+'%'; el.hidden=false; } }
 // your recording of a phrase, with the part's voice and the backing (like the choir)
-function checkListen(x){ const k=[...S.takes].reverse().find(k=>k.song0<=x.a+0.2&&k.song1>=x.a+0.5);
+function checkListen(x){ const cov=k=>k.song0<=x.a+0.2&&k.song1>=x.a+0.5, k=[...(S.ckTakes||[])].reverse().find(cov)||[...S.takes].reverse().find(cov);   // the check-up's own recording first, not a later practice loop
   if(!k){ setStatus('No recording of this phrase: keep REC on during the run to listen back.',true); return; }
   reviewTake(k,2,Math.max(0,(x.a-k.song0)/k.rate-0.6),Math.min(k.song1,x.b+0.4)); }
 function checkSave(weak,btn){ if(!S.cur||S.cur.libId==null) return; const uid=S.curUid||'', song=curSongName(), bl=bmGet(), ids=[];
@@ -4447,7 +4453,7 @@ async function checkupDialog(){ if(!S.cur||S.cur.libId==null||!S.tT){ setStatus(
   checkupStart(a,b,label,whole); }
 async function checkupStart(a,b,label,full){ if(S.prac) pracStop(true); if(S.editMode||S.tap) closeEditor(true); if(S.playing) stop();
   if(!S.mic){ $('#micOn').checked=true; $('#micOn').dispatchEvent(new Event('change')); for(let i=0;i<30&&!S.mic;i++) await new Promise(r=>setTimeout(r,200)); if(!S.mic){ setStatus('The check-up needs the microphone: allow it and try again.',true); return; } }
-  S.check={a,b,label,full,rec:$('#recOn').checked}; $('#recOn').checked=true;
+  S.ckKeep=false; S.check={a,b,label,full,rec:$('#recOn').checked}; $('#recOn').checked=true;
   S.loop.a=S.loop.b=null; S.loop.on=false; $('#loopOn').checked=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); $('#anaBox').hidden=true;   // a whole run, no loop
   $('#checkInfo').innerHTML='<b>Check-up</b>: '+esc(label)+' · sing it through, it ends by itself at '+fmtT(b)+'. Pause and Play work as usual.'; $('#checkBar').hidden=false;
   S.pos=Math.max(0,a-1.5); updateTime(); play(); }
