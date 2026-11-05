@@ -462,6 +462,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .ana-row{gap:8px;margin-top:10px;align-items:center}
 .ck-secs-top{display:flex;justify-content:space-between;align-items:center;margin-top:6px} .ck-secs{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-top:6px}
 .ck-sec{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:8px 10px;text-align:left} .ck-sec.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)} .ck-sec.on .small{color:inherit;opacity:.85}
+.delay-fix{margin:6px 0} .delay-fix .fix-delay{margin-top:4px} #rNums{margin-top:4px}
 .ck-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .ck-head{display:flex;flex-direction:column;gap:2px} .ck-item.tl-weak{border-left:4px solid var(--off)} .ck-item.tl-ok{border-left:4px solid var(--near)} .ck-item .row{gap:6px;margin-top:4px}
 table.sheet td.tap.tl-good{box-shadow:inset 4px 0 0 var(--good)} table.sheet td.tap.tl-ok{box-shadow:inset 4px 0 0 var(--near)} table.sheet td.tap.tl-weak{box-shadow:inset 4px 0 0 var(--off)} table.sheet td.tap.tl-good.now{box-shadow:inset 4px 0 0 var(--good),inset 0 0 0 2px var(--accent)} table.sheet td.tap.tl-ok.now{box-shadow:inset 4px 0 0 var(--near),inset 0 0 0 2px var(--accent)} table.sheet td.tap.tl-weak.now{box-shadow:inset 4px 0 0 var(--off),inset 0 0 0 2px var(--accent)}
@@ -1180,7 +1181,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-05 c';
+const APP_VERSION='2026-11-05 d';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3267,7 +3268,8 @@ function timingSummary(){
   if(hits.length>=8){ const offs=hits.map(x=>x.off).sort((a,b)=>a-b), med=offs[offs.length>>1], mad=median(offs.map(v=>Math.abs(v-med)));
     const ms=Math.round(med/S.rate*100)*10;
     if(Math.abs(ms)>=60&&mad<=0.15){ fix=`<br><span class="small">Your note starts were ${ms>0?'late':'early'} by a similar amount almost everywhere, which usually means the delay setting is off rather than your singing.</span> <button type="button" class="fix-delay" data-ms="${ms}">${ms>0?'Add':'Remove'} ${Math.abs(ms)} ms ${ms>0?'to':'from'} Delay compensation</button>`; } }
-  return `<br><b>${pct}%</b> of ${s.n} note starts were on time (within 80 ms). ${tend}${w}${fix}`;
+  S.delayFixHtml=fix;   // shown on its own, outside the numbers
+  return `<br><b>${pct}%</b> of ${s.n} note starts were on time (within 80 ms). ${tend}${w}`;
 }
 
 // ===== lyrics =====
@@ -4407,7 +4409,7 @@ function checkReport(a,b,full){ const box=$('#anaBox'), ph=checkPhrases(a,b).map
   if(weak.length) html+='<p class="small">Loop a phrase and practise it: this report stays here (quick practice runs don’t replace it) until you close it or do a new check-up.</p><p class="small ana-prog" id="ckPractice" hidden></p>';
   html+='<button type="button" class="link-btn" id="ckNums" aria-expanded="false">Show the numbers</button><div id="ckNumsBox"></div>';
   box.innerHTML=html; box.hidden=false; $('#result').hidden=false; $('#resultText').hidden=true; $('#result h2').textContent=full?'Check-up':'Last run';   // the words first; the numbers on request
-  box.querySelector('#ckNums').addEventListener('click',e=>{ const rt=$('#resultText'); box.querySelector('#ckNumsBox').appendChild(rt); { const ar=rt.querySelector('.ana-row'); if(ar) ar.hidden=true; } rt.hidden=!rt.hidden; e.target.textContent=rt.hidden?'Show the numbers':'Hide the numbers'; e.target.setAttribute('aria-expanded',String(!rt.hidden)); });   // opens right under the link
+  box.querySelector('#ckNums').addEventListener('click',e=>{ const rt=$('#resultText'); box.querySelector('#ckNumsBox').appendChild(rt); { const ar=rt.querySelector('.ana-row'); if(ar) ar.hidden=true; const nb=rt.querySelector('#rNumsBtn'); if(nb) nb.hidden=true; const nn=rt.querySelector('#rNums'); if(nn) nn.hidden=false; } rt.hidden=!rt.hidden; e.target.textContent=rt.hidden?'Show the numbers':'Hide the numbers'; e.target.setAttribute('aria-expanded',String(!rt.hidden)); });   // opens right under the link
   box.querySelectorAll('[data-ck-o]').forEach(bt=>bt.addEventListener('click',()=>{ const x=weak[+bt.dataset.ckO]; if(S.playing) stop(); S.loop.a=x.a; S.loop.b=Math.min(S.dur,x.b); S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); seek(loopStart()); setStatus('Looping “'+x.text+'”. Press Play.'); window.scrollTo({top:0,behavior:'smooth'}); }));
   box.querySelectorAll('[data-ck-l]').forEach(bt=>bt.addEventListener('click',()=>checkListen(weak[+bt.dataset.ckL])));
   S.ckKeep=true; S.ckTakes=S.takes.slice();   // keep the report (and the recordings it refers to) while you practise
@@ -4467,10 +4469,14 @@ function showResult(){
   if(S.stat.n<30){ $('#result').hidden=true; return; }
   const pct=Math.round(100*S.stat.hit/S.stat.n), avg=Math.round(S.stat.sum/S.stat.n), secs=Math.round(S.stat.n/60);
   const tend=Math.abs(avg)<10?'Your average was right on the target.':avg>0?`On average you were ${avg} cents sharp (too high).`:`On average you were ${-avg} cents flat (too low).`;
-  $('#resultText').innerHTML=`<b>${pct}%</b> of the compared time was within 50 cents of the target. ${tend} <span class="small">(${secs} s of singing compared${S.ignoreOct?', octave ignored':''})</span>`;
-  $('#resultText').innerHTML+=timingSummary();
-  if(S.passes.length) $('#resultText').innerHTML+='<br>Loop passes (pitch): '+S.passes.join('% · ')+'%.';
-  $('#resultText').innerHTML+='<div class="row ana-row"><button id="anaBtn" type="button" class="primary">Which phrases to work on?</button><span class="small">Your weakest phrases in this run, in words, ready to loop or save.</span></div>';
+  S.delayFixHtml='';
+  let nums=`<b>${pct}%</b> of the compared time was within 50 cents of the target. ${tend} <span class="small">(${secs} s of singing compared${S.ignoreOct?', octave ignored':''})</span>`+timingSummary();
+  if(S.passes.length) nums+='<br>Loop passes (pitch): '+S.passes.join('% · ')+'%.';
+  // the words first: the phrase report button and (when it applies) the delay advice; the numbers behind a link, opening right under it
+  $('#resultText').innerHTML='<div class="row ana-row"><button id="anaBtn" type="button" class="primary">Which phrases to work on?</button><span class="small">Your weakest phrases in this run, in words, ready to loop or save.</span></div>'+
+    (S.delayFixHtml?'<div class="delay-fix">'+S.delayFixHtml.replace(/^<br>/,'')+'</div>':'')+
+    '<button type="button" class="link-btn" id="rNumsBtn" aria-expanded="false">Show the numbers</button><div id="rNums" hidden>'+nums+'</div>';
+  $('#rNumsBtn').addEventListener('click',e=>{ const n=$('#rNums'); n.hidden=!n.hidden; e.target.textContent=n.hidden?'Show the numbers':'Hide the numbers'; e.target.setAttribute('aria-expanded',String(!n.hidden)); });
   $('#anaBtn').addEventListener('click',()=>{ const R=anaRange(); checkReport(R.a,R.b,false); }); $('#anaBox').hidden=true;
   $('#result').hidden=false;
 }
