@@ -1186,7 +1186,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-06 a';
+const APP_VERSION='2026-11-06 b';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4118,7 +4118,7 @@ function stopMic(){ if(!S.mic) return; if(S.recNode){ try{S.recNode.disconnect()
 
 // real-time YIN on the analyser window, decimated to ~16 kHz
 const RT={dec:3,x:null,cm:null};
-function micPitch(){
+function micPitch(ref){
   const an=S.mic.an, sr=S.ctx.sampleRate; an.getFloatTimeDomainData(S.micBuf);
   const dec=Math.max(1,Math.round(sr/16000)), fs=sr/dec, n=Math.floor(S.micBuf.length/dec);
   if(!RT.x||RT.x.length!==n){ RT.x=new Float32Array(n); }
@@ -4131,15 +4131,24 @@ function micPitch(){
   let best=-1;
   for(let tau=tauMin;tau<=tauMax;tau++){ if(cm[tau]<0.15){ while(tau+1<=tauMax&&cm[tau+1]<cm[tau]) tau++; best=tau; break; } }
   if(best<0) return NaN;
+  // octave check: a low voice on a phone microphone often has a weak fundamental, so the detector can latch onto an overtone
+  // (one or two octaves too high). The voice is just as periodic at 2, 3 or 4 times that period, so among those
+  // the one nearest the expected note (the target, or the note just sung) is taken, only when it is a clear octave-sized move.
+  if(ref!=null&&!isNaN(ref)){ let pick=best, pd=Math.abs(f2m(fs/best)-ref);
+    for(let k=2;k<=4;k++){ const c0=Math.round(best*k); if(c0+3>tauMax) break; let m=c0; for(let d=-3;d<=3;d++){ const q=c0+d; if(cm[q]<cm[m]) m=q; }
+      if(cm[m]<0.3){ const dd=Math.abs(f2m(fs/m)-ref); if(dd<pd-6){ pick=m; pd=dd; } } }
+    best=pick; }
   let t=best; const a=cm[best-1],b=cm[best],c=cm[best+1],den=a-2*b+c; if(den>0) t=best+0.5*(a-c)/den;
   return f2m(fs/t);
 }
+// what the voice is expected to be near: the target note, else the note just heard (a fresh start is taken as it comes)
+function micRef(t){ const tg=t!=null?targetAt(t):NaN; if(!isNaN(tg)) return tg; if(S.micLast&&performance.now()-S.micLast.at<1500) return S.micLast.m; return null; }
 // paused with the microphone on: what you are singing right now (You / Off by, a key on the keyboard, a dot at the playhead)
 S.live=NaN; S.liveShown=null;
 function liveLoop(){ requestAnimationFrame(liveLoop);
   const on=!S.playing&&!!S.mic&&!S.review&&!S.cal&&!document.hidden&&!!S.micBuf;
   if(!on){ if(!isNaN(S.live)){ S.live=NaN; S.liveShown=null; if(!S.playing){ $('#rYou').textContent='–'; $('#rCents').textContent='–'; $('#rCents').className=''; draw(); } } return; }
-  const you=micPitch(); S.live=you;
+  const you=micPitch(micRef(null)); S.live=you; if(!isNaN(you)) S.micLast={m:you,at:performance.now()};
   const key=(isNaN(you)?'x':Math.round(you*20))+'|'+S.pos.toFixed(2)+'|'+S.win; if(key===S.liveShown) return; S.liveShown=key;   // redraw only when it changes (5 cents)
   const ry=$('#rYou'), rc=$('#rCents'); let tg=targetAt(S.pos); if(isNaN(tg)){ const m=targetNoteNear(S.pos); tg=m==null?NaN:m; }
   if(isNaN(you)){ ry.textContent='–'; rc.textContent='–'; rc.className=''; }
@@ -4212,7 +4221,8 @@ function step(){
   if(now>=S.dur-0.02){ stop(); S.pos=S.dur; updateTime(); endTipMaybe(); if((S.pmode==='part'||S.pmode==='partloop'||S.pmode==='shuffle')&&!(S.editMode||S.tap||S.sug||S.prac)) playNextSong(); return; }   // while editing: stay on this song
   let you=NaN; updateTone(now); metSchedule(now); if(S.targetHold){ const v=targetAt(now); keyFollow(isNaN(v)?null:Math.round(v)); }
   if(S.mic){
-    const raw=micPitch();
+    const raw=micPitch(micRef(now-(S.delay+ANA_LAG)*S.rate));
+    if(!isNaN(raw)) S.micLast={m:raw,at:performance.now()};
     S.micHist.push(raw); if(S.micHist.length>5) S.micHist.shift();
     const ok=S.micHist.filter(v=>!isNaN(v));
     if(!isNaN(raw)&&ok.length>=3){ you=median(ok); }
