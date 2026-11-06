@@ -1186,7 +1186,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-05 e';
+const APP_VERSION='2026-11-06 a';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4202,7 +4202,7 @@ function setMetOn(on){ setMetMode(on?'all':'off'); }
 function dotFeed(m){ const now=performance.now(), d=S.dotS;
   if(isNaN(m)){ if(d&&now-d.at>350) S.playYou=null; return; }   // a short unvoiced moment (a consonant, a breath): keep the dot where it was
   if(!d||now-d.at>350||Math.abs(m-d.m)>2.5) S.dotS={m,at:now};   // new note or a big leap: jump straight there
-  else { d.m+=(m-d.m)*0.18; d.at=now; }
+  else { const a=Math.abs(m-d.m); d.m+=(m-d.m)*(a>0.9?0.5:0.18); d.at=now; }   // a step to the next note follows quickly; vibrato and wobble stay calm
   S.playYou={m:S.dotS.m}; }
 function step(){
   if(!S.playing) return;
@@ -4713,9 +4713,12 @@ function draw(){
   if(S.kbNote!=null&&S.kbNote>=lo&&S.kbNote<=hi){ const y=yOf(S.kbNote); g.fillStyle=col('--accent'); g.globalAlpha=0.55; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; lit.push(S.kbNote); }
   { const ab=document.getElementById('kbAuto'); if(ab&&ab.hidden===!!S.viewManual) ab.hidden=!S.viewManual; }
   const dotM=S.playing?(S.playYou&&!S.review?S.playYou.m:NaN):S.live;
-  if(!isNaN(dotM)){ const lm=Math.round(dotM), tgL=targetAt(now), gc=isNaN(tgL)?col('--you-idle'):col('--'+grade(centsDiff(dotM,tgL)));
+  // while singing, the dot sits where the voice belongs in the song: the app hears you later than you sing (Voice delay),
+  // so it is drawn that much behind the playhead, on the target you were singing against, and coloured the way the score counts it
+  const dotT=S.playing?songTime()-(S.delay+ANA_LAG)*S.rate:now, dotX=S.playing?Math.max(LABELW+8,Math.min(headX,xOf(dotT))):headX;
+  if(!isNaN(dotM)){ const lm=Math.round(dotM), tgL=S.playing?tgNear(dotT,dotM):targetAt(now), gc=isNaN(tgL)?col('--you-idle'):col('--'+grade(centsDiff(dotM,tgL),S.playing&&busyAt(dotT)?FB().busy:1));
     if(lm>=lo&&lm<=hi){ const y=yOf(lm); g.fillStyle=gc; g.globalAlpha=0.5; g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.globalAlpha=1; lit.push(lm); }
-    const yy=yOf(dotM); if(yy>0&&yy<h){ g.fillStyle=gc; g.beginPath(); g.arc(headX,yy,7,0,Math.PI*2); g.fill(); g.strokeStyle=col('--lane-bg'); g.lineWidth=2; g.stroke(); } }
+    const yy=yOf(dotM); if(yy>0&&yy<h){ g.fillStyle=gc; g.beginPath(); g.arc(dotX,yy,7,0,Math.PI*2); g.fill(); g.strokeStyle=col('--lane-bg'); g.lineWidth=2; g.stroke(); } }
   if(hit!=null&&hit>=lo&&hit<=hi){ const y=yOf(hit); g.fillStyle=col('--key-hit'); g.fillRect(0,y-rh/2+0.5,LABELW-1,rh-1); g.fillStyle=col('--accent'); g.fillRect(0,y-rh/2+0.5,3,rh-1); lit.push(hit); }
   [...new Set(lit)].forEach(m=>{ if(m===hit) return; const pc=((m%12)+12)%12; if(!BLACK.includes(pc)&&m!==hit){ /* the name stays readable through the light tint */ } keyLabel(g,m,false); });
   if(hit!=null&&hit>=lo&&hit<=hi) keyLabel(g,hit,true);
