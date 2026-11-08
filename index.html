@@ -1189,7 +1189,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-08 f';
+const APP_VERSION='2026-11-08 g';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4857,17 +4857,28 @@ canvas.addEventListener('mousedown',e=>{ if(e.button===1) e.preventDefault(); })
 canvas.addEventListener('auxclick',e=>{ if(e.button===1) e.preventDefault(); });
 // stop the phone's own long-press buzz and menus on the lane (the app's loop-mark buzz still works)
 canvas.addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
-canvas.addEventListener('pointermove',e=>{ if(drag&&drag.loopEdge){ const d=drag, t=Math.round(snapT(laneTimeAt(e.clientX))*100)/100;   // loop handle: move A or B (snaps to the grid)
-    if(d.loopEdge==='a') S.loop.a=Math.max(0,Math.min(t,S.loop.b!=null?S.loop.b-0.5:S.dur)); else S.loop.b=Math.min(S.dur,Math.max(t,S.loop.a!=null?S.loop.a+0.5:0));
-    d.moved=true; updateLoopUI(); draw(); return; }
+// loop handle: move A or B (snaps to the grid)
+function loopEdgeSet(d,clientX){ const t=Math.round(snapT(laneTimeAt(clientX))*100)/100;
+  if(d.loopEdge==='a') S.loop.a=Math.max(0,Math.min(t,S.loop.b!=null?S.loop.b-0.5:S.dur)); else S.loop.b=Math.min(S.dur,Math.max(t,S.loop.a!=null?S.loop.a+0.5:0));
+  d.moved=true; updateLoopUI(); draw(); }
+// holding a handle near (or past) the left or right edge pans the graph, faster the further out, and the handle rides along
+function loopEdgePan(ts){ const d=drag; if(!d||!d.loopEdge){ return; }
+  const r=canvas.getBoundingClientRect(), x=d.lx-r.left, Z=44; let v=0;
+  if(x<LABELW+Z) v=-(LABELW+Z-x)/Z; else if(x>r.width-Z) v=(x-(r.width-Z))/Z;
+  v=Math.max(-2.5,Math.min(2.5,v)); const dt=d.panT?Math.min(0.05,(ts-d.panT)/1000):0; d.panT=ts;
+  if(!v){ d.panRaf=0; d.panT=0; return; }
+  if(S.playing){ d.resume=true; stop(); }   // the graph can only be moved while the song stands still; playback carries on when you let go
+  const np=Math.max(0,Math.min(S.dur,S.pos+v*S.win*0.9*dt)); if(np!==S.pos){ S.pos=np; updateTime(); }
+  loopEdgeSet(d,d.lx); d.panRaf=requestAnimationFrame(loopEdgePan); }
+canvas.addEventListener('pointermove',e=>{ if(drag&&drag.loopEdge){ const d=drag; d.lx=e.clientX; loopEdgeSet(d,e.clientX); if(!d.panRaf) d.panRaf=requestAnimationFrame(loopEdgePan); return; }
   if(drag&&drag.stretch){ const d=drag, t=snapT(laneTimeAt(e.clientX)), minL=Math.max(0.05,snapStep(t)||0.1); let a1=d.a0,b1=d.b0;   // edge handle: make the selection bigger or smaller
     if(d.stretch==='a') a1=Math.max(0,Math.min(t,d.b0-minL)); else b1=Math.min(S.dur,Math.max(t,d.a0+minL));
     if(a1!==d.a1||b1!==d.b1){ d.a1=a1; d.b1=b1; S.sel={a:a1,b:b1,m:S.sel&&S.sel.m}; updateSelInfo(); draw(); } return; }
   if(S.lyrDrag){ const d=S.lyrDrag, pps=(canvas.clientWidth-LABELW)/S.win; let t=lyrT(d.t0+(e.clientX-d.x0)/pps); if(t<d.min) t=lyrT(d.min+snapStep()); if(t>d.max) t=lyrT(d.max-snapStep()); if(t>=d.min&&t<=d.max) S.lyrics[d.i].t=t; draw(); return; } if(kb&&kb.pts.has(e.pointerId)){ kb.pts.set(e.pointerId,e.clientY); kbMove(); return; } if(touchPts.has(e.pointerId)) touchPts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pinch&&touchPts.size>=2){ setWin(pinch.win0*pinch.d0/pinchDist(),false); if(!S.playing&&!S.review){ const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,pinch.pos0-(pinchMid()-pinch.mid0)/pps)); updateTime(); tapFollow(); draw(); } return; } if(!drag||drag.pinch) return; if(drag.edit){ S.sel.b=snapT(laneTimeAt(e.clientX)); updateSelInfo(); draw(); return; } if(drag.scroll){ pageDrag(drag,e.clientY); return; } if(!drag.isMouse&&!drag.moved&&!drag.long&&!drag.sweep){ const dx=Math.abs(e.clientX-drag.x), dy=Math.abs(e.clientY-drag.y0); if(dy>9&&dy>1.4*dx){ drag.scroll=true; clearTimeout(drag.timer); drag.sy=drag.y0; drag.ys=[]; pageDrag(drag,e.clientY); return; } if(dx<=6) return; } if(!drag.moved&&Math.abs(e.clientX-drag.x)>6){ drag.moved=true; clearTimeout(drag.timer); if(S.playing&&!S.review&&!drag.long){ stop(); drag.resume=true; drag.pos=S.pos; drag.x=e.clientX; } } if(drag.sweep){ sweepSel(drag.sweep,laneTimeAt(e.clientX)); return; } if(drag.samples){ drag.samples.push([performance.now(),e.clientX]); if(drag.samples.length>8) drag.samples.shift(); } if(drag.long||!drag.moved||S.playing||S.review) return; const pps=(canvas.clientWidth-LABELW)/S.win; S.pos=Math.max(0,Math.min(S.dur,drag.pos-(e.clientX-drag.x)/pps)); updateTime(); tapFollow(); draw(); });
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
-  if(drag&&drag.loopEdge){ const d=drag; drag=null; touchPts.delete(e.pointerId);
+  if(drag&&drag.loopEdge){ const d=drag; drag=null; touchPts.delete(e.pointerId); if(d.panRaf) cancelAnimationFrame(d.panRaf);
     if(d.moved&&(S.loop.a!==d.a0||S.loop.b!==d.b0)){ S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); setStatus('Loop '+(S.loop.a!=null?fmtT1(S.loop.a):'start')+' – '+(S.loop.b!=null?fmtT1(S.loop.b):'end')+'.'); }
-    draw(); return; }
+    draw(); if(d.resume) play(); return; }
   if(drag&&drag.stretch){ drag=null; touchPts.delete(e.pointerId); updateSelInfo(); draw(); return; }
   if(S.lyrDrag){ const d=S.lyrDrag; S.lyrDrag=null; const L=S.lyrics[d.i]; if(L.t!==d.t0&&!S.tap&&d.t0!=null) setTimeout(()=>repCheckTime(d.i,L.t-d.t0),0); if(L.t!==d.t0){ if(S.tap){ S.tap.hist.push({i:d.i,t:d.t0,cleared:[],moved:true,back:S.tap.i}); $('#lyrUndo').disabled=false; } else { undoPush({lyr:d.i,t:d.t0}); updateSelInfo(); } setStatus('“'+L.text+'” moved to '+fmtT1(L.t)+'.'); } lyrChanged(); return; }
   if(kb&&kb.pts.has(e.pointerId)){ kb.pts.delete(e.pointerId);
