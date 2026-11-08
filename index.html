@@ -345,6 +345,9 @@ table.sheet tr.st-bridge td{background-color:var(--sec-bridge)} table.sheet tr.s
 table.sheet td.lab{padding-left:9px}
 table.sheet td.tap{cursor:pointer}
 table.sheet td.inloop{background-image:linear-gradient(color-mix(in srgb,var(--loop-edge) 20%,transparent),color-mix(in srgb,var(--loop-edge) 20%,transparent))}   /* lines inside the loop */
+.sheet-loop .sl-h{position:absolute;left:22px;width:44px;height:16px;border-radius:8px;background:var(--loop-edge);pointer-events:auto;touch-action:none;cursor:ns-resize;display:flex;align-items:center;justify-content:center} .sheet-loop .sl-h::before{content:'';position:absolute;inset:-14px -12px}   /* bigger target for a thumb */
+.sheet-loop .sl-h::after{content:'';width:18px;height:5px;border-top:1.5px solid #fff;border-bottom:1.5px solid #fff} .sheet-loop .sl-h.top{top:-9px} .sheet-loop .sl-h.bot{bottom:-9px}
+#dlgView.nosel :not(input):not(textarea){-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}   /* opened by a long press: the finger is still down, so no text selection */
 .sheet-loop{position:absolute;pointer-events:none;border:2.5px solid var(--loop-edge);border-radius:8px;z-index:2} .sheet-loop span{position:absolute;top:-11px;right:8px;background:var(--loop-edge);color:#fff;font:600 11px/1 var(--font-mono,monospace);padding:4px 7px;border-radius:6px;white-space:nowrap}
 table.sheet td.now{box-shadow:inset 0 0 0 2px var(--accent);border-radius:4px;font-weight:700;background-image:linear-gradient(color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--accent) 22%,transparent))}
 
@@ -1191,7 +1194,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-08 i';
+const APP_VERSION='2026-11-08 j';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -5290,9 +5293,22 @@ function sheetLoopFrame(){ const body=document.querySelector('.sheet-body'); if(
   if(!tds.length){ if(box) box.hidden=true; return; }   // nothing looped, or the sheet is closed
   const br=body.getBoundingClientRect(); let l=1e9,t=1e9,r=-1e9,b=-1e9;
   tds.forEach(td=>{ const q=td.getBoundingClientRect(); l=Math.min(l,q.left); t=Math.min(t,q.top); r=Math.max(r,q.right); b=Math.max(b,q.bottom); });
-  if(!box){ box=document.createElement('div'); box.className='sheet-loop'; box.innerHTML='<span></span>'; body.appendChild(box); }
+  if(!box){ box=document.createElement('div'); box.className='sheet-loop'; box.innerHTML='<span></span><div class="sl-h top" role="slider" aria-label="Loop start: drag up or down"></div><div class="sl-h bot" role="slider" aria-label="Loop end: drag up or down"></div>'; body.appendChild(box);
+    box.querySelectorAll('.sl-h').forEach(h=>sheetLoopHandle(h,h.classList.contains('top')?'a':'b')); }
   const P=4; box.hidden=false; Object.assign(box.style,{left:(l-br.left+body.scrollLeft-P)+'px',top:(t-br.top+body.scrollTop-P)+'px',width:(r-l+2*P)+'px',height:(b-t+2*P)+'px'});
   box.firstChild.textContent='↻ '+fmtT(S.loop.a)+'–'+fmtT(S.loop.b); }
+// drag the frame's top or bottom handle to take in more lines or fewer; near the edge of the sheet it scrolls along
+function sheetLoopHandle(h,edge){ let d=null; const body=document.querySelector('.sheet-body');
+  const lineAt=y=>{ let best=null,bd=1e9; document.querySelectorAll('#sheetTable td.tap').forEach(td=>{ if(!td.offsetParent||!isFinite(+td.dataset.a)) return; const q=td.getBoundingClientRect(), dd=y<q.top?q.top-y:y>q.bottom?y-q.bottom:0; if(dd<bd){ bd=dd; best=td; } }); return best; };
+  const apply=()=>{ const td=lineAt(d.y); if(!td) return; const P=sheetPhrases(), p={a:+td.dataset.a,b:+td.dataset.b}, L=S.loop;
+    if(edge==='a'){ const a=Math.round(p.a*100)/100; if(a<L.b-0.5&&a!==L.a){ L.a=a; d.moved=true; updateLoopUI(); draw(); } }
+    else { const b=phraseEndOf(p,P); if(b>L.a+0.5&&b!==L.b){ L.b=b; d.moved=true; updateLoopUI(); draw(); } } };
+  const tick=()=>{ if(!d) return; const r=body.getBoundingClientRect(), Z=50; let v=0; if(d.y<r.top+Z) v=-(r.top+Z-d.y); else if(d.y>r.bottom-Z) v=d.y-(r.bottom-Z);
+    if(v){ body.scrollTop+=Math.max(-25,Math.min(25,v*0.35)); apply(); } d.raf=requestAnimationFrame(tick); };
+  h.addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); h.setPointerCapture(e.pointerId); d={y:e.clientY,moved:false,raf:requestAnimationFrame(tick)}; try{ navigator.vibrate&&navigator.vibrate(10); }catch(x){} });
+  h.addEventListener('pointermove',e=>{ if(!d) return; d.y=e.clientY; apply(); });
+  const end=()=>{ if(!d) return; cancelAnimationFrame(d.raf); const m=d.moved; d=null; if(m){ S.passes=[]; S.tPasses=[]; S.ghost=[]; if(!S.playing) seek(loopStart()); setStatus('Looping '+fmtT(S.loop.a)+'–'+fmtT(S.loop.b)+'.'); } };
+  h.addEventListener('pointerup',end); h.addEventListener('pointercancel',end); }
 // line heights change with shapes, text size and screen width: keep the frame on the lines
 if(window.ResizeObserver){ const ro=new ResizeObserver(()=>sheetLoopFrame()); requestAnimationFrame(()=>{ const t=$('#sheetTable'); if(t) ro.observe(t); }); }
 // long-press a line: loop it; with a loop already set, long-press another line to stretch the loop to it (a section of several lines)
@@ -5300,10 +5316,13 @@ async function sheetLineMenu(td){ const p={a:+td.dataset.a,b:+td.dataset.b,td}, 
   try{ navigator.vibrate&&navigator.vibrate(25); }catch(e){}
   const L=S.loop, has=L.a!=null&&L.b!=null&&L.b-L.a>=0.5, inside=has&&p.a>=L.a-0.05&&p.a<L.b-0.05;
   const sa=has?Math.min(L.a,Math.round(p.a*100)/100):0, sb=has?Math.max(L.b,end):0, nIn=has?P.filter(x=>x.a>=sa-0.05&&x.a<sb-0.05).length:0;
+  if(inside){ S.loop.a=S.loop.b=null; S.loop.on=false; $('#loopOn').checked=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); setStatus('Loop cleared.'); return; }   // long-press inside the loop: stop looping
   const head='<p class="kv-sub">“'+esc(txt.length>60?txt.slice(0,58)+'…':txt)+'” · '+fmtT(p.a)+'–'+fmtT(end)+'</p>';
-  const r=has&&!inside
+  $('#dlgView').classList.add('nosel');
+  const r=has
     ? await dlg({title:'Loop several lines',html:head+'<p>Stretch the loop to this line: '+nIn+' lines, '+fmtT(sa)+'–'+fmtT(sb)+'.</p>',buttons:[{label:'Stretch the loop to here',value:'ext',primary:true},{label:'Stretch and bookmark',value:'extbm'},{label:'Loop only this line',value:'loop'},{label:'Cancel',value:null}]})
-    : await dlg({title:'This line',html:head+'<p class="small">Tip: after looping a line, long-press another line to loop everything in between.</p>',buttons:[{label:'Loop and bookmark',value:'bm',primary:true},{label:'Loop it',value:'loop'},{label:'Cancel',value:null}]});
+    : await dlg({title:'This line',html:head+'<p class="small">Tip: after looping a line, long-press another line to loop everything in between. Long-press inside the loop to stop looping.</p>',buttons:[{label:'Loop it',value:'loop',primary:true},{label:'Loop and bookmark',value:'bm'},{label:'Cancel',value:null}]});
+  $('#dlgView').classList.remove('nosel');
   if(!r.value) return;
   if(r.value==='ext'||r.value==='extbm'){ S.loop.a=sa; S.loop.b=sb; S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); seek(loopStart()); draw(); }
   else loopPhrase(p);
