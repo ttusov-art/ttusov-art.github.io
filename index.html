@@ -75,6 +75,36 @@ html:has(.key-view:not([hidden])),html:has(.sheet-view:not([hidden])),html:has(.
 .kv-b.in{fill:#3c4246}
 .kv-svg rect.on{fill:var(--warm)!important}
 .kv-svg text{pointer-events:none}
+/* ===== full-screen piano (from "Bigger keys"): overview strip, keys, pedal strip ===== */
+.pno{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;overscroll-behavior:contain;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.pno[hidden]{display:none}
+.pno-top{display:flex;align-items:center;gap:8px;padding:6px 10px;min-height:40px}
+.pno-top h2{font-size:16px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .pno-top .small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.pno-top button{min-height:34px;padding:4px 12px}
+.pno-map{display:flex;align-items:center;gap:6px;padding:0 10px 6px}
+.pno-map button{min-width:38px;min-height:30px;padding:2px 8px;font-size:17px;line-height:1}
+#pnoMini{flex:1;height:26px;display:block;touch-action:none;cursor:grab;border-radius:5px;background:var(--surface)}
+#pnoMini .mw{fill:#fff;stroke:#b8c0c6;stroke-width:.5} #pnoMini .mb{fill:#3a3f43} #pnoMini .mv{fill:color-mix(in srgb,var(--accent) 22%,transparent);stroke:var(--accent);stroke-width:1.5}
+.pno-keys{position:relative;flex:1;min-height:120px;overflow:hidden;touch-action:none;margin:0 6px}
+.pno-keys svg{position:absolute;left:0;top:0;height:100%;display:block;touch-action:none}
+.pno-keys text{pointer-events:none;font:600 13px var(--font-ui,sans-serif);text-anchor:middle} .pno-keys .kv-tw{fill:#4a5257} .pno-keys .kv-tw.home{fill:#0c7165} .pno-keys .kv-tb{fill:#e9eef1;font-size:11px} .pno-keys .oc{fill:#8a949a;font-size:10px}
+.pno-keys rect.on{fill:var(--warm)!important} .pno-keys rect.cue{fill:#8fd3c7!important} .pno-keys rect.loopon{fill:color-mix(in srgb,var(--loop-edge) 55%,#fff)!important}
+.pno-strip{display:flex;gap:8px;padding:8px 10px 10px;align-items:stretch;overflow-x:auto}
+.pno-strip button{min-height:52px;padding:4px 12px;font-weight:600;white-space:nowrap;touch-action:manipulation}
+#pnoPedal{flex:1 1 30%;min-width:120px;touch-action:none;font-size:16px} #pnoPedal.on{background:var(--warm);border-color:var(--warm);color:#fff}
+.pno-strip .on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+#pnoLoop{position:relative;overflow:hidden;min-width:118px} #pnoLoop .lp-bar{position:absolute;left:0;bottom:0;height:4px;background:currentColor;opacity:.55;width:0}
+#pnoLoop.rec,#pnoLoop.dub{background:#c43d3d;border-color:#c43d3d;color:#fff} #pnoLoop.arm{animation:pnoBlink 1s steps(2) infinite} @keyframes pnoBlink{50%{opacity:.55}}
+.pno-lpx{display:flex;gap:6px} .pno-lpx[hidden]{display:none} .pno-lpx button{min-width:48px;padding:4px 8px}
+.pno-hint{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-align:center;z-index:3;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.pno-int{position:absolute;left:8px;right:8px;top:6px;z-index:4;background:color-mix(in srgb,var(--surface) 96%,transparent);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.16);padding:8px 10px;display:flex;flex-direction:column;gap:6px;max-height:calc(100% - 12px);overflow:auto}
+.pno-int[hidden]{display:none} .pno-int .tabs{display:flex;gap:6px;align-items:center;flex-wrap:wrap} .pno-int .tabs button.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.pno-int .ans{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px} .pno-int .ans button{min-height:38px;padding:2px 6px;font-size:14px}
+.pno-int .ans button.ok{background:var(--good,#2e9b5f);color:#fff;border-color:transparent} .pno-int .ans button.bad{background:#c43d3d;color:#fff;border-color:transparent}
+.pno-int .q{font-size:16px;font-weight:600} .pno-int .row{gap:6px;flex-wrap:wrap;align-items:center} .pno-int select{width:auto}
+.pno-meter{position:relative;height:30px;border-radius:8px;background:var(--surface-2,#eef1f3);overflow:hidden} .pno-meter .mid{position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--accent)} .pno-meter .zone{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--good,#2e9b5f) 22%,transparent)}
+.pno-meter .nd{position:absolute;top:4px;bottom:4px;width:10px;margin-left:-5px;border-radius:5px;background:var(--warm);transition:left .08s linear} .pno-meter .hold{position:absolute;left:0;bottom:0;height:4px;background:var(--good,#2e9b5f);width:0}
+
 .kv-tw{font:600 15px system-ui,sans-serif;fill:#1d2327;text-anchor:middle}
 .kv-tw.home{fill:#0c7165;font-weight:800}
 .kv-tb{font:600 11px system-ui,sans-serif;fill:#fff;text-anchor:middle}
@@ -588,12 +618,25 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
 <div class="back-toast" id="backToast" hidden role="status">Press back again to close Part Coach</div>
 <div class="new-ver" id="newVer" hidden role="status"><span id="newVerText">A new version of Part Coach is ready.</span><button id="newVerGo" type="button" class="primary">Reload</button><button id="newVerX" type="button" class="link-btn" aria-label="Later">Later</button></div>
 <script>window.BOOT=[]; setTimeout(()=>{ const b=document.getElementById('bootView'); if(b) b.remove(); },25000);   // safety: never stuck</script>
+<div class="pno" id="pnoView" hidden role="dialog" aria-modal="true" aria-labelledby="pnoName">
+  <div class="pno-top"><h2 id="pnoName">Piano</h2><span class="small" id="pnoInfo"></span><button id="pnoClose" type="button" aria-label="Close the piano">✕ Close</button></div>
+  <div class="pno-map"><button id="pnoZoomOut" type="button" aria-label="Fewer, bigger keys" title="Bigger keys (fewer on screen)">−</button><svg id="pnoMini" aria-label="The whole keyboard: drag the window to move the keys" role="img"></svg><button id="pnoZoomIn" type="button" aria-label="More, smaller keys" title="More keys on screen">+</button></div>
+  <div class="pno-keys" id="pnoKeys"><div class="pno-int" id="pnoInt" hidden></div><div class="pno-hint" id="pnoTurn" hidden>Turn your phone sideways for more keys.<br><button type="button" id="pnoTurnOk" class="link-btn">OK</button></div></div>
+  <div class="pno-strip">
+    <button id="pnoPedal" type="button" aria-pressed="false" title="Sustain pedal: hold it while you play, or tap to latch it on and off">Pedal</button>
+    <button id="pnoDn" type="button" aria-label="One octave lower">◀ Oct</button><button id="pnoUp" type="button" aria-label="One octave higher">Oct ▶</button>
+    <button id="pnoChord" type="button" aria-pressed="false" title="Chord mode: each key plays the triad of the key you are in, with that note at the bottom">Chord</button>
+    <button id="pnoLoop" type="button" title="Loop pedal: record a pattern, it repeats underneath while you play on top"><span id="pnoLoopT">● Loop</span><span class="lp-bar" id="pnoLoopBar"></span></button>
+    <span class="pno-lpx" id="pnoLpx" hidden><button id="pnoLpMute" type="button" aria-label="Pause the loop">❚❚</button><button id="pnoLpUndo" type="button" aria-label="Undo the last layer">↶</button><button id="pnoLpClear" type="button" aria-label="Clear the loop">✕</button></span>
+    <button id="pnoInts" type="button" aria-pressed="false" title="Interval practice: guess what you hear, or sing it">Intervals</button>
+  </div>
+</div>
 <div class="key-view" id="keyView" hidden role="dialog" aria-modal="true" aria-labelledby="kvName">
   <div class="kv-card">
     <div class="kv-head"><h2 id="kvName">Key</h2><button id="kvClose" type="button" aria-label="Close">✕</button></div>
     <p class="kv-sub" id="kvRel"></p>
     <div id="kvPiano"></div>
-    <div class="kv-size row"><button id="kvPedal" type="button" aria-pressed="false" title="Sustain pedal: tap to keep notes ringing (tap again to release), or hold it down while you play">Pedal</button><button id="kvBig" type="button" aria-pressed="false" title="Bigger keys: one octave at a time">Bigger keys</button><span class="kv-oct" id="kvOctRow" hidden><button id="kvOctDn" type="button" aria-label="Lower octave">◀</button><span class="small" id="kvOctLab"></span><button id="kvOctUp" type="button" aria-label="Higher octave">▶</button></span></div>
+    <div class="kv-size row"><button id="kvPedal" type="button" aria-pressed="false" title="Sustain pedal: tap to keep notes ringing (tap again to release), or hold it down while you play">Pedal</button><button id="kvBig" type="button" aria-pressed="false" title="Bigger keys: the piano full screen, with pedal, chords, a loop pedal and interval practice">Bigger keys</button><span class="kv-oct" id="kvOctRow" hidden><button id="kvOctDn" type="button" aria-label="Lower octave">◀</button><span class="small" id="kvOctLab"></span><button id="kvOctUp" type="button" aria-label="Higher octave">▶</button></span></div>
     <p class="kv-sub" id="kvFrom" style="margin-bottom:10px"></p>
     <div class="kv-row">
       <button id="kvPlay" type="button" class="primary">▶ Play the scale</button>
@@ -1193,7 +1236,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-08 l';
+const APP_VERSION='2026-11-08 m';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2520,7 +2563,7 @@ async function saveKey(){ if(!S.cur||S.cur.libId==null) return; const k=S.mkey?{
        else await libUpdate(S.cur.libId,{musicKey:k}); }catch(e){} }
 // ----- key view: two octaves with the notes of the key named, the home note marked -----
 S.kvKey=null;
-function kvBig(){ try{ return localStorage.getItem('pc-kvbig')==='1'; }catch(e){ return false; } }
+function kvBig(){ return false; }   // "Bigger keys" now opens the full-screen piano
 function openKeyView(){ if(!S.mkey) return; S.kvKey={tonic:S.mkey.tonic,mode:S.mkey.mode}; $('#keyView').hidden=false; renderKeyView(); $('#kvClose').focus({preventScroll:true}); }
 function closeKeyView(){ S.kvFingers.forEach(f=>{ if(f.v) voiceOff(f.v,true); }); S.kvFingers.clear(); kvSetPedal(false);  $('#keyView').hidden=true; kvStop(); }
 function renderKeyView(){
@@ -2570,6 +2613,155 @@ function kvTap(e){ const r0=e.target.closest('rect[data-m]'); if(!r0) return; e.
   const move=ev=>{ if(ev.pointerId!==id) return; const el=document.elementFromPoint(ev.clientX,ev.clientY), r=el&&el.closest&&el.closest('#kvPiano rect[data-m]'); if(r) sound(+r.dataset.m); };
   const up=ev=>{ if(ev.pointerId!==id) return; if(f.v) kvRelease(f.v,f.m); S.kvFingers.delete(id); kvMarks(); window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); window.removeEventListener('pointercancel',up); };
   window.addEventListener('pointermove',move); window.addEventListener('pointerup',up); window.addEventListener('pointercancel',up); }
+
+// ===== full-screen piano ("Bigger keys"): landscape, an overview strip to zoom and move the keys, a pedal strip with
+// sustain, octave, chord mode, a loop pedal and interval practice =====
+const PNO_LO=36, PNO_HI=96, PNO_W=[0,2,4,5,7,9,11], PNO_NW=36;   // C2–C7: 36 white keys (and the top C)
+const P0={view:15,w0:14,chord:false,pedal:false,fingers:new Map(),sus:[]}; const PN=P0;
+const pnoWhiteOf=m=>Math.floor((m-PNO_LO)/12)*7+PNO_W.indexOf(((m-PNO_LO)%12+12)%12);
+function pnoKey(){ return S.kvKey||S.mkey||{tonic:0,mode:'major'}; }
+function pnoVoiceMid(){ const v=S.tM?[...S.tM].filter(x=>!isNaN(x)):[]; if(v.length>20){ v.sort((a,b)=>a-b); return v[Math.floor(v.length/2)]; } return (S.view.lo+S.view.hi)/2; }
+async function pnoOpen(){ const el=$('#pnoView'); el.hidden=false; document.body.classList.add('modal-open');
+  try{ PN.view=Math.max(5,Math.min(PNO_NW,+localStorage.getItem('pc-pno-view')||15)); }catch(e){}
+  const mid=pnoVoiceMid(); PN.w0=Math.max(0,Math.min(PNO_NW+1-PN.view,pnoWhiteOf(Math.round(mid)-(PNO_W.includes(((Math.round(mid)%12)+12)%12)?0:1))+0.5-PN.view/2));   // the voice range in the middle
+  try{ if(el.requestFullscreen&&!document.fullscreenElement) await el.requestFullscreen({navigationUI:'hide'}); }catch(e){}
+  try{ if(screen.orientation&&screen.orientation.lock) await screen.orientation.lock('landscape'); }catch(e){}
+  setTimeout(()=>{ $('#pnoTurn').hidden=!(innerHeight>innerWidth&&!PN.turnOk); },400);
+  pnoRender(); pnoInfo(); }
+function pnoClose(){ pnoAllOff(); pnoSetPedal(false); loopStop(true); intStop(); $('#pnoView').hidden=true; if($('#keyView').hidden&&$('#dlgView').hidden) document.body.classList.remove('modal-open');
+  try{ if(screen.orientation&&screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+  try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){} }
+function pnoInfo(){ const k=pnoKey(); $('#pnoName').textContent=keyName(k);
+  $('#pnoInfo').textContent=(PN.chord?'Chord mode: each key plays its chord in '+keyName(k)+'. ':'')+(LP.len?'Loop '+LP.len.toFixed(1)+' s'+(LP.muted?' (paused)':'')+'. ':'')+(PN.chord||LP.len?'':'Tap keys to play; drag the strip above to move, − + to zoom.'); }
+// keys: drawn at the current zoom; moving them is only a shift
+function pnoRender(){ const box=$('#pnoKeys'), W=box.clientWidth||600, H=box.clientHeight||200, ww=W/PN.view, bw=ww*0.6, bh=H*0.62, k=pnoKey(), sp=scaleSpelling(k), svg=[];
+  PN.ww=ww; svg.push('<svg width="'+(PNO_NW*ww+ww)+'" height="'+H+'" id="pnoSvg">');
+  const lab=(pc,x,y,cls)=>sp[pc]!=null?'<text x="'+x+'" y="'+y+'" class="'+cls+'">'+sp[pc]+'</text>':'';
+  for(let i=0;i<=PNO_NW;i++){ const pc=PNO_W[i%7], m=PNO_LO+Math.floor(i/7)*12+pc, inK=sp[pc]!=null, home=pc===k.tonic, x=i*ww;
+    svg.push('<rect data-m="'+m+'" x="'+(x+1)+'" y="0" width="'+(ww-2)+'" height="'+(H-1)+'" rx="5" class="kv-w'+(home?' home':inK?' in':'')+'"/>'+lab(pc,x+ww/2,H-(pc===0?24:10),'kv-tw'+(home?' home':''))+(pc===0?'<text x="'+(x+ww/2)+'" y="'+(H-8)+'" class="oc">C'+(Math.floor(m/12)-1)+'</text>':'')); }
+  for(let i=0;i<PNO_NW;i++){ const wp=PNO_W[i%7]; if(wp===4||wp===11) continue; const pc=wp+1, m=PNO_LO+Math.floor(i/7)*12+pc, inK=sp[pc]!=null, home=pc===k.tonic, x=(i+1)*ww-bw/2;
+    svg.push('<rect data-m="'+m+'" x="'+x+'" y="0" width="'+bw+'" height="'+bh+'" rx="4" class="kv-b'+(home?' home':inK?' in':'')+'"/>'+(ww>34?lab(pc,x+bw/2,bh-10,'kv-tb'+(home?' home':'')):'')); }
+  svg.push('</svg>'); box.querySelectorAll('svg').forEach(x=>x.remove()); box.insertAdjacentHTML('beforeend',svg.join('')); pnoPlace(); pnoMarks(); }
+function pnoPlace(){ PN.w0=Math.max(0,Math.min(PNO_NW+1-PN.view,PN.w0)); const sv=$('#pnoSvg'); if(sv) sv.style.transform='translateX('+(-PN.w0*PN.ww)+'px)'; pnoMini();
+  $('#pnoDn').disabled=PN.w0<=0.01; $('#pnoUp').disabled=PN.w0>=PNO_NW+1-PN.view-0.01; }
+function pnoMini(){ const el=$('#pnoMini'), W=el.clientWidth||300, H=26, w=W/(PNO_NW+1), o=[];
+  for(let i=0;i<=PNO_NW;i++) o.push('<rect class="mw" x="'+(i*w)+'" y="0" width="'+w+'" height="'+H+'"/>');
+  for(let i=0;i<PNO_NW;i++){ const wp=PNO_W[i%7]; if(wp===4||wp===11) continue; o.push('<rect class="mb" x="'+((i+1)*w-w*0.3)+'" y="0" width="'+(w*0.6)+'" height="'+(H*0.6)+'"/>'); }
+  o.push('<rect class="mv" x="'+(PN.w0*w)+'" y="1" width="'+(PN.view*w)+'" height="'+(H-2)+'" rx="3"/>'); el.setAttribute('viewBox','0 0 '+W+' '+H); el.innerHTML=o.join(''); }
+function pnoZoom(d){ const c=PN.w0+PN.view/2; PN.view=Math.max(5,Math.min(PNO_NW+1,PN.view+d)); PN.w0=c-PN.view/2; try{ localStorage.setItem('pc-pno-view',String(PN.view)); }catch(e){} pnoRender(); }
+function pnoMarks(){ const on=new Set(); PN.fingers.forEach(f=>f.ms.forEach(m=>on.add(m))); (LP.sounding||new Set()).forEach(m=>on.add(m));
+  $('#pnoKeys').querySelectorAll('rect[data-m]').forEach(r=>{ const m=+r.dataset.m; r.classList.toggle('on',on.has(m)); r.classList.toggle('cue',!!(INT.cue&&INT.cue.has(m))); }); }
+// chord mode: the triad of the key you are in, built on the note you play (C in C major: C E G; D: D F A; B: B D F). A note outside the key: major.
+function pnoChordOf(m){ const k=pnoKey(), st=SCALE_STEPS[k.mode], pc=((m-k.tonic)%12+12)%12, i=st.indexOf(pc);
+  if(i<0) return [m,m+4,m+7]; const up=j=>{ const q=i+j; return st[q%7]+12*Math.floor(q/7)-pc; }; return [m,m+up(2),m+up(4)]; }
+// playing: every finger its own note (or chord); sliding moves it; the sustain pedal keeps released notes ringing
+function pnoOn(m){ pnoSusCut(m); const v=voiceOn(m,S.keySound,S.limiter,keyVol()); v.rec=loopNoteOn(m); return v; }
+function pnoEnd(v){ voiceOff(v); loopNoteOff(v.rec); }
+function pnoRelease(v){ if(PN.pedal){ PN.sus.push(v); if(PN.sus.length>36) pnoEnd(PN.sus.shift()); } else pnoEnd(v); }
+function pnoSusCut(m){ PN.sus=PN.sus.filter(v=>{ if(v.m===m){ voiceOff(v,true); loopNoteOff(v.rec); return false; } return true; }); }
+function pnoSetPedal(on){ PN.pedal=on; const b=$('#pnoPedal'); b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on)); if(!on){ PN.sus.forEach(pnoEnd); PN.sus=[]; } }
+function pnoAllOff(){ PN.fingers.forEach(f=>f.vs.forEach(v=>{ voiceOff(v,true); loopNoteOff(v.rec); })); PN.fingers.clear(); PN.sus.forEach(v=>{ voiceOff(v,true); loopNoteOff(v.rec); }); PN.sus=[]; pnoMarks(); }
+function pnoTap(e){ const r0=e.target.closest&&e.target.closest('rect[data-m]'); if(!r0) return; e.preventDefault();
+  const id=e.pointerId, f={m:null,ms:[],vs:[]}; PN.fingers.set(id,f);
+  const sound=m=>{ if(m===f.m) return; f.vs.forEach(pnoRelease); f.m=m; f.ms=PN.chord?pnoChordOf(m):[m]; f.vs=f.ms.filter(x=>x>=21&&x<=108).map(pnoOn); pnoMarks(); intKey(m); };
+  sound(+r0.dataset.m);
+  const move=ev=>{ if(ev.pointerId!==id) return; const el=document.elementFromPoint(ev.clientX,ev.clientY), r=el&&el.closest&&el.closest('#pnoKeys rect[data-m]'); if(r) sound(+r.dataset.m); };
+  const up=ev=>{ if(ev.pointerId!==id) return; f.vs.forEach(pnoRelease); PN.fingers.delete(id); pnoMarks(); window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); window.removeEventListener('pointercancel',up); };
+  window.addEventListener('pointermove',move); window.addEventListener('pointerup',up); window.addEventListener('pointercancel',up); }
+
+// ----- loop pedal (free length): tap Loop, play: the loop starts with your first note; tap again to close it, and it repeats.
+// Tap again to add a layer on top (tap to finish it); ↶ takes the last layer away, ❚❚ pauses, ✕ clears.
+const LP={state:'empty',ev:[],len:0,t0:0,layer:0,muted:false,timer:null,live:[],sounding:new Set(),cycle:0};
+function lpNow(){ return ensureCtx().currentTime; }
+function loopNoteOn(m){ if(LP.state==='arm'){ LP.state='rec'; LP.t0=lpNow(); LP.layer=1; loopPaint(); }
+  if(LP.state!=='rec'&&LP.state!=='dub') return null; const s=LP.state==='rec'?lpNow()-LP.t0:((lpNow()-LP.t0)%LP.len+LP.len)%LP.len;
+  const e={m,s,e:null,layer:LP.layer,abs:lpNow()}; LP.ev.push(e); return e; }
+function loopNoteOff(e){ if(!e||e.e!=null) return; const d=lpNow()-e.abs; e.d=LP.len?Math.min(LP.len,d):d; e.e=1; }
+function loopTap(){
+  if(LP.state==='empty'){ LP.ev=[]; LP.state='arm'; }
+  else if(LP.state==='arm'){ LP.state='empty'; }
+  else if(LP.state==='rec'){ const now=lpNow(); LP.len=now-LP.t0; if(LP.len<0.4){ LP.state='empty'; LP.ev=[]; LP.len=0; loopPaint(); return; }
+    LP.ev.forEach(e=>{ if(e.e==null){ e.d=Math.min(LP.len,now-e.abs); e.e=1; e.held=true; } }); LP.state='play'; LP.muted=false; LP.next=LP.t0+LP.len; loopRun(); }
+  else if(LP.state==='play'){ LP.state='dub'; LP.layer++; }
+  else if(LP.state==='dub'){ LP.ev.forEach(e=>{ if(e.e==null){ e.d=Math.min(LP.len,lpNow()-e.abs); e.e=1; } }); LP.state='play'; }
+  loopPaint(); }
+// the scheduler: every 25 ms, notes of the coming 120 ms are started at their exact time on the audio clock
+function loopRun(){ clearInterval(LP.timer); LP.timer=setInterval(()=>{ if(!LP.len) return; const now=lpNow(), ahead=now+0.12;
+    while(LP.next<ahead){ const c0=LP.next; if(!LP.muted) LP.ev.forEach(e=>{ if(e.e==null&&LP.state==='dub'&&e.layer===LP.layer) return; const t=c0+e.s, d=Math.max(0.05,e.d||0.3);
+        const v=voiceOn(e.m,S.keySound,S.limiter,keyVol()*0.8,t); voiceOff(v,false,t+d); LP.live.push({v,m:e.m,a:t,b:t+d}); });
+      LP.next+=LP.len; LP.cycle++; }
+    LP.live=LP.live.filter(x=>x.b>now-0.6); const snd=new Set(LP.live.filter(x=>x.a<=now&&x.b>now).map(x=>x.m));
+    if(snd.size!==LP.sounding.size||[...snd].some(m=>!LP.sounding.has(m))){ LP.sounding=snd; pnoMarks(); }
+    const bar=$('#pnoLoopBar'); if(bar) bar.style.width=(100*(((now-LP.t0)%LP.len+LP.len)%LP.len)/LP.len)+'%'; },25); }
+function loopStop(clear){ clearInterval(LP.timer); LP.timer=null; LP.live.forEach(x=>voiceOff(x.v,true)); LP.live=[]; LP.sounding=new Set();
+  if(clear){ LP.state='empty'; LP.ev=[]; LP.len=0; LP.layer=0; } loopPaint(); pnoMarks(); }
+function loopPaint(){ const b=$('#pnoLoop'); if(!b) return; const st=LP.state; b.className=st==='empty'||st==='play'?'':st;
+  $('#pnoLoopT').textContent={empty:'● Loop',arm:'Play to start…',rec:'■ Close loop',play:'● Add layer',dub:'■ Finish layer'}[st];
+  $('#pnoLpx').hidden=!LP.len; $('#pnoLpMute').textContent=LP.muted?'▶':'❚❚'; $('#pnoLpMute').setAttribute('aria-label',LP.muted?'Play the loop':'Pause the loop');
+  $('#pnoLpUndo').disabled=!LP.ev.some(e=>e.layer>1); if(!LP.len) $('#pnoLoopBar').style.width='0'; pnoInfo(); }
+
+// ----- intervals: "Guess" (two notes are played, you tap the interval) and "Sing" (one note is played, you sing the other)
+const INTS=[[1,'minor 2nd','m2'],[2,'major 2nd','M2'],[3,'minor 3rd','m3'],[4,'major 3rd','M3'],[5,'perfect 4th','P4'],[6,'tritone','TT'],[7,'perfect 5th','P5'],[8,'minor 6th','m6'],[9,'major 6th','M6'],[10,'minor 7th','m7'],[11,'major 7th','M7'],[12,'octave','P8']];
+const INT={mode:'guess',set:'basic',dir:'up',q:null,score:0,n:0,miss:[],cue:null,raf:0,micOwn:false,voices:[]};
+function intPool(){ return INT.set==='basic'?INTS.filter(x=>[2,4,5,7,12].includes(x[0])):INT.set==='more'?INTS.filter(x=>[2,3,4,5,7,9,12].includes(x[0])):INTS; }
+function intRange(){ const mid=pnoVoiceMid(); return [Math.round(mid-7),Math.round(mid+7)]; }
+function intNew(fromMiss){ const pool=intPool(); let it=fromMiss&&INT.miss.length?INT.miss.shift():pool[Math.floor(Math.random()*pool.length)];
+  const dn=INT.dir==='down'||(INT.dir==='both'&&Math.random()<0.5), [lo,hi]=intRange(); let r=lo+Math.floor(Math.random()*(hi-lo+1)); const t=r+(dn?-it[0]:it[0]);
+  INT.q={it,root:r,target:t,dn,answered:false}; }
+function intPlay(both){ const q=INT.q; if(!q) return; INT.voices.forEach(v=>voiceOff(v,true)); INT.voices=[]; const c=ensureCtx(), t=c.currentTime+0.05;
+  const a=voiceOn(q.root,S.keySound,S.limiter,keyVol(),t); voiceOff(a,false,t+0.9); INT.voices.push(a);
+  if(both){ const b=voiceOn(q.target,S.keySound,S.limiter,keyVol(),t+0.95); voiceOff(b,false,t+2); INT.voices.push(b); } }
+function intStop(){ cancelAnimationFrame(INT.raf); INT.raf=0; INT.voices.forEach(v=>voiceOff(v,true)); INT.voices=[]; INT.cue=null; if(INT.micOwn){ stopMic(); INT.micOwn=false; } }
+function intKey(m){ /* playing a key while the panel is open: nothing to check yet */ }
+function intOpen(on){ const el=$('#pnoInt'); if(on==null) on=el.hidden; el.hidden=!on; $('#pnoInts').classList.toggle('on',on); $('#pnoInts').setAttribute('aria-pressed',String(on)); if(!on){ intStop(); pnoMarks(); return; } intRender(); }
+function intRender(){ const el=$('#pnoInt'), q=INT.q, nm=x=>x[1].replace(/^./,c=>c.toUpperCase());
+  const opts=(v,list)=>list.map(([k,l])=>'<option value="'+k+'"'+(v===k?' selected':'')+'>'+l+'</option>').join('');
+  let h='<div class="tabs"><button type="button" data-im="guess" class="'+(INT.mode==='guess'?'sel':'')+'">Guess</button><button type="button" data-im="sing" class="'+(INT.mode==='sing'?'sel':'')+'">Sing</button>'+
+    '<select id="intSet" class="sel" aria-label="Which intervals">'+opts(INT.set,[['basic','5 intervals'],['more','7 intervals'],['all','All 12']])+'</select>'+
+    '<select id="intDir" class="sel" aria-label="Direction">'+opts(INT.dir,[['up','Upwards'],['down','Downwards'],['both','Both ways']])+'</select>'+
+    '<span class="small" style="flex:1">'+(INT.n?INT.score+' of '+INT.n+' right':'')+'</span><button type="button" id="intClose" aria-label="Close interval practice">✕</button></div>';
+  if(INT.mode==='guess'){
+    if(!q) h+='<div class="row"><span>Two notes are played: tap which interval it was.</span><button type="button" class="primary" id="intGo">Start</button></div>';
+    else { h+='<div class="row"><span class="q">'+(q.answered?(q.ok?'✓ '+nm(q.it):'It was a '+q.it[1]+(q.dn?', down':', up')):'Which interval?')+'</span><button type="button" id="intAgain">↻ Hear again</button>'+(q.answered?'<button type="button" class="primary" id="intNext">Next</button>':'')+'</div>';
+      h+='<div class="ans">'+intPool().map(x=>{ const cls=q.answered?(x===q.it?'ok':(q.pick===x?'bad':'')):''; return '<button type="button" data-ia="'+x[0]+'" class="'+cls+'">'+nm(x)+'</button>'; }).join('')+'</div>';
+      if(INT.miss.length&&q.answered) h+='<div class="row"><span class="small">To practise again: '+[...new Set(INT.miss.map(x=>x[2]))].join(', ')+'</span><button type="button" id="intMiss">Practise the misses</button></div>'; }
+  } else {
+    if(!q) h+='<div class="row"><span>One note is played, then you sing the interval. Uses the microphone.</span><button type="button" class="primary" id="intGo">Start</button></div>';
+    else { const sp=scaleSpelling(pnoKey()), name=m=>(sp[((m%12)+12)%12]||noteName(m).replace(/\d+$/,''))+(Math.floor(m/12)-1);
+      h+='<div class="row"><span class="q">'+(q.done?'✓ Well sung: ':q.gave?'This is it: ':'Sing a ')+q.it[1]+' '+(q.dn?'down':'up')+(q.done||q.gave?' ('+name(q.target)+')':'')+'</span><button type="button" id="intAgain">↻ First note</button><button type="button" id="intShow">Hear the answer</button><button type="button" class="'+(q.done||q.gave?'primary':'')+'" id="intNext">Next</button></div>'+
+        '<div class="pno-meter" aria-hidden="true"><div class="zone" id="intZone"></div><div class="mid"></div><div class="nd" id="intNd" style="left:50%;opacity:.25"></div><div class="hold" id="intHold"></div></div><span class="small" id="intSay">Start from '+name(q.root)+'. Sing and hold the note: the dot goes to the middle when you are on it.</span>'; }
+  }
+  el.innerHTML=h;
+  el.querySelectorAll('[data-im]').forEach(b=>b.addEventListener('click',()=>{ intStop(); INT.mode=b.dataset.im; INT.q=null; INT.score=0; INT.n=0; INT.miss=[]; intRender(); pnoMarks(); }));
+  el.querySelector('#intSet').addEventListener('change',e=>{ INT.set=e.target.value; INT.q=null; intStop(); intRender(); });
+  el.querySelector('#intDir').addEventListener('change',e=>{ INT.dir=e.target.value; INT.q=null; intStop(); intRender(); });
+  el.querySelector('#intClose').addEventListener('click',()=>intOpen(false));
+  const go=el.querySelector('#intGo'); if(go) go.addEventListener('click',()=>intAsk());
+  const nx=el.querySelector('#intNext'); if(nx) nx.addEventListener('click',()=>intAsk());
+  const ms=el.querySelector('#intMiss'); if(ms) ms.addEventListener('click',()=>intAsk(true));
+  const ag=el.querySelector('#intAgain'); if(ag) ag.addEventListener('click',()=>intPlay(INT.mode==='guess'));
+  const sh=el.querySelector('#intShow'); if(sh) sh.addEventListener('click',()=>{ INT.q.gave=true; intPlay(true); INT.cue=new Set([INT.q.root,INT.q.target]); pnoMarks(); intRender(); });
+  el.querySelectorAll('[data-ia]').forEach(b=>b.addEventListener('click',()=>intAnswer(+b.dataset.ia))); }
+async function intAsk(fromMiss){ intStop(); intNew(fromMiss); pnoMarks(); intRender();
+  if(INT.mode==='guess'){ intPlay(true); return; }
+  if(!S.mic){ const ok=await startMic(); if(!ok){ $('#intSay').textContent='The microphone could not be opened.'; return; } INT.micOwn=true; }
+  intPlay(false); intListen(); }
+function intAnswer(n){ const q=INT.q; if(!q||q.answered) return; q.answered=true; q.pick=INTS.find(x=>x[0]===n); q.ok=n===q.it[0]; INT.n++; if(q.ok) INT.score++; else INT.miss.push(q.it);
+  INT.cue=new Set([q.root,q.target]); pnoMarks(); intRender(); if(q.ok) setTimeout(()=>{ if(INT.q===q&&!$('#pnoInt').hidden) intAsk(); },1300); }
+// singing: the dot shows how far you are from the note (±2 semitones across the bar); hold it in the green zone for 0.7 s
+function intListen(){ const q=INT.q, t0=performance.now()+900; let held=0, last=performance.now(); const hist=[], tol=Math.max(35,FB().good);
+  const z=$('#intZone'); if(z){ const w=tol/200*50; z.style.left=(50-w)+'%'; z.style.width=(2*w)+'%'; }
+  const tick=()=>{ if(INT.q!==q||q.done||q.gave){ return; } INT.raf=requestAnimationFrame(tick); const now=performance.now(), dt=(now-last)/1000; last=now; if(now<t0) return;
+    let m=S.mic?micPitch(q.target):NaN; hist.push(m); if(hist.length>5) hist.shift(); const ok=hist.filter(x=>!isNaN(x)); m=ok.length>=3?median(ok):NaN;
+    const nd=$('#intNd'), hd=$('#intHold'), say=$('#intSay'); if(!nd) return;
+    if(isNaN(m)){ nd.style.opacity='.25'; held=Math.max(0,held-dt); }
+    else { const c=(m-q.target)*100; let cw=c; while(cw>600) cw-=1200; while(cw<-600) cw+=1200;   // the right note in another octave counts too
+      const on=Math.abs(cw)<=tol, cd=on?cw:c; nd.style.opacity='1'; nd.style.left=Math.max(2,Math.min(98,50+cd/4))+'%'; held=on?held+dt:Math.max(0,held-dt*2);
+      say.textContent=on?'Yes, hold it…':(c<0?'Higher':'Lower')+(Math.abs(c)>150?' (about '+Math.round(Math.abs(c)/100)+' semitones)':', a little'); }
+    hd.style.width=Math.min(100,held/0.7*100)+'%';
+    if(held>=0.7){ q.done=true; INT.n++; INT.score++; INT.cue=new Set([q.root,q.target]); pnoMarks(); intRender(); }
+    else if(now-t0>12000){ q.gave=true; INT.n++; INT.miss.push(q.it); intPlay(true); INT.cue=new Set([q.root,q.target]); pnoMarks(); intRender(); } };
+  INT.raf=requestAnimationFrame(tick); }
 
 // ===== suggestions from choir members (Google Apps Script inbox) =====
 // Members' songs from a share link keep their shared version in rec.base = {updated, contour, lyrics}.
@@ -4799,9 +4991,9 @@ function grandNearest(m){ let best=GRAND_NOTES[0]; for(const n of GRAND_NOTES) i
 function grandPrefetch(quiet){ const lo=Math.max(21,Math.min(S.view.lo,45)-3), hi=Math.min(108,Math.max(S.view.hi,72)+3); let n=0,ok=0;
   const list=GRAND_NOTES.filter(m=>m>=lo&&m<=hi); list.forEach(m=>grandLoad(m).then(()=>{ ok++; },()=>{}).finally(()=>{ if(++n===list.length&&!quiet&&(S.keySound==='grand'||S.toneSound==='grand')) setStatus(ok===list.length?'Grand piano ready.':'Some piano notes could not be downloaded; the simple piano fills in.',ok<list.length); })); return Promise.allSettled(list.map(m=>grandLoad(m))); }
 // one sounding note in the chosen sound ('tone', 'piano' or 'grand'), into dest at the given level
-function voiceOn(m,sound,dest,level){
+function voiceOn(m,sound,dest,level,when){
   const c=ensureCtx(); if(c.state==='suspended') c.resume();
-  const t=c.currentTime, f=m2f(m), out=c.createGain(); out.gain.value=level; out.connect(dest);
+  const t=Math.max(c.currentTime,when||0), f=m2f(m), out=c.createGain(); out.gain.value=level; out.connect(dest);
   const env=c.createGain(); env.gain.setValueAtTime(0,t); env.connect(out); const oscs=[]; let mul=1;
   const gs=sound==='grand'?grandNearest(m):null, gbuf=gs!=null?S.grand[gs+'b']:null;
   if(gs!=null&&!gbuf) grandLoad(gs).catch(()=>{});   // not downloaded yet: the simple piano plays this time
@@ -4818,10 +5010,10 @@ function voiceOn(m,sound,dest,level){
   }
   return {env,out,oscs,m,mul};
 }
-function voiceOff(v,quick){
-  if(!v) return; const t=S.ctx.currentTime;
+function voiceOff(v,quick,when){
+  if(!v) return; const t=Math.max(S.ctx.currentTime,when||0);
   v.env.gain.cancelScheduledValues(t); v.env.gain.setValueAtTime(v.env.gain.value,t); v.env.gain.setTargetAtTime(0,t,quick?0.01:0.06);
-  setTimeout(()=>{ v.oscs.forEach(o=>{ try{o.stop()}catch(e){} o.disconnect(); }); v.env.disconnect(); v.out.disconnect(); },quick?100:500);
+  setTimeout(()=>{ v.oscs.forEach(o=>{ try{o.stop()}catch(e){} o.disconnect(); }); v.env.disconnect(); v.out.disconnect(); },(quick?100:500)+Math.max(0,(t-S.ctx.currentTime)*1000));
 }
 function keyNoteOn(m){ keyNoteOff(true); S.key=voiceOn(m,S.keySound,S.limiter,keyVol()); S.kbNote=m; draw(); }
 // while the Target box is held during playback, the sound follows the target line (a temporary guide tone)
@@ -5119,6 +5311,7 @@ $('#hsResume').addEventListener('change',e=>{ try{ localStorage.setItem('pc-hsre
   const arm=()=>{ if(armed) return; armed=true; try{ history.pushState({pcGuard:1},''); }catch(e){} };   // after the first tap: browsers only honour this after you have used the page
   ['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,arm,{once:true,capture:true}));
   const closeTop=()=>{ const vis=id=>{ const e=document.getElementById(id); return e&&!e.hidden; };
+    if(vis('pnoView')){ if(!$('#pnoInt').hidden) intOpen(false); else pnoClose(); return true; }   // the piano: Back closes the interval panel, then the piano
     if(vis('dlgView')){ $('#dlgView')._done&&$('#dlgView')._done(null); return true; }
     if(vis('keyView')){ closeKeyView(); return true; }
     if(vis('guideMenu')){ closeGuideMenu(); return true; }
@@ -5173,13 +5366,36 @@ $('#kvUse').addEventListener('click',()=>{ S.mkey={...S.kvKey,auto:false}; saveK
 $('#kvAuto').addEventListener('click',()=>{ S.mkey=null; scheduleKeyDetect(true).then(()=>{ if(S.mkey) S.kvKey={tonic:S.mkey.tonic,mode:S.mkey.mode}; renderKeyView(); }); });
 $('#kvPlay').addEventListener('click',kvPlayScale);
 $('#kvPiano').addEventListener('pointerdown',kvTap);
+$('#pnoKeys').addEventListener('pointerdown',pnoTap); $('#pnoKeys').addEventListener('touchstart',e=>{ if(e.cancelable&&!e.target.closest('.pno-int,.pno-hint')) e.preventDefault(); },{passive:false});
+$('#pnoClose').addEventListener('click',pnoClose); $('#pnoTurnOk').addEventListener('click',()=>{ PN.turnOk=true; $('#pnoTurn').hidden=true; });
+$('#pnoZoomOut').addEventListener('click',()=>pnoZoom(-2)); $('#pnoZoomIn').addEventListener('click',()=>pnoZoom(2));
+$('#pnoDn').addEventListener('click',()=>{ PN.w0-=7; pnoPlace(); }); $('#pnoUp').addEventListener('click',()=>{ PN.w0+=7; pnoPlace(); });
+$('#pnoChord').addEventListener('click',()=>{ PN.chord=!PN.chord; $('#pnoChord').classList.toggle('on',PN.chord); $('#pnoChord').setAttribute('aria-pressed',String(PN.chord)); pnoInfo(); });
+$('#pnoLoop').addEventListener('click',loopTap);
+$('#pnoLpMute').addEventListener('click',()=>{ LP.muted=!LP.muted; if(LP.muted){ LP.live.forEach(x=>voiceOff(x.v,true)); LP.live=[]; } loopPaint(); });
+$('#pnoLpUndo').addEventListener('click',()=>{ const top=Math.max(...LP.ev.map(e=>e.layer)); if(top>1){ LP.ev=LP.ev.filter(e=>e.layer!==top); LP.layer=top-1; if(LP.state==='dub') LP.state='play'; } loopPaint(); });
+$('#pnoLpClear').addEventListener('click',()=>loopStop(true));
+$('#pnoInts').addEventListener('click',()=>intOpen());
+{ const pb=$('#pnoPedal'); let down=0, was=false;   // quick tap: latch on/off; held down: pedal while held
+  pb.addEventListener('pointerdown',e=>{ e.preventDefault(); pb.setPointerCapture(e.pointerId); down=performance.now(); was=PN.pedal; if(!was) pnoSetPedal(true); });
+  const up=()=>{ if(!down) return; const quick=performance.now()-down<300; down=0; if(quick){ if(was) pnoSetPedal(false); } else pnoSetPedal(false); };
+  pb.addEventListener('pointerup',up); pb.addEventListener('pointercancel',up); }
+// drag the overview strip to move the keys (tap: jump there)
+{ const mini=$('#pnoMini'); let drag=null;
+  const at=e=>{ const r=mini.getBoundingClientRect(); return (e.clientX-r.left)/r.width*(PNO_NW+1); };
+  mini.addEventListener('pointerdown',e=>{ mini.setPointerCapture(e.pointerId); const x=at(e); drag={off:(x>=PN.w0&&x<=PN.w0+PN.view)?x-PN.w0:PN.view/2}; PN.w0=x-drag.off; pnoPlace(); });
+  mini.addEventListener('pointermove',e=>{ if(!drag) return; PN.w0=at(e)-drag.off; pnoPlace(); });
+  ['pointerup','pointercancel'].forEach(ev=>mini.addEventListener(ev,()=>{ drag=null; })); }
+addEventListener('resize',()=>{ if(!$('#pnoView').hidden){ pnoRender(); $('#pnoTurn').hidden=!(innerHeight>innerWidth&&!PN.turnOk); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#pnoView').hidden){ e.stopPropagation(); pnoClose(); } },true);
+document.addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement&&!$('#pnoView').hidden) setTimeout(()=>{ if(!$('#pnoView').hidden) pnoRender(); },200); });
 { const pb=$('#kvPedal'); let down=0, was=false;   // quick tap: latch on/off; held down: pedal while held
   pb.addEventListener('pointerdown',e=>{ e.preventDefault(); pb.setPointerCapture(e.pointerId); down=performance.now(); was=S.kvPedal; if(!was) kvSetPedal(true); });
   const end=()=>{ if(!down) return; const held=performance.now()-down>350; down=0; if(was) kvSetPedal(false); else if(held) kvSetPedal(false); };
   pb.addEventListener('pointerup',end); pb.addEventListener('pointercancel',end);
   pb.addEventListener('contextmenu',e=>e.preventDefault()); pb.addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});   // no text selection, menu or buzz on a long press
   pb.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); kvSetPedal(!S.kvPedal); } }); }
-$('#kvBig').addEventListener('click',()=>{ try{ localStorage.setItem('pc-kvbig',kvBig()?'0':'1'); }catch(e){} renderKeyView(); });
+$('#kvBig').addEventListener('click',()=>pnoOpen());
 $('#kvOctDn').addEventListener('click',()=>{ S.kvOct=0; renderKeyView(); }); $('#kvOctUp').addEventListener('click',()=>{ S.kvOct=1; renderKeyView(); });
 $('#kvPiano').addEventListener('touchstart',e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
 $('#edShR').addEventListener('click',()=>edShiftLine(1));
