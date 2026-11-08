@@ -14,7 +14,7 @@ Part Coach is a single web page. There is nothing to install from an app store a
 
 Useful things to try:
 
-- **Loop** a difficult passage, slow it down with the **tempo** (BPM) button, and **bookmark** it to come back later.
+- **Loop** a difficult passage, slow it down with the **speed** button in the graph’s top right corner, and **bookmark** it to come back later.
 - **Key** opens a playable piano keyboard (several fingers at once, with a sustain pedal).
 - **Check-up**: sing a song (or a section) once; afterwards you get the 3–4 phrases to work on, in words, with Listen and Loop, and one tap saves them as a practice list. Your lyrics sheet is coloured by the result.
 - **Warm-up**: a short session of scales, arpeggios and sirens in your part's range.
