@@ -731,7 +731,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           </div>
       </div>
       <div class="end-tip" id="endTip" hidden role="status"><span class="small">Heard a wrong note or a lyric out of time? Fix it with the pencil <b>✎</b> above (words: in the Lyrics editor), then tap Suggest my edits. Every fix helps the whole choir.</span><div class="row"><button id="endTipGo" type="button" class="primary">Show me</button><button id="endTipOff" type="button" class="link-btn">Don't show again</button><button id="endTipX" type="button" class="link-btn" aria-label="Close the tip">Close</button></div></div>
-      <div class="row hint-row"><div class="hint-top"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span class="time" id="time">0:00 / 0:00</span></div><div id="laneHint" class="lane-hint" hidden><b>Getting started</b><ol><li><b>Open the link</b> for your part that the moderator shared. The app downloads that part’s songs to your phone (you can choose which ones).</li><li><b>Choose a song</b> and press <b>Play</b>. You hear the voice of your part and the backing, each with its own volume.</li><li><b>Turn on the microphone</b> to see your own pitch as you sing. The readouts show the target note, how far off you are, and how much of the time you were on pitch and on time.</li></ol><b>Useful things to try</b><ul><li><b>Loop</b> a difficult passage, slow it down with the <b>speed</b> button in the graph’s top right corner, and <b>bookmark</b> it to come back later.</li><li><b>Key</b> opens a playable piano keyboard (several fingers at once, with a sustain pedal).</li><li><b>Check-up</b>: sing a song (or a section) once; afterwards you get the 3–4 phrases to work on, in words, with Listen and Loop, and one tap saves them as a practice list.</li><li><b>Warm-up</b>: a short session of scales, arpeggios and sirens in your part’s range.</li><li><b>Lyrics</b> follow along, with a countdown before each entry after a long rest.</li></ul><p><b>Found a mistake?</b> Tap the pencil ✎. You can fix a wrong note (<b>Edit target line</b>) or the timing of a lyric line (<b>Time lyrics</b>) and send it as a suggestion. If you can hear that something is off but don’t know what, tap <b>⚑ Sounds off</b> to mark the spot for someone else to check. Suggestions are anonymous, and editing and suggesting is very welcome: it makes the songs better for everyone.</p><p><b>Updates:</b> when the moderator publishes new or corrected songs, tap <b>Update</b>. When a new version of the app itself is out, a banner offers to reload.</p></div><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
+      <div class="row hint-row"><div class="hint-top"><button id="hintBtn" type="button" class="link-btn" aria-expanded="false" aria-controls="laneHint">Expand for info</button><span class="time" id="time">0:00 / 0:00</span></div><div id="laneHint" class="lane-hint" hidden><b>Getting started</b><ol><li><b>Open the link</b> for your part that the moderator shared. The app downloads that part’s songs to your phone (you can choose which ones).</li><li><b>Choose a song</b> and press <b>Play</b>. You hear the voice of your part and the backing, each with its own volume.</li><li><b>Turn on the microphone</b> to see your own pitch as you sing. The readouts show the target note, how far off you are, and how much of the time you were on pitch and on time.</li></ol><b>Useful things to try</b><ul><li><b>Loop</b> a difficult passage, slow it down with the <b>speed</b> button in the graph’s top right corner, and <b>bookmark</b> it to come back later.</li><li><b>Key</b> opens a playable piano keyboard (several fingers at once, with a sustain pedal).</li><li><b>Check-up</b>: sing a song (or a section) once; afterwards you get the 3–4 sections to work on, in words, with Listen and Loop, and one tap saves them as a practice list.</li><li><b>Warm-up</b>: a short session of scales, arpeggios and sirens in your part’s range.</li><li><b>Lyrics</b> follow along, with a countdown before each entry after a long rest.</li></ul><p><b>Found a mistake?</b> Tap the pencil ✎. You can fix a wrong note (<b>Edit target line</b>) or the timing of a lyric line (<b>Time lyrics</b>) and send it as a suggestion. If you can hear that something is off but don’t know what, tap <b>⚑ Sounds off</b> to mark the spot for someone else to check. Suggestions are anonymous, and editing and suggesting is very welcome: it makes the songs better for everyone.</p><p><b>Updates:</b> when the moderator publishes new or corrected songs, tap <b>Update</b>. When a new version of the app itself is out, a banner offers to reload.</p></div><span class="hint-install" id="hintInstall" hidden><button id="installBtn" type="button">Add Part Coach to your home screen</button><span class="small">Opens like an app, full screen, with its own icon.</span></span></div>
     </div>
   </section>
 
@@ -751,7 +751,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <div class="tr-row2">
     <span class="tempo-grp" hidden><select id="tempo" class="sel" aria-label="Tempo" title="Tempo: slower or faster, the pitch stays the same"><option value="1" selected>Tempo 100%</option></select></span>
     <button id="warmBtn" type="button" title="2-minute warm-up in this part’s voice range: scales, arpeggios and sirens">Warm-up</button>
-    <button id="checkBtn" type="button" title="Sing the song (or a section) once; afterwards you get the phrases to work on">Check-up</button>
+    <button id="checkBtn" type="button" title="Sing the song (or a section) once; afterwards you get the sections to work on">Check-up</button>
     <label class="btn rec-btn" for="recOn" title="Record my voice"><input id="recOn" type="checkbox" checked aria-label="Record my voice"><span class="rec-dot" aria-hidden="true"></span><span class="rec-txt" aria-hidden="true">REC</span></label>
     </div>
   </section>
@@ -1193,7 +1193,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-08 k';
+const APP_VERSION='2026-11-08 l';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -4406,7 +4406,7 @@ function anaShow(k,j,quiet){ const l=S.anaF&&S.anaF[k]; if(!l||!l.length) return
   document.querySelectorAll('#anaBox .ana-item').forEach(e=>e.classList.toggle('on',e.dataset.k===k));
   if(!quiet){ if(S.playing) stop(); S.pos=Math.max(0,l[j].t-S.win*0.25); updateTime(); window.scrollTo({top:0,behavior:'smooth'}); }
   draw(); }
-// ===== check-up: sing a song (or a section) once, then get the 3–4 phrases to work on, in words =====
+// ===== check-up: sing a song (or a section) once, then get the sections to work on, in words =====
 // a phrase = one timed lyric line (or, without lyrics, a stretch of the tune between rests). Each is scored on pitch and timing.
 function checkPhrases(a,b){ const out=[], T=S.tT, M=S.tM; if(!T) return out;
   const voiced=(pa,pb)=>{ let n=0; for(let i=idxAt(pa);i<T.length&&T[i]<pb;i++) if(!isNaN(M[i])) n++; return n*((T[1]-T[0])||0.01); };
@@ -4415,6 +4415,20 @@ function checkPhrases(a,b){ const out=[], T=S.tT, M=S.tM; if(!T) return out;
   let st=null, gap=0; const step=(T[1]-T[0])||0.01;   // no lyrics: stretches of the tune between rests of 0.4 s or more, at least 3 s long
   for(let i=idxAt(a);i<T.length&&T[i]<b;i++){ const v=!isNaN(M[i]); if(v){ if(st==null) st=T[i]; gap=0; } else if(st!=null){ gap+=step; if(gap>=0.4&&T[i]-st>=3){ out.push({a:st,b:T[i],text:'From '+fmtT(st)}); st=null; } } }
   if(st!=null&&b-st>=1) out.push({a:st,b,text:'From '+fmtT(st)}); return out; }
+// what the check-up judges: the song's sections (Verse, Chorus… from the lyrics sheet), steadier than single lines and a wider
+// focus; a song without sections is cut into groups of lines of about 15 s or more. Each unit also knows its hardest line.
+function checkUnits(a,b){ const lines=checkPhrases(a,b); if(!lines.length) return [];
+  const secs=songSections().filter(x=>x.sec), out=[];
+  if(secs.length){ secs.forEach((x,i)=>{ const sa=Math.max(a,x.t), sb=Math.min(b,i+1<secs.length?secs[i+1].t:S.dur); if(sb-sa<1) return;
+      const ls=lines.filter(l=>l.a>=sa-0.2&&l.a<sb-0.2); if(!ls.length) return; out.push({a:ls[0].a,b:sb,text:x.label,lines:ls}); });
+    const first=out.length?out[0].a:b, pre=lines.filter(l=>l.a<first-0.2&&l.a<secs[0].t-0.2);   // lines before the first section label
+    if(pre.length) out.unshift({a:pre[0].a,b:Math.min(first,secs[0].t),text:'Start',lines:pre});
+    return out; }
+  let cur=null; lines.forEach(l=>{ if(!cur||cur.b-cur.a>=15){ cur={a:l.a,b:l.b,text:'From '+fmtT(l.a),lines:[l]}; out.push(cur); } else { cur.b=l.b; cur.lines.push(l); } });
+  const last=out[out.length-1]; if(out.length>1&&last.b-last.a<6){ const pv=out[out.length-2]; pv.b=last.b; pv.lines.push(...last.lines); out.pop(); }   // no short leftover at the end
+  return out; }
+function checkUnitScore(u){ const x=checkScore(u), L=u.lines.length>1?u.lines.map(checkScore).filter(l=>l.cover>=0.15):[];
+  const hard=L.length?L.reduce((m,l)=>l.score<m.score?l:m):null; x.hard=hard&&hard.score<FB().solid&&hard.score<x.score-0.05?hard:null; return x; }
 function checkScore(ph){ const P=S.pts.filter(p=>p.t>=ph.a&&p.t<ph.b), tgd=P.filter(p=>!isNaN(targetAt(p.t))), sung=tgd.filter(p=>!isNaN(p.m));
   const cover=tgd.length?sung.length/tgd.length:0, good=sung.length?sung.filter(p=>p.c==='good').length/sung.length:0;
   const devs=sung.map(p=>anaDev(p.m,targetAt(p.t))*100).filter(d=>Math.abs(d)<400), mean=devs.length?devs.reduce((x,y)=>x+y,0)/devs.length:0;
@@ -4432,29 +4446,31 @@ function checkSecOf(t){ let lab=''; for(const x of songSections()) if(x.sec&&x.t
 function checkHist(){ try{ return JSON.parse(localStorage.getItem('pc-checkups')||'{}')||{}; }catch(e){ return {}; } }
 const checkKey=()=>S.curUid||(S.cur&&S.cur.libId!=null?'id'+S.cur.libId:'');
 const tlOf=sc=>sc>=FB().solid?'good':sc>=FB().solid-0.2?'ok':'weak';
-// the report: overall in one line, then the phrases to work on with Listen / Loop, and Save as practice list
-function checkReport(a,b,full){ const box=$('#anaBox'), ph=checkPhrases(a,b).map(checkScore);
+// the report: overall in one line, then the sections to work on with Listen / Loop, and Save as practice list
+function checkReport(a,b,full){ const box=$('#anaBox'), ph=checkUnits(a,b).map(checkUnitScore);
   const heard=ph.filter(x=>x.cover>=0.15);
-  if(heard.length<2){ box.innerHTML='<p class="small">Too little singing to judge. Sing along with the microphone on (at least a few phrases), then try again.</p>'; box.hidden=false; $('#result').hidden=false; return; }
-  const SOL=FB().solid, solid=heard.filter(x=>x.score>=SOL).length, pct=Math.round(100*solid/heard.length), weak=heard.filter(x=>x.score<SOL).sort((x,y)=>x.score-y.score).slice(0,4);
+  if(!heard.length||(heard.length<2&&heard[0].b-heard[0].a<8)){ box.innerHTML='<p class="small">Too little singing to judge. Sing along with the microphone on (at least a few lines), then try again.</p>'; box.hidden=false; $('#result').hidden=false; return; }
+  const SOL=FB().solid, solid=heard.filter(x=>x.score>=SOL).length, pct=Math.round(100*solid/heard.length), weak=heard.filter(x=>x.score<SOL).sort((x,y)=>x.score-y.score).slice(0,3);
   const key=checkKey(), H=checkHist(), list=H[key]||[], prev=[...list].reverse().find(r=>r.a<b&&r.b>a);
   const was=t=>prev&&(prev.ph.find(x=>Math.abs(x.t-t)<0.3)||null);
   const mood=pct>=85?'Great run':pct>=65?'Good run':pct>=45?'Getting there':'A tough one', unheard=ph.length-heard.length;
-  let html='<div class="ck-head"><div class="ck-top"><b>'+mood+': '+solid+' of '+heard.length+' phrases solid.</b><button type="button" class="link-btn" id="ckClose">Close</button></div>'+(unheard?'<span class="small">'+unheard+' phrase'+(unheard>1?'s':'')+' not heard (not sung, or too quiet) '+(unheard>1?'are':'is')+' left out.</span>':'')+(prev?'<span class="small ana-prog">Last check-up ('+new Date(prev.at).toLocaleDateString()+'): '+Math.round(100*prev.solid/Math.max(1,prev.total))+'% → now '+pct+'%'+(pct>Math.round(100*prev.solid/Math.max(1,prev.total))?' ✓':'')+'</span>':'')+'</div>';
+  let html='<div class="ck-head"><div class="ck-top"><b>'+mood+': '+solid+' of '+heard.length+' section'+(heard.length>1?'s':'')+' solid.</b><button type="button" class="link-btn" id="ckClose">Close</button></div>'+(unheard?'<span class="small">'+unheard+' section'+(unheard>1?'s':'')+' not heard (not sung, or too quiet) '+(unheard>1?'are':'is')+' left out.</span>':'')+(prev?'<span class="small ana-prog">Last check-up ('+new Date(prev.at).toLocaleDateString()+'): '+Math.round(100*prev.solid/Math.max(1,prev.total))+'% → now '+pct+'%'+(pct>Math.round(100*prev.solid/Math.max(1,prev.total))?' ✓':'')+'</span>':'')+'</div>';
   const better=prev?heard.filter(x=>{ const w=was(x.a); return w&&w.s<SOL&&x.score>=SOL; }).slice(0,3):[];
   if(better.length) html+='<p class="small ana-prog">✓ Better than last time: '+better.map(x=>'“'+esc(x.text.length>28?x.text.slice(0,26)+'…':x.text)+'”').join(', ')+'.</p>';
-  if(!weak.length) html+='<div class="ana-item good"><b>✓ Every phrase was solid</b><span class="small">Try it without the guide voice (Voice off), or a little faster.</span></div>';
+  if(!weak.length) html+='<div class="ana-item good"><b>✓ Every section was solid</b><span class="small">Try it without the guide voice (Voice off), or a little faster.</span></div>';
   else html+='<p class="small">Work on '+(weak.length>1?'these '+weak.length:'this one')+':</p>';
-  weak.forEach((x,i)=>{ const sec=checkSecOf(x.a), w=was(x.a);
-    html+='<div class="ana-item ck-item tl-'+tlOf(x.score)+'"><b>'+(i+1)+'. '+(sec?esc(sec)+', ':'')+'“'+esc(x.text.length>40?x.text.slice(0,38)+'…':x.text)+'” <span class="small">'+fmtT(x.a)+'</span></b>'+
-      '<span>'+esc(x.why.length?x.why.join('; ').replace(/^./,c=>c.toUpperCase())+'.':'A little unsure overall.')+'</span>'+(w&&w.s<SOL?'<span class="small">Also weak last time.</span>':'')+
-      '<div class="row"><button type="button" data-ck-l="'+i+'">▶ Listen</button><button type="button" data-ck-o="'+i+'">Loop it</button></div></div>'; });
-  if(weak.length) html+='<div class="row"><button type="button" class="primary" id="ckSave">Save as practice list</button><span class="small">Bookmarks for these phrases, ready in Practise bookmarks.</span></div>';
-  if(weak.length) html+='<p class="small">Loop a phrase and practise it: this report stays here (quick practice runs don’t replace it) until you close it or do a new check-up.</p><p class="small ana-prog" id="ckPractice" hidden></p>';
+  weak.forEach((x,i)=>{ const w=was(x.a), h=x.hard, q=t=>'“'+esc(t.length>34?t.slice(0,32)+'…':t)+'”';
+    html+='<div class="ana-item ck-item tl-'+tlOf(x.score)+'"><b>'+(i+1)+'. '+esc(x.text)+' <span class="small">'+fmtT(x.a)+'–'+fmtT(x.b)+'</span></b>'+
+      '<span>'+esc(x.why.length?x.why.join('; ').replace(/^./,c=>c.toUpperCase())+'.':'A little unsure overall.')+'</span>'+(h?'<span class="small">Hardest line: '+q(h.text)+' ('+fmtT(h.a)+')</span>':'')+(w&&w.s<SOL?'<span class="small">Also weak last time.</span>':'')+
+      '<div class="row"><button type="button" data-ck-l="'+i+'">▶ Listen</button><button type="button" data-ck-o="'+i+'">Loop it</button>'+(h?'<button type="button" data-ck-h="'+i+'">Loop the hardest line</button>':'')+'</div></div>'; });
+  if(weak.length) html+='<div class="row"><button type="button" class="primary" id="ckSave">Save as practice list</button><span class="small">Bookmarks for these sections, ready in Practise bookmarks.</span></div>';
+  if(weak.length) html+='<p class="small">Loop a section and practise it: this report stays here (quick practice runs don’t replace it) until you close it or do a new check-up.</p><p class="small ana-prog" id="ckPractice" hidden></p>';
   html+='<button type="button" class="link-btn" id="ckNums" aria-expanded="false">Show the numbers</button><div id="ckNumsBox"></div>';
   box.innerHTML=html; box.hidden=false; $('#result').hidden=false; $('#resultText').hidden=true; $('#result h2').textContent=full?'Check-up':'Last run';   // the words first; the numbers on request
   box.querySelector('#ckNums').addEventListener('click',e=>{ const rt=$('#resultText'); box.querySelector('#ckNumsBox').appendChild(rt); { const ar=rt.querySelector('.ana-row'); if(ar) ar.hidden=true; const nb=rt.querySelector('#rNumsBtn'); if(nb) nb.hidden=true; const nn=rt.querySelector('#rNums'); if(nn) nn.hidden=false; } rt.hidden=!rt.hidden; e.target.textContent=rt.hidden?'Show the numbers':'Hide the numbers'; e.target.setAttribute('aria-expanded',String(!rt.hidden)); });   // opens right under the link
-  box.querySelectorAll('[data-ck-o]').forEach(bt=>bt.addEventListener('click',()=>{ const x=weak[+bt.dataset.ckO]; if(S.playing) stop(); S.loop.a=x.a; S.loop.b=Math.min(S.dur,x.b); S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); seek(loopStart()); setStatus('Looping “'+x.text+'”. Press Play.'); window.scrollTo({top:0,behavior:'smooth'}); }));
+  const ckLoop=x=>{ if(S.playing) stop(); S.loop.a=x.a; S.loop.b=Math.min(S.dur,x.b); S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); seek(loopStart()); setStatus('Looping '+fmtT(x.a)+'–'+fmtT(x.b)+'. Press Play.'); window.scrollTo({top:0,behavior:'smooth'}); };
+  box.querySelectorAll('[data-ck-h]').forEach(bt=>bt.addEventListener('click',()=>ckLoop(weak[+bt.dataset.ckH].hard)));
+  box.querySelectorAll('[data-ck-o]').forEach(bt=>bt.addEventListener('click',()=>{ const x=weak[+bt.dataset.ckO]; if(S.playing) stop(); S.loop.a=x.a; S.loop.b=Math.min(S.dur,x.b); S.loop.on=true; $('#loopOn').checked=true; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); seek(loopStart()); setStatus('Looping '+x.text+' ('+fmtT(x.a)+'–'+fmtT(x.b)+'). Press Play.'); window.scrollTo({top:0,behavior:'smooth'}); }));
   box.querySelectorAll('[data-ck-l]').forEach(bt=>bt.addEventListener('click',()=>checkListen(weak[+bt.dataset.ckL])));
   S.ckKeep=true; S.ckTakes=S.takes.slice();   // keep the report (and the recordings it refers to) while you practise
   box.querySelector('#ckClose').addEventListener('click',()=>{ S.ckKeep=false; $('#result').hidden=true; setStatus('Report closed.'); });
@@ -4469,19 +4485,19 @@ function checkListen(x){ const cov=k=>k.song0<=x.a+0.2&&k.song1>=x.a+0.5, k=[...
   if(!k){ setStatus('No recording of this phrase: keep REC on during the run to listen back.',true); return; }
   reviewTake(k,2,Math.max(0,(x.a-k.song0)/k.rate-0.6),Math.min(k.song1,x.b+0.4)); }
 function checkSave(weak,btn){ if(!S.cur||S.cur.libId==null) return; const uid=S.curUid||'', song=curSongName(), bl=bmGet(), ids=[];
-  weak.forEach(x=>{ const name=(x.text.length>26?x.text.slice(0,25).trim()+'…':x.text); const bm={id:newSugId(),uid,libId:S.cur.libId,song,name,a:+x.a.toFixed(2),b:+Math.min(S.dur,x.b).toFixed(2),rate:1,win:S.win,created:Date.now()}; bl.push(bm); ids.push(bm.id); });
+  weak.forEach(x=>{ const name=x.text+' '+fmtT(x.a); const bm={id:newSugId(),uid,libId:S.cur.libId,song,name,a:+x.a.toFixed(2),b:+Math.min(S.dur,x.b).toFixed(2),rate:1,win:S.win,created:Date.now()}; bl.push(bm); ids.push(bm.id); });
   bmSave(bl); const lists=prLists(), L={id:newSugId(),name:'Check-up '+new Date().toLocaleDateString(undefined,{day:'numeric',month:'short'})+' · '+song,def:3,gap:2,items:ids.map(id=>({id,rep:null}))};
   lists.push(L); prSave(lists); prSetCur(L.id); btn.disabled=true; btn.textContent='✓ Saved';
   setStatus('Saved '+ids.length+' bookmarks and the practice list “'+L.name+'”. Open it from the bookmark ribbon: ▶ Practise bookmarks.'); }
 // the lyrics sheet: each line of your part coloured by the last check-up (green solid, yellow nearly, red to work on)
 function sheetTraffic(){ const list=checkHist()[checkKey()]||[], last=list[list.length-1];
   document.querySelectorAll('#sheetTable td.tap').forEach(td=>{ td.classList.remove('tl-good','tl-ok','tl-weak'); if(!last) return; const a=+td.dataset.a, b=+td.dataset.b;
-    const hits=last.ph.filter(x=>x.t>=a-0.3&&x.t<Math.max(b,a+0.5)); if(!hits.length) return; td.classList.add('tl-'+tlOf(Math.min(...hits.map(x=>x.s)))); }); }
+    const hits=last.ph.filter(x=>x.t<Math.max(b,a+0.5)-0.05&&(x.e!=null?x.e:x.t+0.5)>a+0.05); if(!hits.length) return; td.classList.add('tl-'+tlOf(Math.min(...hits.map(x=>x.s)))); }); }
 async function checkupDialog(){ if(!S.cur||S.cur.libId==null||!S.tT){ setStatus('Open a song from your library first.',true); return; }
   const secs=songSections().filter(x=>x.sec), opts=secs.map((x,i)=>{ const end=i+1<secs.length?secs[i+1].t:S.dur; return {a:x.t,b:end,label:x.label}; });
   // sections: tap to choose; tapping another one takes in everything in between, so the choice is always one stretch
   let lo=0, hi=opts.length-1;
-  const r=await dlg({title:'Check-up',html:'<p class="kv-sub">Sing it through once, like in rehearsal. Afterwards you get the phrases to work on, in words, ready to loop or save as a practice list. The microphone and REC are switched on for the run.</p>'+
+  const r=await dlg({title:'Check-up',html:'<p class="kv-sub">Sing it through once, like in rehearsal. Afterwards you get the sections to work on, in words, ready to loop or save as a practice list. The microphone and REC are switched on for the run.</p>'+
       (opts.length?'<div class="ck-secs-top"><b>What to sing</b><button type="button" class="link-btn" id="ckAll">Whole song</button></div><div class="ck-secs" id="ckSecs"></div><p class="small" id="ckSum"></p>':'<p class="kv-sub">The whole song ('+fmtT(S.dur)+').</p>'),
     buttons:[{label:'▶ Start',value:'go',primary:true},{label:'Cancel',value:null}],
     onOpen:body=>{ if(!opts.length) return; const box=body.querySelector('#ckSecs');
@@ -4504,7 +4520,7 @@ async function checkupStart(a,b,label,full){ if(S.prac) pracStop(true); if(S.edi
   $('#checkInfo').innerHTML='<b>Check-up</b>: '+esc(label)+' · sing it through, it ends by itself at '+fmtT(b)+'. Pause and Play work as usual.'; $('#checkBar').hidden=false;
   S.pos=Math.max(0,a-1.5); updateTime(); play(); }
 function checkupEnd(){ const c=S.check; if(!c) return null; S.check=null; $('#checkBar').hidden=true; $('#recOn').checked=c.rec; return c; }
-function checkupFinish(){ const c=checkupEnd(); if(!c) return; setStatus('Check-up done: here are the phrases to work on.'); setTimeout(()=>checkReport(c.a,Math.min(c.b,Math.max(c.a+1,S.pos)),c.full),600); }
+function checkupFinish(){ const c=checkupEnd(); if(!c) return; setStatus('Check-up done: here are the sections to work on.'); setTimeout(()=>checkReport(c.a,Math.min(c.b,Math.max(c.a+1,S.pos)),c.full),600); }
 $('#checkBtn').addEventListener('click',checkupDialog);
 $('#checkFinish').addEventListener('click',()=>{ if(S.playing) stop(); checkupFinish(); });
 $('#checkCancel').addEventListener('click',()=>{ if(S.playing) stop(); checkupEnd(); setStatus('Check-up cancelled.'); });
@@ -4517,7 +4533,7 @@ function showResult(){
   let nums=`<b>${pct}%</b> of the compared time was within ${FB().good} cents of the target. ${tend} <span class="small">(${secs} s of singing compared${S.ignoreOct?', octave ignored':''})</span>`+timingSummary();
   if(S.passes.length) nums+='<br>Loop passes (pitch): '+S.passes.join('% · ')+'%.';
   // the words first: the phrase report button and (when it applies) the delay advice; the numbers behind a link, opening right under it
-  $('#resultText').innerHTML='<div class="row ana-row"><button id="anaBtn" type="button" class="primary">Which phrases to work on?</button><span class="small">Your weakest phrases in this run, in words, ready to loop or save.</span></div>'+
+  $('#resultText').innerHTML='<div class="row ana-row"><button id="anaBtn" type="button" class="primary">Which sections to work on?</button><span class="small">Your weakest sections in this run, in words, ready to loop or save.</span></div>'+
     (S.delayFixHtml?'<div class="delay-fix">'+S.delayFixHtml.replace(/^<br>/,'')+'</div>':'')+
     '<button type="button" class="link-btn" id="rNumsBtn" aria-expanded="false">Show the numbers</button><div id="rNums" hidden>'+nums+'</div>';
   $('#rNumsBtn').addEventListener('click',e=>{ const n=$('#rNums'); n.hidden=!n.hidden; e.target.textContent=n.hidden?'Show the numbers':'Hide the numbers'; e.target.setAttribute('aria-expanded',String(!n.hidden)); });
