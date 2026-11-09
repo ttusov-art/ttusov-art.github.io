@@ -1238,7 +1238,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-09 c';
+const APP_VERSION='2026-11-09 e';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1340,7 +1340,7 @@ function songReady(name,label){
   renderSheetBtns(); closeSheet(); if(typeof repHide==='function') repHide();
   S.lyrTextHist=[]; S.edSnap=null; S.needTiming=false; S.gateBase=null; S.gateLoud=null; { const gi=$('#gateIn'); if(gi){ gi.value='100'; $('#gateV').textContent=gateLabel(100); } } $('#lyrCheckNote').hidden=true; S.setup=S.openRec&&S.openRec.setup?{...S.openRec.setup}:null; setTimeout(paintSetup,0); S.mkey=S.pendingKey||null; S.pendingKey=null; S.mkeyTok++; renderKeyBtn(); refreshCurBase(S.openRec); S.openRec=null;
   setTimeout(()=>{ S.beatJob=scheduleBeatDetect(false); },50); setTimeout(()=>{ S.keyJob=scheduleKeyDetect(false); },400);
-  normalize(); S.stretch=null; S.rate=1; $('#tempo').value='1'; setTimeout(paintTempo,0);
+  normalize(); S.stretch=null; S.stretchHQ=null; S.rate=1; $('#tempo').value='1'; setTimeout(paintTempo,0);
   $('#songName').textContent=name; $('#guideName').textContent=label||name;
   S.songOpening=true; updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); stopTap(); renderLyrics(true); draw(); updateTime();
   if(S.pmode==='song') loopWholeSong(); S.songOpening=false; paintSongLoop();
@@ -1363,7 +1363,7 @@ async function loadGuide(file){
       const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'),rangeKey(S.part));
       setTarget(pl.tt,pl.mm);
     }
-    normalize(); S.stretch=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    normalize(); S.stretch=null; S.stretchHQ=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -1372,7 +1372,7 @@ async function loadGuide(file){
 }
 async function loadBack(file){
   stop(); setStatus('Loading '+file.name+'…');
-  try{ S.backBuf=await decode(await file.arrayBuffer()); if(!S.beat||S.beat.auto){ S.beat=null; setTimeout(()=>scheduleBeatDetect(false),50); } if(!S.mkey||S.mkey.auto){ S.mkey=null; setTimeout(()=>scheduleKeyDetect(false),400); } normalize(); S.stretch=null; S.curBackBlob=file; $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime();
+  try{ S.backBuf=await decode(await file.arrayBuffer()); if(!S.beat||S.beat.auto){ S.beat=null; setTimeout(()=>scheduleBeatDetect(false),50); } if(!S.mkey||S.mkey.auto){ S.mkey=null; setTimeout(()=>scheduleKeyDetect(false),400); } normalize(); S.stretch=null; S.stretchHQ=null; S.curBackBlob=file; $('#backName').textContent=file.name; $('#backClear').hidden=false; updateDur(); updateTime();
     let msg='Backing loaded. Press Play and sing along.';
     if(S.cur.libId!=null){ try{ const r=await libAddBacking(S.cur.libId,file.name.replace(/\.[a-z0-9]+$/i,''),file,false); if(r){ S.curBacks=r.backs; S.curBackSel=r.sel; renderBackPick(); } await renderLib(); msg=S.curBacks.length>1?'Backing added to this song. Switch between its '+S.curBacks.length+' backings in the Kept backings menu.':'Backing loaded and kept with this song in the library.'; }catch(e){ msg='Backing loaded, but it could not be saved in the library (storage may be full).'; } }
     setStatus(msg); }
@@ -1416,7 +1416,7 @@ async function play(){ S.dotS=null; S.playYou=null; if(!$('#endTip').hidden) end
   if(!S.guideBuf&&!S.backBuf){ setStatus('Load a song first.',true); return; }
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
   if($('#micOn').checked && !S.mic){ const ok=await startMic(); if(!ok) $('#micOn').checked=false; paintMic(); }
-  if(S.rate!==1&&!(S.stretch&&S.stretch.rate===S.rate)){ const ok=await prepareTempo(); if(!ok) return; }
+  if(!tempoReady()){ const ok=await prepareTempo(); if(!ok) return; }
   if(S.playing) return;   // Play pressed again while the speed was being prepared: start only once
   if(S.pos>=S.dur-0.05) S.pos=0;
   if(loopActive()){ const st=loopStart(); if(S.pos<st-0.01||S.pos>=S.loop.b) S.pos=st; S.pass={n:0,hit:0,sum:0}; }
@@ -1437,11 +1437,17 @@ async function play(){ S.dotS=null; S.playYou=null; if(!$('#endTip').hidden) end
 function startSources(pos){
   const ctx=S.ctx; S.srcs.forEach(s=>{ try{s.stop()}catch(e){} s.disconnect(); }); S.srcs=[];
   const at=ctx.currentTime+0.06;
-  const st=S.rate!==1&&S.stretch&&S.stretch.rate===S.rate?S.stretch:null;
+  let st=null, off0=0; clearTimeout(S.hqEndT); const tok=S.hqTok=(S.hqTok||0)+1;
+  if(S.rate!==1){ const R=hqRange(), h=S.stretchHQ;
+    if(R&&hqOk(R)&&pos>=h.s0-0.01&&pos<h.s1-0.15){ st=h; off0=h.s0;
+      // the loop's own sound ends a little after the loop: if the loop is switched off meanwhile, carry on with the whole song
+      S.hqEndT=setTimeout(()=>{ if(S.playing&&S.hqTok===tok){ const t=songTime(); stop(); S.pos=t; prepareTempo().then(ok=>{ if(ok) play(); }); } },Math.max(0,((h.s1-0.15)-pos)/S.rate*1000)+60); }
+    else if(S.stretch&&S.stretch.rate===S.rate) st=S.stretch;
+    else { setTimeout(()=>{ if(!S.playing) return; const t=songTime(); stop(); S.pos=t; prepareTempo().then(ok=>{ if(ok) play(); }); },0); S.startAt=at; S.pos0=pos; return; } }
   for(const [orig,str,g] of [[S.guideBuf,st&&st.guide,S.gGuide],[S.backBuf,st&&st.back,S.gBack]]){
     if(!orig||pos>=orig.duration) continue;
     const buf=st?str:orig; if(!buf) continue;
-    const s=ctx.createBufferSource(); s.buffer=buf; s.connect(g); s.start(at,st?pos/S.rate:pos); S.srcs.push(s);
+    const s=ctx.createBufferSource(); s.buffer=buf; s.connect(g); s.start(at,st?(pos-off0)/S.rate:pos); S.srcs.push(s);
   }
   S.startAt=at; S.pos0=pos;
 }
@@ -1452,6 +1458,11 @@ async function toCtxRate(buf){
   const oc=new OfflineAudioContext(buf.numberOfChannels,Math.max(1,Math.ceil(buf.duration*sr)),sr);
   const s=oc.createBufferSource(); s.buffer=buf; s.connect(oc.destination); s.start(); return await oc.startRendering();
 }
+// slowing down (or speeding up) without changing the pitch: WSOLA. The sound is cut into overlapping 46 ms pieces that are laid
+// further apart; each piece is placed where it fits the sound before it best. In the best version voice and backing are stretched separately
+// (each fits best on its own; a single voice stretches very cleanly), the fit is found coarsely and then to the exact sample
+// (no phasey highs), the pieces overlap 3/4 (smoother joins) and stereo is kept.
+// whole songs: the quick version (coarse fit, voice and backing together, half overlap)
 async function wsola(bufs,rate,onProg){
   bufs=await Promise.all(bufs.map(toCtxRate));
   const N=2048,Hs=1024,D=8,tol=512,Ha=Hs*rate,Nd=N/D,td=tol/D;
@@ -1479,13 +1490,63 @@ async function wsola(bufs,rate,onProg){
   }
   return outs.map(o=>{ if(!o) return null; const b=new AudioBuffer({numberOfChannels:1,length:o.length,sampleRate:sr}); b.copyToChannel(o,0); return b; });
 }
+// short loops (up to 20 s): the best version
+async function wsolaHQ(bufs,rate,onProg){
+  bufs=await Promise.all(bufs.map(toCtxRate));
+  const sr=S.ctx.sampleRate, live=bufs.filter(Boolean).length||1; let done=0;
+  const outs=[];
+  for(let i=0;i<bufs.length;i++){ const b=bufs[i]; if(!b){ outs.push(null); continue; }
+    // memory: the voice (one voice, in the middle) stays mono; the backing keeps its stereo while the slowed song is under 6 minutes
+    const stereo=i>0&&b.length/rate/sr<360;
+    const o=await wsolaTrack(b,rate,sr,p=>onProg&&onProg((done+p)/live),stereo); done++; outs.push(o); }
+  return outs; }
+async function wsolaTrack(buf,rate,sr,onProg,stereo){
+  const N=sr>32000?2048:1024, Hs=N/4, Ha=Hs*rate, D=8, tol=sr>32000?512:256, td=tol/D, Nc=(N/2)/D, R=N/8, FD=D;   // coarse match on 1/8 of the samples, then ±8 samples exact
+  const nch=stereo?Math.min(2,buf.numberOfChannels):1, ch=[]; for(let c=0;c<nch;c++) ch.push(buf.getChannelData(c)); const len=buf.length;
+  if(nch===1&&buf.numberOfChannels>1){ const a=buf.getChannelData(0),c=buf.getChannelData(1),x=new Float32Array(len); for(let i=0;i<len;i++) x[i]=0.5*(a[i]+c[i]); ch[0]=x; }
+  const m=nch===1?ch[0]:(()=>{ const a=ch[0],c=ch[1],x=new Float32Array(len); for(let i=0;i<len;i++) x[i]=0.5*(a[i]+c[i]); return x; })();
+  const ny=Math.ceil(len/D), y=new Float32Array(ny); for(let i=0;i<ny;i++){ let s=0; const o=i*D; for(let k=0;k<D;k++){ const v=m[o+k]; if(v!==undefined) s+=v; } y[i]=s/D; }
+  const outLen=Math.ceil(len/rate)+N, frames=Math.floor((outLen-N)/Hs)+1, win=new Float32Array(N); for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
+  const out=ch.map(()=>new Float32Array(outLen)), wsum=new Float32Array(outLen);
+  let start=0;
+  for(let k=0;k<frames;k++){ const o=k*Hs;
+    for(let j=0;j<N;j++){ const idx=start+j; if(idx>=0&&idx<len){ const w=win[j]; for(let c=0;c<nch;c++) out[c][o+j]+=ch[c][idx]*w; } wsum[o+j]+=win[j]; }
+    const nom=Math.round((k+1)*Ha), tp=start+Hs, base=Math.floor(nom/D), tq=Math.floor(tp/D); let pos=nom;
+    if(tq>=0&&tq+Nc<ny&&base-td>=0&&base+td+Nc<ny){
+      let bc=-Infinity,best=0;
+      for(let d=-td;d<=td;d++){ const cb=base+d; let s=0,e=1e-9; for(let j=0;j<Nc;j++){ const v=y[cb+j]; s+=y[tq+j]*v; e+=v*v; } const sc=s/Math.sqrt(e); if(sc>bc){ bc=sc; best=d; } }
+      pos=(base+best)*D;
+      if(pos-FD>=0&&pos+FD+R<len&&tp+R<len){ let bf=-Infinity,fd=0;   // the exact sample
+        for(let d=-FD;d<=FD;d++){ const q=pos+d; let s=0,e=1e-9; for(let j=0;j<R;j++){ const v=m[q+j]; s+=m[tp+j]*v; e+=v*v; } const sc=s/Math.sqrt(e); if(sc>bf){ bf=sc; fd=d; } }
+        pos+=fd; } }
+    start=pos;
+    if(k%300===0){ onProg&&onProg(k/frames); await new Promise(r=>setTimeout(r,0)); } }
+  for(let i=0;i<outLen;i++){ const w=wsum[i]; if(w>1e-3){ const g=1/w; for(let c=0;c<nch;c++) out[c][i]*=g; } }
+  const ob=new AudioBuffer({numberOfChannels:nch,length:outLen,sampleRate:sr}); out.forEach((x,c)=>ob.copyToChannel(x,c)); return ob; }
 // one preparation at a time: asking again for the same speed (Play, Space, a bookmark) waits for the one already running
-function prepareTempo(){
-  if(S.rate===1) return Promise.resolve(true);
-  if(S.stretch&&S.stretch.rate===S.rate) return Promise.resolve(true);
-  if(S.prepP&&S.prepP.rate===S.rate) return S.prepP.p;
-  const r=S.rate, p=prepareTempo0().finally(()=>{ if(S.prepP&&S.prepP.p===p) S.prepP=null; });
-  S.prepP={rate:r,p}; return p; }
+// a loop of up to 20 s is slowed on its own with the best version (quick, it is short); anything else uses the whole song, quick version
+const HQ_MAX=20;
+function hqRange(){ if(!loopActive()) return null; const a=loopStart(), b=S.loop.b; if(b-a>HQ_MAX) return null; return {s0:Math.max(0,a-0.3),s1:Math.min(S.dur,b+0.6)}; }
+function hqOk(R){ const h=S.stretchHQ; return !!(h&&R&&h.rate===S.rate&&h.s0<=R.s0+0.01&&h.s1>=R.s1-0.01); }
+function tempoReady(whole){ if(S.rate===1) return true; const R=whole?null:hqRange(); return R?hqOk(R):!!(S.stretch&&S.stretch.rate===S.rate); }
+function prepareTempo(o){ const whole=!!(o&&o.whole);
+  if(tempoReady(whole)) return Promise.resolve(true);
+  const R=whole?null:hqRange(), key=S.rate+(R?':'+R.s0.toFixed(2)+'-'+R.s1.toFixed(2):':whole');
+  if(S.prepP&&S.prepP.key===key) return S.prepP.p;
+  const r=S.rate, p=(R?prepareHQ(R):prepareTempo0()).finally(()=>{ if(S.prepP&&S.prepP.p===p) S.prepP=null; });
+  S.prepP={rate:r,key,p}; return p; }
+function sliceBuf(b,s0,s1){ if(!b) return null; const i0=Math.max(0,Math.floor(s0*b.sampleRate)), i1=Math.min(b.length,Math.ceil(s1*b.sampleRate)); if(i1-i0<64) return null;
+  const o=new AudioBuffer({numberOfChannels:b.numberOfChannels,length:i1-i0,sampleRate:b.sampleRate}); for(let c=0;c<b.numberOfChannels;c++) o.copyToChannel(b.getChannelData(c).subarray(i0,i1),c); return o; }
+async function prepareHQ(R){
+  if(!S.guideBuf&&!S.backBuf) return false;
+  const r=S.rate;
+  try{ tempoLoading(r,0);
+    const [guide,back]=await wsolaHQ([sliceBuf(S.guideBuf,R.s0,R.s1),sliceBuf(S.backBuf,R.s0,R.s1)],r,p=>{ if(S.rate===r) tempoLoading(r,p); });
+    if(S.rate!==r) return false;
+    S.stretchHQ={rate:r,s0:R.s0,s1:R.s1,guide,back};
+    setStatus('Loop at '+Math.round(r*100)+'% ready, in the best quality. The pitch stays the same.'); return true; }
+  catch(err){ setStatus('Could not slow the loop down on this device: '+((err&&err.message)||'out of memory')+'.',true); return false; }
+  finally{ if(!S.prepP||S.prepP.rate===r||S.rate===1) tempoLoading(null); } }
 // the notice on the pitch graph while the slower (or faster) sound is made; playback waits for it, so it never stutters
 function tempoLoading(r,frac){ const ov=$('#laneLoading');
   if(r==null){ if(ov.dataset.tempo){ delete ov.dataset.tempo; ov.hidden=true; } return; }
@@ -1711,7 +1772,7 @@ function renderBackPick(){
 async function useBacking(i){
   const b=S.curBacks[i]; if(!b) return;
   stop(); setStatus('Opening '+b.name+'…');
-  try{ S.backBuf=await decode(await b.blob.arrayBuffer()); S.curBackBlob=b.blob; S.curBackSel=i; if(S.mkey&&S.mkey.auto){ S.mkey=null; setTimeout(()=>scheduleKeyDetect(false),400); } normalize(); S.stretch=null; updateDur(); updateTime();
+  try{ S.backBuf=await decode(await b.blob.arrayBuffer()); S.curBackBlob=b.blob; S.curBackSel=i; if(S.mkey&&S.mkey.auto){ S.mkey=null; setTimeout(()=>scheduleKeyDetect(false),400); } normalize(); S.stretch=null; S.stretchHQ=null; updateDur(); updateTime();
     $('#backName').textContent=b.name+' (from library)'; $('#backClear').hidden=false; renderBackPick();
     if(S.cur.libId!=null) libSetBacks(S.cur.libId,S.curBacks,i).catch(()=>{});
     setStatus('Backing: '+b.name+'.'); }
@@ -1731,7 +1792,7 @@ async function deleteBacking(btn){
   const gb=S.curBacks[i], gone=gb.name; S.curBacks=S.curBacks.filter((_,k)=>k!==i);
   { const r=await libGet(S.cur.libId); if(r){ const d=(r.delBacks||[]).filter(x=>!(x.name===gb.name&&!!x.sep===!!gb.sep)); d.push({name:gb.name,sep:!!gb.sep,size:gb.blob?gb.blob.size:null}); r.delBacks=d; await libPutRaw(r); } }
   if(S.curBacks.length){ await libSetBacks(S.cur.libId,S.curBacks,0); await useBacking(0); }
-  else { await libSetBacks(S.cur.libId,[],-1); stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); renderBackPick(); }
+  else { await libSetBacks(S.cur.libId,[],-1); stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; S.stretch=null; S.stretchHQ=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); renderBackPick(); }
   renderLib(); setStatus('Deleted '+gone+' from this song.');
 }
 // saves to one song run one after another, so two quick saves (say lyrics and pitch line) can't overwrite each other
@@ -4240,7 +4301,7 @@ async function reviewTake(k,withBacking,startVoice=0,until=null){
   stop(); if(S.review) stopReview();
   const ctx=ensureCtx(); if(ctx.state!=='running') await ctx.resume();
   if(withBacking&&k.rate!==S.rate){ S.rate=k.rate; $('#tempo').value=String(k.rate); }
-  if(withBacking&&S.rate!==1&&!(S.stretch&&S.stretch.rate===S.rate)){ const ok=await prepareTempo(); if(!ok) return; }
+  if(withBacking&&!tempoReady(true)){ const ok=await prepareTempo({whole:true}); if(!ok) return; }
   const at=ctx.currentTime+0.08, srcs=[];
   let voiceOff=Math.max(startVoice,k.song0<0?-k.song0/k.rate:0), song0=k.song0+voiceOff*k.rate;
   const vg=ctx.createGain(); vg.gain.value=takeBuffer(k)&&k.gain; vg.connect(S.limiter);
@@ -5134,7 +5195,7 @@ canvas.addEventListener('pointermove',e=>{ if(drag&&drag.loopEdge){ const d=drag
 $('#tempo').addEventListener('change',async e=>{ setTimeout(paintTempo,0);
   const was=S.playing; if(was) stop();
   S.rate=+e.target.value; S.ghost=[];
-  if(S.rate===1){ S.stretch=null; setStatus('Original tempo'+(S.beat&&S.beat.bpm>0?' ('+Math.round(S.beat.bpm)+' BPM)':'')+'.'); if(was) play(); return; }
+  if(S.rate===1){ S.stretch=null; S.stretchHQ=null; setStatus('Original tempo'+(S.beat&&S.beat.bpm>0?' ('+Math.round(S.beat.bpm)+' BPM)':'')+'.'); if(was) play(); return; }
   const ok=await prepareTempo(); if(ok&&was) play();
 });
 async function addCurrentToLib(btn){
@@ -6002,7 +6063,7 @@ document.addEventListener('click',e=>{ if(!$('#guideMenu').hidden&&!e.target.clo
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#guideMenu').hidden){ closeGuideMenu(); $('#guidePick').focus(); } });
 $('#guideFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadGuide(f).finally(()=>e.target.value=''); });
 $('#backFile').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadBack(f).finally(()=>e.target.value=''); });
-$('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; renderBackPick(); S.stretch=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
+$('#backClear').addEventListener('click',()=>{ stop(); S.backBuf=null; S.curBackBlob=null; S.curBackSel=-1; renderBackPick(); S.stretch=null; S.stretchHQ=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true; updateDur(); updateTime(); });
 const pct=v=>Math.round(v*100)+'%';
 $('#volGuide').addEventListener('input',e=>{ $('#volGuideV').textContent=pct(+e.target.value); applyGains(); try{localStorage.setItem('pc-volguide',e.target.value)}catch(x){} });
 $('#volBack').addEventListener('input',e=>{ $('#volBackV').textContent=pct(+e.target.value); applyGains(); try{localStorage.setItem('pc-volback',e.target.value)}catch(x){} });
@@ -6080,8 +6141,8 @@ async function bmAdd(){ if(!S.cur||S.cur.libId==null){ setStatus('Open a song fr
   const v=r.body.querySelector('#bmNameIn').value.trim(); if(v) bm.name=v;
   const l=bmGet(); l.push(bm); bmSave(l); setStatus('★ Bookmarked “'+bm.name+'” ('+bmMeta(bm)+'). Open it from Bookmarks, or from Choose song.'); }
 // the speed you chose stays when you open bookmarks or move through a practice list (also into another song)
-async function keepRate(r){ if(r===S.rate&&(r===1||(S.stretch&&S.stretch.rate===r))) return; $('#tempo').value=String(r); S.rate=r; S.ghost=[];
-  if(r===1) S.stretch=null; else if(!(await prepareTempo())){ S.rate=1; $('#tempo').value='1'; } paintTempo(); }
+async function keepRate(r){ if(r===S.rate&&tempoReady()) return; $('#tempo').value=String(r); S.rate=r; S.ghost=[];
+  if(r===1){ S.stretch=null; S.stretchHQ=null; } else if(!(await prepareTempo())){ S.rate=1; $('#tempo').value='1'; } paintTempo(); }
 async function bmOpen(bm){ if(S.playing) stop(); const rate=S.rate||1;
   if(!bmMine(bm)){ const lib=await libMeta(), x=lib.find(s=>bm.uid?s.uid===bm.uid:s.id===bm.libId); if(!x){ setStatus('The song of this bookmark is not on this phone any more.',true); return; } if(!(await openLibSong(x.id))) return; }
   setWin(bm.win||S.win,false);
