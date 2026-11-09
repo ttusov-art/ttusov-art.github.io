@@ -1238,7 +1238,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-09 e';
+const APP_VERSION='2026-11-09 f';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1461,7 +1461,7 @@ async function toCtxRate(buf){
 // slowing down (or speeding up) without changing the pitch: WSOLA. The sound is cut into overlapping 46 ms pieces that are laid
 // further apart; each piece is placed where it fits the sound before it best. In the best version voice and backing are stretched separately
 // (each fits best on its own; a single voice stretches very cleanly), the fit is found coarsely and then to the exact sample
-// (no phasey highs), the pieces overlap 3/4 (smoother joins) and stereo is kept.
+// (no phasey highs) and the pieces overlap 3/4 (smoother joins). The backing of a loop goes through the phase vocoder below.
 // whole songs: the quick version (coarse fit, voice and backing together, half overlap)
 async function wsola(bufs,rate,onProg){
   bufs=await Promise.all(bufs.map(toCtxRate));
@@ -1498,10 +1498,10 @@ async function wsolaHQ(bufs,rate,onProg){
   for(let i=0;i<bufs.length;i++){ const b=bufs[i]; if(!b){ outs.push(null); continue; }
     // memory: the voice (one voice, in the middle) stays mono; the backing keeps its stereo while the slowed song is under 6 minutes
     const stereo=i>0&&b.length/rate/sr<360;
-    const o=await wsolaTrack(b,rate,sr,p=>onProg&&onProg((done+p)/live),stereo); done++; outs.push(o); }
+    const pr=p=>onProg&&onProg((done+p)/live), o=i===0?await wsolaTrack(b,rate,sr,pr,false):await pvTrack(b,rate,sr,pr,stereo); done++; outs.push(o); }
   return outs; }
 async function wsolaTrack(buf,rate,sr,onProg,stereo){
-  const N=sr>32000?2048:1024, Hs=N/4, Ha=Hs*rate, D=8, tol=sr>32000?512:256, td=tol/D, Nc=(N/2)/D, R=N/8, FD=D;   // coarse match on 1/8 of the samples, then ±8 samples exact
+  const N=sr>32000?2048:1024, Hs=N/4, Ha=Hs*rate, D=8, tol=sr>32000?512:256, td=tol/D, Nc=(N/2)/D, R=N/8, FD=D;   // coarse match on 1/8 of the samples, then ±8 samples exact; 3/4 overlap
   const nch=stereo?Math.min(2,buf.numberOfChannels):1, ch=[]; for(let c=0;c<nch;c++) ch.push(buf.getChannelData(c)); const len=buf.length;
   if(nch===1&&buf.numberOfChannels>1){ const a=buf.getChannelData(0),c=buf.getChannelData(1),x=new Float32Array(len); for(let i=0;i<len;i++) x[i]=0.5*(a[i]+c[i]); ch[0]=x; }
   const m=nch===1?ch[0]:(()=>{ const a=ch[0],c=ch[1],x=new Float32Array(len); for(let i=0;i<len;i++) x[i]=0.5*(a[i]+c[i]); return x; })();
@@ -1521,6 +1521,46 @@ async function wsolaTrack(buf,rate,sr,onProg,stereo){
         pos+=fd; } }
     start=pos;
     if(k%300===0){ onProg&&onProg(k/frames); await new Promise(r=>setTimeout(r,0)); } }
+  for(let i=0;i<outLen;i++){ const w=wsum[i]; if(w>1e-3){ const g=1/w; for(let c=0;c<nch;c++) out[c][i]*=g; } }
+  const ob=new AudioBuffer({numberOfChannels:nch,length:outLen,sampleRate:sr}); out.forEach((x,c)=>ob.copyToChannel(x,c)); return ob; }
+// ----- the best quality for short loops, step 2: the backing (chords, piano) with a phase vocoder -----
+// Each 85 ms window is turned into its frequencies; the frequencies are laid further apart and their phases advanced so that
+// every partial keeps sounding continuous. "Phase locking": the bins around each peak follow that peak, so a piano note keeps its
+// colour instead of going hollow. At a sudden attack (a new chord, a drum) the phases are reset, so attacks stay crisp.
+// Stereo: the phase changes are worked out on left+right together and applied to both, so the stereo image stays put.
+function fftIn(re,im,inv){ const n=re.length; for(let i=1,j=0;i<n;i++){ let b=n>>1; for(;j&b;b>>=1) j^=b; j^=b; if(i<j){ let t=re[i]; re[i]=re[j]; re[j]=t; t=im[i]; im[i]=im[j]; im[j]=t; } }
+  for(let len=2;len<=n;len<<=1){ const a=(inv?2:-2)*Math.PI/len, wr=Math.cos(a), wi=Math.sin(a), h=len>>1;
+    for(let i=0;i<n;i+=len){ let cr=1,ci=0; for(let k=0;k<h;k++){ const p=i+k, q=p+h, xr=re[q]*cr-im[q]*ci, xi=re[q]*ci+im[q]*cr; re[q]=re[p]-xr; im[q]=im[p]-xi; re[p]+=xr; im[p]+=xi; const t=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=t; } } }
+  if(inv){ for(let i=0;i<n;i++){ re[i]/=n; im[i]/=n; } } }
+async function pvTrack(buf,rate,sr,onProg,stereo){
+  const N=sr>32000?4096:2048, Hs=N/4, B=N/2+1, nch=stereo?Math.min(2,buf.numberOfChannels):1, len=buf.length;
+  const ch=[]; for(let c=0;c<nch;c++) ch.push(buf.getChannelData(c));
+  if(nch===1&&buf.numberOfChannels>1){ const a=buf.getChannelData(0),b=buf.getChannelData(1),x=new Float32Array(len); for(let i=0;i<len;i++) x[i]=0.5*(a[i]+b[i]); ch[0]=x; }
+  const win=new Float32Array(N); for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
+  const outLen=Math.ceil(len/rate)+N, frames=Math.floor((outLen-N)/Hs)+1, out=ch.map(()=>new Float32Array(outLen)), wsum=new Float32Array(outLen);
+  const re=ch.map(()=>new Float64Array(N)), im=ch.map(()=>new Float64Array(N)), mag=new Float64Array(B), ph=new Float64Array(B), prevPh=new Float64Array(B), psi=new Float64Array(B), cph=ch.map(()=>new Float64Array(B));
+  const omega=new Float64Array(B); for(let k=0;k<B;k++) omega[k]=2*Math.PI*k/N;
+  const princ=x=>x-2*Math.PI*Math.round(x/(2*Math.PI));
+  let prevA=-1, prevE=0, first=true; const peak=new Int32Array(B);
+  for(let f=0;f<frames;f++){ const ta=Math.round(f*Hs*rate);
+    for(let c=0;c<nch;c++){ const x=ch[c], r=re[c], m=im[c]; for(let j=0;j<N;j++){ const i=ta+j; r[j]=i<len?x[i]*win[j]:0; m[j]=0; } fftIn(r,m,false); }
+    let E=0; for(let k=0;k<B;k++){ let sr2=0,si=0; for(let c=0;c<nch;c++){ sr2+=re[c][k]; si+=im[c][k]; cph[c][k]=Math.atan2(im[c][k],re[c][k]); } mag[k]=Math.hypot(sr2,si); ph[k]=Math.atan2(si,sr2); E+=mag[k]*mag[k]; }
+    const attack=first||E>prevE*2.5&&E>1e-6;   // a sudden jump in energy: an attack
+    if(attack){ for(let k=0;k<B;k++) psi[k]=ph[k]; }
+    else { const dA=ta-prevA; let np=0;
+      for(let k=0;k<B;k++){ const m0=mag[k]; if((k<2||m0>mag[k-1]&&m0>=mag[k-2])&&(k>B-3||m0>mag[k+1]&&m0>=mag[k+2])) peak[np++]=k; }
+      if(!np){ for(let k=0;k<B;k++) psi[k]+=omega[k]*Hs; }
+      else { let pi=0; const newPsi=new Float64Array(B);
+        for(let q=0;q<np;q++){ const k=peak[q], w=omega[k]+(dA>0?princ(ph[k]-prevPh[k]-omega[k]*dA)/dA:0); newPsi[k]=psi[k]+w*Hs; }
+        for(let k=0;k<B;k++){ while(pi<np-1&&Math.abs(peak[pi+1]-k)<Math.abs(peak[pi]-k)) pi++; const p=peak[pi]; if(k!==p) newPsi[k]=newPsi[p]+(ph[k]-ph[p]); }   // the bins around a peak follow it
+        psi.set(newPsi); } }
+    for(let k=0;k<B;k++) prevPh[k]=ph[k]; prevA=ta; prevE=E; first=false;
+    const o=f*Hs;
+    for(let c=0;c<nch;c++){ const r=re[c], m=im[c], cp=cph[c];
+      for(let k=0;k<B;k++){ const a=Math.hypot(r[k],m[k]), p=cp[k]+(psi[k]-ph[k]); r[k]=a*Math.cos(p); m[k]=a*Math.sin(p); if(k>0&&k<N/2){ r[N-k]=r[k]; m[N-k]=-m[k]; } }
+      m[0]=0; m[N/2]=0; fftIn(r,m,true); const y=out[c]; for(let j=0;j<N;j++) y[o+j]+=r[j]*win[j]; }
+    for(let j=0;j<N;j++) wsum[o+j]+=win[j]*win[j];
+    if(f%60===0){ onProg&&onProg(f/frames); await new Promise(r=>setTimeout(r,0)); } }
   for(let i=0;i<outLen;i++){ const w=wsum[i]; if(w>1e-3){ const g=1/w; for(let c=0;c<nch;c++) out[c][i]*=g; } }
   const ob=new AudioBuffer({numberOfChannels:nch,length:outLen,sampleRate:sr}); out.forEach((x,c)=>ob.copyToChannel(x,c)); return ob; }
 // one preparation at a time: asking again for the same speed (Play, Space, a bookmark) waits for the one already running
