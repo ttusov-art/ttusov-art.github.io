@@ -347,7 +347,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .sheet-hintrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;flex-basis:100%}
 #shapesAll{padding:5px 10px;font-size:13px;gap:6px}
 .sheet-nav{display:flex;justify-content:center;align-items:center;gap:14px;padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:var(--surface)}
-.sheet-nav button{min-width:54px;min-height:46px;justify-content:center;padding:8px 12px} #sheetPlay{min-width:72px} #sheetBm{margin-left:10px}
+.sheet-nav button{min-width:54px;min-height:46px;justify-content:center;padding:8px 12px} #sheetPlay{min-width:72px} #sheetVoice{margin-left:10px;font-weight:600} #sheetVoice[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,var(--line))} #sheetVoice[aria-pressed="false"]{opacity:.6;text-decoration:line-through}
+@media (max-width:380px){.sheet-nav{gap:8px;padding-left:8px;padding-right:8px} #sheetVoice{margin-left:4px} .sheet-nav button{min-width:48px;padding:8px}}
 table.sheet td.tap{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .sheet-acts{display:inline-flex;gap:6px;align-items:center;flex:none}
 #shapesAll[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
@@ -675,7 +676,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <span class="sheet-hintrow"><span class="small" id="sheetHint">Tap a line of your part to see the shape of its melody. Long-press to loop it.</span><span class="sheet-acts"><button id="shapesAll" type="button" aria-pressed="false" title="Show or hide the melody shape of every line"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15c3 0 3-6 6-6s3 8 6 8 3-5 6-5"/></svg><span id="shapesAllLbl">Show all shapes</span></button></span></span>
   </div>
   <div class="sheet-body"><table class="sheet" id="sheetTable"></table></div>
-  <div class="sheet-nav" id="sheetNav"><button id="sheetPrevPh" type="button" aria-label="Previous phrase" title="Previous phrase"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6l-8 6 8 6z" fill="currentColor"/><path d="M6 6v12"/></svg></button><button id="sheetPlay" type="button" class="primary" aria-label="Play" title="Play / pause (Space)"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg></button><button id="sheetNextPh" type="button" aria-label="Next phrase" title="Next phrase"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l8 6-8 6z" fill="currentColor"/><path d="M18 6v12"/></svg></button><button id="sheetBm" type="button" aria-label="Bookmark this loop or phrase" title="Bookmark the loop, or the phrase you are in"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg></button></div>
+  <div class="sheet-nav" id="sheetNav"><button id="sheetPrevPh" type="button" aria-label="Previous phrase" title="Previous phrase"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6l-8 6 8 6z" fill="currentColor"/><path d="M6 6v12"/></svg></button><button id="sheetPlay" type="button" class="primary" aria-label="Play" title="Play / pause (Space)"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg></button><button id="sheetNextPh" type="button" aria-label="Next phrase" title="Next phrase"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l8 6-8 6z" fill="currentColor"/><path d="M18 6v12"/></svg></button><button id="sheetVoice" type="button" aria-pressed="true" title="Guide voice on or off"><span>Voice</span></button><button id="sheetBm" type="button" aria-label="Bookmark this loop or phrase" title="Bookmark the loop, or the phrase you are in"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg></button></div>
 </div>
 <div class="wrap">
   <header>
@@ -1237,7 +1238,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-09 b';
+const APP_VERSION='2026-11-09 c';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -5154,8 +5155,9 @@ async function addCurrentToLib(btn){
   }catch(err){ setStatus('Could not add it to the library: '+((err&&err.message)||'storage may be full')+'.',true); }
   finally{ btn.disabled=false; btn.textContent=old; }
 }
-function setGuideMuted(m){ S.guideMuted=m; const b=$('#guideBtn'); b.setAttribute('aria-pressed',String(!m)); b.classList.toggle('guide-on',!m); b.textContent='Voice'; b.title='Guide voice: '+(m?'off':'on')+' (tap to turn '+(m?'on':'off')+')'; applyGains(); try{localStorage.setItem('pc-guide-muted',m?'1':'0')}catch(x){} }
+function setGuideMuted(m){ S.guideMuted=m; { const v=$('#sheetVoice'); if(v){ v.setAttribute('aria-pressed',String(!m)); v.setAttribute('aria-label','Guide voice '+(m?'off':'on')); } } const b=$('#guideBtn'); b.setAttribute('aria-pressed',String(!m)); b.classList.toggle('guide-on',!m); b.textContent='Voice'; b.title='Guide voice: '+(m?'off':'on')+' (tap to turn '+(m?'on':'off')+')'; applyGains(); try{localStorage.setItem('pc-guide-muted',m?'1':'0')}catch(x){} }
 $('#guideBtn').addEventListener('click',()=>{ setGuideMuted(!S.guideMuted); setStatus(S.guideMuted?'Guide voice off. Sing the part on your own.':'Guide voice on.'); });
+$('#sheetVoice').addEventListener('click',()=>$('#guideBtn').click());   // the same switch in the lyrics sheet's bottom bar
 function paintToggle(id,label,on){ const b=$('#'+id); b.setAttribute('aria-pressed',String(on)); b.classList.toggle('guide-on',on); b.textContent=label; b.title=label+': '+(on?'on':'off')+' (tap to turn '+(on?'off':'on')+')'; }
 function setBackMuted(m){ S.backMuted=m; paintToggle('backBtn','Backing',!m); applyGains(); try{localStorage.setItem('pc-back-muted',m?'1':'0')}catch(x){} }
 function toneIsOn(){ return !S.toneMuted&&+$('#volTone').value>0; }
