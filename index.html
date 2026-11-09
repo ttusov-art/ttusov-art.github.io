@@ -1238,7 +1238,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-09 f';
+const APP_VERSION='2026-11-09 g';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1490,7 +1490,7 @@ async function wsola(bufs,rate,onProg){
   }
   return outs.map(o=>{ if(!o) return null; const b=new AudioBuffer({numberOfChannels:1,length:o.length,sampleRate:sr}); b.copyToChannel(o,0); return b; });
 }
-// short loops (up to 20 s): the best version
+// short loops (up to 20 s): the best version, the phase vocoder (pvTrack) for voice and backing
 async function wsolaHQ(bufs,rate,onProg){
   bufs=await Promise.all(bufs.map(toCtxRate));
   const sr=S.ctx.sampleRate, live=bufs.filter(Boolean).length||1; let done=0;
@@ -1498,7 +1498,7 @@ async function wsolaHQ(bufs,rate,onProg){
   for(let i=0;i<bufs.length;i++){ const b=bufs[i]; if(!b){ outs.push(null); continue; }
     // memory: the voice (one voice, in the middle) stays mono; the backing keeps its stereo while the slowed song is under 6 minutes
     const stereo=i>0&&b.length/rate/sr<360;
-    const pr=p=>onProg&&onProg((done+p)/live), o=i===0?await wsolaTrack(b,rate,sr,pr,false):await pvTrack(b,rate,sr,pr,stereo); done++; outs.push(o); }
+    const pr=p=>onProg&&onProg((done+p)/live), o=await pvTrack(b,rate,sr,pr,stereo); done++; outs.push(o); }   // voice and backing both through the phase vocoder (the voice track holds several singers)
   return outs; }
 async function wsolaTrack(buf,rate,sr,onProg,stereo){
   const N=sr>32000?2048:1024, Hs=N/4, Ha=Hs*rate, D=8, tol=sr>32000?512:256, td=tol/D, Nc=(N/2)/D, R=N/8, FD=D;   // coarse match on 1/8 of the samples, then ±8 samples exact; 3/4 overlap
