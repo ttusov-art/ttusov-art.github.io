@@ -1237,7 +1237,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-09 a';
+const APP_VERSION='2026-11-09 b';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3646,7 +3646,19 @@ function renderSheetBtns(){ const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.len
   $('#sheetFold').hidden=true; }
 // the Sheet button in the lyrics bar can be folded away, so the lyrics get the whole width (remembered on this device)
 S.sheetFolded=false; try{ S.sheetFolded=localStorage.getItem('pc-sheetfold')==='1'; }catch(e){}
+// hidden columns of the lyrics sheet: each song keeps its own choice; a song opened for the first time hides the columns whose
+// names you have hidden anywhere (a shared list that only loses a name when you show that column again)
 function sheetHidden(){ try{ return JSON.parse(localStorage.getItem('pc-sheethide')||'[]'); }catch(e){ return []; } }
+const sheetColKey=n=>String(n).trim().toLowerCase().replace(/\s+/g,' ');
+function sheetSongKey(){ return S.curUid||(S.cur&&S.cur.libId!=null?'lib'+S.cur.libId:''); }
+function sheetHideMap(){ try{ return JSON.parse(localStorage.getItem('pc-sheethide-song')||'{}')||{}; }catch(e){ return {}; } }
+function sheetHideFor(cols){ const k=sheetSongKey(), per=k&&sheetHideMap()[k];
+  if(Array.isArray(per)) return cols.filter(c=>per.includes(c));
+  const g=new Set(sheetHidden().map(sheetColKey)); return cols.filter(c=>g.has(sheetColKey(c))); }
+function sheetHideToggle(n,cols){ let h=sheetHideFor(cols); const hide=!h.includes(n);
+  if(!hide) h=h.filter(x=>x!==n); else if(h.length<cols.length-1) h.push(n); else return;
+  const k=sheetSongKey(); if(k){ const m=sheetHideMap(); m[k]=h; try{ localStorage.setItem('pc-sheethide-song',JSON.stringify(m)); }catch(e){} }
+  let g=sheetHidden().filter(x=>sheetColKey(x)!==sheetColKey(n)); if(hide) g.push(n); try{ localStorage.setItem('pc-sheethide',JSON.stringify(g)); }catch(e){} }
 // which sheet column holds your timed lyric lines, and the time span of each of its lines
 // the timed lyric lines inside one sheet cell (when there are two or more), each with its own start and end
 function sheetSubLines(sp){ const L=S.lyrics.filter(l=>l.t!=null&&l.text&&l.t>=sp.a-0.05&&l.t<sp.b-0.3).sort((x,y)=>x.t-y.t); if(L.length<2) return null;
@@ -3680,10 +3692,10 @@ function openSheet(){
   const sh=S.sheet; if(!sh) return; const SM=sheetMap(sh), mine=SM.mine, mineSpans=SM.mineSpans, clean=SM.clean, usable=SM.usable;
   let li=0;
   $('#sheetTitle').textContent=sh.title||($('#songName').textContent||'Lyrics');
-  let hide=sheetHidden().filter(n=>sh.cols.includes(n)); if(hide.length>=sh.cols.length) hide=[];
+  let hide=sheetHideFor(sh.cols); if(hide.length>=sh.cols.length) hide=[];
   const bar=$('#sheetParts'); bar.innerHTML='';
   sh.cols.forEach((n,k)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=n+(k===mine?' (you)':''); b.setAttribute('aria-pressed',String(!hide.includes(n)));
-    b.addEventListener('click',()=>{ let h=sheetHidden().filter(x=>sh.cols.includes(x)); if(h.includes(n)) h=h.filter(x=>x!==n); else if(h.length<sh.cols.length-1) h.push(n); try{ localStorage.setItem('pc-sheethide',JSON.stringify(h)); }catch(e){} openSheet(); });
+    b.addEventListener('click',()=>{ sheetHideToggle(n,sh.cols); openSheet(); });
     bar.appendChild(b); });
   const show=sh.cols.map(n=>!hide.includes(n)), t=$('#sheetTable'); t.innerHTML='';
   const anyLab=sh.rows.some(r=>r.label);
