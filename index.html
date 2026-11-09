@@ -698,7 +698,7 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
     <canvas id="ovw" aria-label="Whole song overview: tap or drag to jump"></canvas>
     <div class="rep-offer" id="repOffer" hidden role="status"></div>
     <div class="prac-bar" id="checkBar" hidden role="status"><span class="small" id="checkInfo"></span><div class="row"><button id="checkFinish" type="button" class="primary">Finish now</button><button id="checkCancel" type="button">Cancel</button></div></div>
-    <div class="prac-bar" id="pracBar" hidden role="status"><span class="small" id="pracInfo"></span><div class="row"><button id="pracPrev" type="button" aria-label="Previous bookmark">⏮</button><button id="pracNext" type="button">Next ⏭</button><button id="pracStop" type="button">Stop practice</button></div></div>
+    <div class="prac-bar" id="pracBar" hidden role="status"><span class="small" id="pracInfo"></span><div class="row"><button id="pracPrev" type="button" aria-label="Previous bookmark">⏮</button><button id="pracNext" type="button">Next ⏭</button><button id="pracStop" type="button">Stop practice</button></div><div class="row prac-save" id="pracSave" hidden><span class="small" id="pracSaveT"></span><button id="pracSaveYes" type="button" class="primary">Save to bookmark</button><button id="pracSaveNo" type="button">Keep as it was</button></div></div>
     <div class="sug-bar" id="sugBar" hidden>
       <span class="small" id="sgInfo"></span>
       <div class="row">
@@ -1237,7 +1237,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-08 n';
+const APP_VERSION='2026-11-09 a';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1601,7 +1601,7 @@ async function playNextSong(manual,dir){ dir=dir||1;
   setStatus((was?'Now playing: ':'Next song: ')+list[k].name+' ('+(k+1)+' of '+list.length+' in '+part+').');
 }
 function updateLoopUI(){
-  sheetLoopMark();
+  sheetLoopMark(); pracSaveOffer();
   { const L=S.loop; if(L.a!=null&&L.b!=null&&L.b-L.a>=0.5&&!L.on){ L.on=true; $('#loopOn').checked=true; } }
   paintSongLoop();
   const L=S.loop, ready=L.a!=null&&L.b!=null&&L.b-L.a>=0.5;
@@ -6219,12 +6219,22 @@ function pracInfo(msg){ const P=S.prac; if(!P) return; const it=P.items[P.i]; if
   const rest=P.items.slice(P.i+1), left=prItemSec(it.bm,Math.max(0,it.rep-P.k))+prTotal(rest,P.gap)+(rest.length?P.gap||0:0);
   $('#pracInfo').innerHTML=msg?esc(msg):'<b>Practising '+(P.i+1)+' of '+P.items.length+'</b>: '+esc(it.s.name)+' · ★ '+esc(it.bm.name)+' · repeat '+Math.min(P.k+1,it.rep)+' of '+it.rep+' · about '+fmtDur(left)+' left';
   $('#pracPrev').disabled=P.i===0; $('#pracNext').textContent=P.i===P.items.length-1?'Finish ⏭':'Next ⏭'; }
-function pracStop(quiet){ const P=S.prac; if(!P) return; S.prac=null; clearTimeout(P.gapT); if(S.playing) stop(); $('#pracBar').hidden=true;
+function pracStop(quiet){ const P=S.prac; if(!P) return; S.prac=null; clearTimeout(P.gapT); if(S.playing) stop(); $('#pracBar').hidden=true; $('#pracSave').hidden=true;
   if(P.listId&&P.i>=P.items.length-1&&P.k>=P.items[P.items.length-1].rep-1){ try{ localStorage.removeItem('pc-prac-progress'); }catch(e){} }   // finished: nothing to continue
   if(!quiet) setStatus(P.i>=P.items.length-1&&P.k>=P.items[P.items.length-1].rep-1?'Practice done: '+P.items.length+' bookmark'+(P.items.length>1?'s':'')+' in '+fmtDur((Date.now()-P.t0)/1000)+'. Well sung!':'Practice stopped.'); }
 $('#pracNext').addEventListener('click',()=>{ const P=S.prac; if(!P) return; clearTimeout(P.gapT); if(P.i>=P.items.length-1){ P.k=P.items[P.i].rep; pracStop(false); } else pracGo(P.i+1); });
 $('#pracPrev').addEventListener('click',()=>{ const P=S.prac; if(P&&P.i>0){ clearTimeout(P.gapT); pracGo(P.i-1); } });
 $('#pracStop').addEventListener('click',()=>pracStop(false));
+// in a practice session: when you stretch or move the loop, offer to keep the new loop in the bookmark for next time
+function pracSaveOffer(){ const P=S.prac, box=$('#pracSave'); if(!box) return; const it=P&&P.items[P.i], L=S.loop;
+  const changed=it&&!P.busy&&L.a!=null&&L.b!=null&&(Math.abs(L.a-it.bm.a)>0.05||Math.abs(L.b-Math.min(S.dur,prEnd(it.bm)))>0.05), key=changed?L.a.toFixed(2)+'-'+L.b.toFixed(2):'';
+  box.hidden=!changed||P.saveNo===key; if(box.hidden) return;
+  $('#pracSaveT').textContent='Loop changed to '+fmtT(L.a)+'–'+fmtT(L.b)+' (was '+fmtT(it.bm.a)+'–'+fmtT(prEnd(it.bm))+'). Keep it for next time?';
+  $('#pracSaveYes').textContent='Save to ★ '+(it.bm.name.length>22?it.bm.name.slice(0,21)+'…':it.bm.name); }
+$('#pracSaveYes').addEventListener('click',()=>{ const P=S.prac, it=P&&P.items[P.i]; if(!it) return; const a=Math.round(S.loop.a*100)/100, b=Math.round(S.loop.b*100)/100;
+  const all=bmGet(), x=all.find(q=>q.id===it.bm.id); if(x){ x.a=a; x.b=b; delete x.pe; bmSave(all); }
+  it.bm.a=a; it.bm.b=b; delete it.bm.pe; pracSaveOffer(); pracInfo(); setStatus('★ '+it.bm.name+' now loops '+fmtT(a)+'–'+fmtT(b)+'.'); });
+$('#pracSaveNo').addEventListener('click',()=>{ const P=S.prac; if(!P) return; P.saveNo=S.loop.a.toFixed(2)+'-'+S.loop.b.toFixed(2); pracSaveOffer(); });
 // the bookmark button: filled when the open song has bookmarks, with their number
 function paintBmBtn(){ const n=bmGet().filter(bmMine).length, b=$('#secBtn'), c=$('#bmCount'); if(!b) return; b.classList.toggle('has-bm',n>0); c.hidden=!n; c.textContent=n; }
 // speed: a quick slider in the graph's corner, 50–100 %, applied when you let go (the slowed sound takes a moment to prepare)
