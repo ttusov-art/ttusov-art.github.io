@@ -18,7 +18,6 @@ Useful things to try:
 - **Key** opens a playable piano keyboard (several fingers at once, with a sustain pedal).
 - **Check-up**: sing a song (or a section) once; afterwards you get the sections to work on (and the hardest line in each), in words, with Listen and Loop, and one tap saves them as a practice list. Your lyrics sheet is coloured by the result.
 - **Warm-up**: a short session of scales, arpeggios and sirens in your part's range.
-- **Choir**: when the moderator has added them, the other parts can sing along (sopranos, altos…), each with its own volume (the ▾ next to Choir). Turn Voice off and sing your part inside the whole choir. Choose in Settings whether to download them.
 - **Lyrics** follow along, with a countdown before each entry after a long rest.
 
 **Found a mistake?** Tap the pencil ✎. You can fix a wrong note (**Edit target line**) or the timing of a lyric line (**Time lyrics**) and send it as a suggestion. If you can hear that something is off but don't know what, tap **⚑ Sounds off** to mark the spot for someone else to check. Suggestions are anonymous, and editing and suggesting is very welcome: it makes the songs better for everyone.
@@ -32,8 +31,6 @@ Updates: when the moderator publishes new or corrected songs, tap **Update**. Wh
 The moderator prepares the songs and shares them. The admin tools are unlocked with the review key from the inbox script (see below).
 
 **Adding a song.** Choose a part recording (for example an MP3). The app separates the voice from the backing on your device, finds the pitch line and keeps everything in the song library. A set-up guide then walks through the steps: lyrics (also from a PDF), smoothing the pitch line, aligning, tempo and beat 1, timing the lyrics and cleaning up.
-
-**Choir parts.** With the same song in other parts in your library, open a song and use **Choir parts → Add choir parts…** (next to the backing track). Each part is lined up with the song automatically (by the backing, which is the same in every part) and goes into the share file as a small MP3.
 
 **Sharing.** Make the share file for a part (a `.zip`), upload it to Dropbox and share the Dropbox link with the choir. Upload the new file under the same name to replace the old one, so the link stays the same. The app reminds you which songs have changes that are not published yet, and **your own edits** shows them change by change, with the option to put single changes back.
 
