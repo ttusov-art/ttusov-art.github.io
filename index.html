@@ -238,6 +238,11 @@ html:has(.key-view:not([hidden])),html:has(.sheet-view:not([hidden])),html:has(.
 .play-btn{padding:8px 20px}
 .tempo-grp{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
 .guide-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.choir-grp{position:static;display:inline-flex;gap:0} .row.snd{position:relative} .snd-btns:has(#choirGrp:not([hidden])){flex-wrap:wrap;row-gap:6px}   /* with the Choir button a narrow phone may need a second row */ .choir-grp[hidden]{display:none} .choir-grp #choirBtn{border-top-right-radius:0;border-bottom-right-radius:0} .choir-grp .choir-mix{border-top-left-radius:0;border-bottom-left-radius:0;border-left:0;padding-left:8px;padding-right:8px;min-width:0}
+.choir-pop{position:absolute;bottom:calc(100% + 6px);left:0;z-index:20;width:min(300px,100%);box-sizing:border-box;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;display:flex;flex-direction:column;gap:8px;text-align:left}
+.choir-pop[hidden]{display:none} .choir-pop .crow{display:grid;grid-template-columns:minmax(64px,auto) 1fr 44px;gap:8px;align-items:center} .choir-pop input[type=range]{width:100%;accent-color:var(--accent)} .choir-pop .val{font-variant-numeric:tabular-nums;text-align:right}
+.choir-adm{display:flex;flex-direction:column;gap:4px} .choir-adm .crow{display:flex;align-items:center;gap:8px} .choir-adm .crow span{flex:1}
+.pick-choir{margin-top:10px;display:flex;gap:8px;align-items:flex-start}
 .ed-toggle{margin-left:auto;flex:none}
 .row.snd{flex-wrap:nowrap}
 #pitchTools .beat-row input[type=number]{flex:none;width:5.2em}
@@ -733,6 +738,8 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         <span class="snd-btns">
         <button id="guideBtn" type="button" aria-pressed="true" class="guide-on" title="Guide voice">Voice</button>
         <button id="backBtn" type="button" aria-pressed="true" class="guide-on">Backing</button>
+        <span class="choir-grp" id="choirGrp" hidden><button id="choirBtn" type="button" aria-pressed="true" class="guide-on" title="The other choir parts singing">Choir</button><button id="choirMix" type="button" class="choir-mix" aria-haspopup="dialog" aria-expanded="false" aria-controls="choirPop" aria-label="Choir parts: volume of each part" title="Volume of each choir part">▾</button>
+          <div class="choir-pop" id="choirPop" role="dialog" aria-label="Choir parts" hidden><b>Choir parts</b><div id="choirSliders"></div><span class="small">Your own part can still be heard faintly: every part recording has the whole choir quietly underneath.</span></div></span>
         <button id="toneBtn" type="button" aria-pressed="false" title="Guide tone">Tone</button>
         <button id="metBtn" type="button" aria-pressed="false" title="Metronome click on every beat">Click</button>
         </span>
@@ -860,6 +867,13 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
         <button id="backSave" type="button">Save</button>
         <button id="backDel" type="button">Delete</button>
       </div>
+    </div>
+    <div class="field" id="choirField" hidden>
+      <span class="lbl">Choir parts (optional)</span>
+      <span class="small">Add the other parts singing this song, from your library. They are lined up with this song and go into the share file; members choose whether to download them.</span>
+      <div id="choirAdmList" class="choir-adm"></div>
+      <div class="row"><button id="choirAdd" type="button">Add choir parts…</button></div>
+      <span class="small" id="choirText"></span>
     </div>
     </div>
   </details>
@@ -1037,6 +1051,10 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
       <div class="field">
         <label class="check" for="restoreBacksOn"><input id="restoreBacksOn" type="checkbox" checked>Restore deleted songs and backings with updates</label>
         <details class="more-info"><summary>More info</summary><span class="small">On: when the moderator's update arrives, songs and backing tracks you deleted come back. Off: what you deleted stays deleted (saves space on this device).</span></details>
+      </div>
+      <div class="field">
+        <label class="check" for="choirDlOn"><input id="choirDlOn" type="checkbox">Download the other choir parts with songs</label>
+        <details class="more-info"><summary>More info</summary><span class="small">When the moderator has added them, a song can come with the other parts singing (sopranos, altos…). Then the <b>Choir</b> button lets you sing your part inside the whole choir, each part with its own volume. About 2 MB more per part and song. Off: they are not downloaded, and the ones on this phone are removed.</span></details>
       </div>
       </div>
       <div class="set-group"><h3 class="set-h">Privacy</h3>
@@ -1238,7 +1256,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-09 g';
+const APP_VERSION='2026-11-10 a';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -1255,8 +1273,8 @@ function ensureCtx(){
     S.limiter.threshold.value=-8; S.limiter.knee.value=6; S.limiter.ratio.value=16; S.limiter.attack.value=0.003; S.limiter.release.value=0.2;
     S.master=c.createGain(); S.master.gain.value=S.muteAll?0:1.3;
     S.limiter.connect(S.master).connect(c.destination);
-    S.gGuide=c.createGain(); S.gBack=c.createGain(); S.gTone=c.createGain(); S.gMet=c.createGain();
-    S.gGuide.connect(S.limiter); S.gBack.connect(S.limiter); S.gTone.connect(S.limiter); S.gMet.connect(S.limiter);
+    S.gGuide=c.createGain(); S.gBack=c.createGain(); S.gTone=c.createGain(); S.gMet=c.createGain(); S.gChoir=c.createGain(); S.gChoirMix=c.createGain();
+    S.gGuide.connect(S.limiter); S.gBack.connect(S.limiter); S.gTone.connect(S.limiter); S.gMet.connect(S.limiter); S.gChoir.connect(S.limiter); S.gChoirMix.connect(S.gChoir);
     applyGains();
   }
   return S.ctx;
@@ -1265,6 +1283,7 @@ function applyGains(){
   if(!S.gGuide) return;
   S.gGuide.gain.value=S.guideMuted?0:+$('#volGuide').value*(S.normGuide||1);
   S.gBack.gain.value=S.backMuted?0:+$('#volBack').value*(S.normBack||1);
+  if(S.gChoir) S.gChoir.gain.value=S.choirMuted?0:+$('#volBack').value*(S.normBack||1);   // the choir follows the backing volume; each part has its own volume on top
   S.gTone.gain.value=S.toneMuted?0:+$('#volTone').value*0.35;
   if(S.gMet) S.gMet.gain.value=+$('#volMet').value*0.9;
 }
@@ -1363,7 +1382,7 @@ async function loadGuide(file){
       const pl=await pitchLineOf(buf,p=>setStatus('Finding the pitch line… '+Math.round(p*100)+'%'),rangeKey(S.part));
       setTarget(pl.tt,pl.mm);
     }
-    normalize(); S.stretch=null; S.stretchHQ=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    normalize(); S.stretch=null; S.stretchHQ=null; S.beat=null; S.beatTok++; S.cur={libId:null,fromFile:true}; S.curPart=S.part; choirUnload(); S.choirList=[]; setTimeout(paintChoir,0); RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     $('#songName').textContent=file.name.replace(/\.(ntpsession|mp3|m4a|wav|ogg)$/i,'').replace(/_/g,' ');
     $('#guideName').textContent=file.name;
     updateDur(); resetRun(true); S.pos=0; S.loop.a=S.loop.b=null; S.loop.on=false; S.passes=[]; S.tPasses=[]; S.ghost=[]; updateLoopUI(); draw(); updateTime();
@@ -1448,6 +1467,11 @@ function startSources(pos){
     if(!orig||pos>=orig.duration) continue;
     const buf=st?str:orig; if(!buf) continue;
     const s=ctx.createBufferSource(); s.buffer=buf; s.connect(g); s.start(at,st?(pos-off0)/S.rate:pos); S.srcs.push(s);
+  }
+  // the choir parts: at full speed each part on its own (its own volume, live); slowed, the mix made for this speed
+  if(S.choir.length){
+    if(st&&st.choir){ const o=(pos-off0)/S.rate; if(o<st.choir.duration){ const s=ctx.createBufferSource(); s.buffer=st.choir; s.connect(S.gChoirMix); s.start(at,Math.max(0,o)); S.srcs.push(s); } }
+    else if(!st) S.choir.forEach(c=>{ const o=pos+c.d; if(o>=c.buf.duration) return; const s=ctx.createBufferSource(); s.buffer=c.buf; s.connect(c.g); if(o>=0) s.start(at,o); else s.start(at-o,0); S.srcs.push(s); });
   }
   S.startAt=at; S.pos0=pos;
 }
@@ -1567,11 +1591,11 @@ async function pvTrack(buf,rate,sr,onProg,stereo){
 // a loop of up to 20 s is slowed on its own with the best version (quick, it is short); anything else uses the whole song, quick version
 const HQ_MAX=20;
 function hqRange(){ if(!loopActive()) return null; const a=loopStart(), b=S.loop.b; if(b-a>HQ_MAX) return null; return {s0:Math.max(0,a-0.3),s1:Math.min(S.dur,b+0.6)}; }
-function hqOk(R){ const h=S.stretchHQ; return !!(h&&R&&h.rate===S.rate&&h.s0<=R.s0+0.01&&h.s1>=R.s1-0.01); }
-function tempoReady(whole){ if(S.rate===1) return true; const R=whole?null:hqRange(); return R?hqOk(R):!!(S.stretch&&S.stretch.rate===S.rate); }
+function hqOk(R){ const h=S.stretchHQ; return !!(h&&R&&h.rate===S.rate&&h.s0<=R.s0+0.01&&h.s1>=R.s1-0.01&&h.ckey===choirKey()); }
+function tempoReady(whole){ if(S.rate===1) return true; const R=whole?null:hqRange(); return R?hqOk(R):!!(S.stretch&&S.stretch.rate===S.rate&&S.stretch.ckey===choirKey()); }
 function prepareTempo(o){ const whole=!!(o&&o.whole);
   if(tempoReady(whole)) return Promise.resolve(true);
-  const R=whole?null:hqRange(), key=S.rate+(R?':'+R.s0.toFixed(2)+'-'+R.s1.toFixed(2):':whole');
+  const R=whole?null:hqRange(), key=S.rate+(R?':'+R.s0.toFixed(2)+'-'+R.s1.toFixed(2):':whole')+'|'+choirKey();
   if(S.prepP&&S.prepP.key===key) return S.prepP.p;
   const r=S.rate, p=(R?prepareHQ(R):prepareTempo0()).finally(()=>{ if(S.prepP&&S.prepP.p===p) S.prepP=null; });
   S.prepP={rate:r,key,p}; return p; }
@@ -1581,9 +1605,9 @@ async function prepareHQ(R){
   if(!S.guideBuf&&!S.backBuf) return false;
   const r=S.rate;
   try{ tempoLoading(r,0);
-    const [guide,back]=await wsolaHQ([sliceBuf(S.guideBuf,R.s0,R.s1),sliceBuf(S.backBuf,R.s0,R.s1)],r,p=>{ if(S.rate===r) tempoLoading(r,p); });
+    const ck=choirKey(), [guide,back,choir]=await wsolaHQ([sliceBuf(S.guideBuf,R.s0,R.s1),sliceBuf(S.backBuf,R.s0,R.s1),choirMixBuf(R.s0,R.s1)],r,p=>{ if(S.rate===r) tempoLoading(r,p); });
     if(S.rate!==r) return false;
-    S.stretchHQ={rate:r,s0:R.s0,s1:R.s1,guide,back};
+    S.stretchHQ={rate:r,s0:R.s0,s1:R.s1,guide,back,choir,ckey:ck};
     setStatus('Loop at '+Math.round(r*100)+'% ready, in the best quality. The pitch stays the same.'); return true; }
   catch(err){ setStatus('Could not slow the loop down on this device: '+((err&&err.message)||'out of memory')+'.',true); return false; }
   finally{ if(!S.prepP||S.prepP.rate===r||S.rate===1) tempoLoading(null); } }
@@ -1598,9 +1622,9 @@ async function prepareTempo0(){
   S.stretch=null;
   try{
     tempoLoading(r,0);
-    const [guide,back]=await wsola([S.guideBuf,S.backBuf],r,p=>{ setStatus('Preparing '+Math.round(r*100)+'% speed… '+Math.round(p*100)+'%'); if(S.rate===r) tempoLoading(r,p); });
+    const ck=choirKey(), [guide,back,choir]=await wsola([S.guideBuf,S.backBuf,choirMixBuf(0,S.dur)],r,p=>{ setStatus('Preparing '+Math.round(r*100)+'% speed… '+Math.round(p*100)+'%'); if(S.rate===r) tempoLoading(r,p); });
     if(S.rate!==r) return false;
-    S.stretch={rate:r,guide,back};
+    S.stretch={rate:r,guide,back,choir,ckey:ck};
     setStatus('Tempo '+(S.beat&&S.beat.bpm>0?Math.round(S.beat.bpm*r)+' BPM ('+Math.round(r*100)+'% of the song)':Math.round(r*100)+'%')+' ready. The pitch stays the same.');
     return true;
   }catch(err){ setStatus('Could not change the tempo on this device: '+((err&&err.message)||'out of memory')+'.',true); S.rate=1; sel.value='1'; return false; }
@@ -2031,10 +2055,16 @@ function forgetSong(s){ if(s&&s.uid&&!isOwnerPart(S.part)){ const l=delSongs(); 
 function skipGet(){ try{ return JSON.parse(localStorage.getItem('pc-skip-songs')||'{}')||{}; }catch(e){ return {}; } }
 function skipSave(o){ try{ localStorage.setItem('pc-skip-songs',JSON.stringify(o)); }catch(e){} }
 const isSkipped=uid=>!!skipGet()[uid];
-function songBytes(z,m,cur){ let n=0; const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) n+=z.size(m.files.pcm)||0;
-  for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) n+=z.size(f)||0; for(const b of (m.backs||[])) n+=z.size(b.file)||0; return n; }
+function songBytes(z,m,cur,withChoir){ let n=0; const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) n+=z.size(m.files.pcm)||0;
+  for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) n+=z.size(f)||0; for(const b of (m.backs||[])) n+=z.size(b.file)||0;
+  if(withChoir==null?choirDl():withChoir) for(const c of (m.choir||[])) n+=z.size(c.file)||0; return n; }
+const choirBytes=(z,m)=>(m.choir||[]).reduce((a,c)=>a+(z.size(c.file)||0),0);
 const skipDeleted=(m,man)=>!restoreBacks()&&!!man.part&&!isOwnerPart(man.part)&&delSongs().includes(m.uid);
 function restoreBacks(){ try{ return localStorage.getItem('pc-restore-backs')!=='0'; }catch(e){ return true; } }
+// choir parts: the other parts singing the same song, added by the moderator. Members choose whether to download them.
+function choirDl(){ try{ return localStorage.getItem('pc-choir-dl')==='1'; }catch(e){ return false; } }
+const choirOf=s=>s&&Array.isArray(s.choir)?s.choir:[];
+const wantsChoir=(c,m,part)=>!!c&&!!m&&choirDl()&&!isOwnerPart(part)&&(m.choir||[]).length>0&&!(m.choir||[]).every(x=>choirOf(c).some(o=>o.part===x.part&&o.blob&&o.blob.size===x.size));
 const wasDeleted=(c,b)=>!!c&&(c.delBacks||[]).some(d=>d.name===b.name&&!!d.sep===!!b.sep&&(d.size==null||b.size==null||d.size===b.size));
 // with restoring on, a song is refreshed when the share has a backing this device doesn't (also ones deleted before deletions were remembered); never on the moderator's own device
 const sameBack=(o,b)=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||!o.blob||o.blob.size===b.size);
@@ -2054,6 +2084,7 @@ async function backupLibrary(fixedName,btn0,txt0){
       if(s.contourOrig){ entries.push({name:dir+'contour-original.f32',data:f32buf(s.contourOrig)}); m.files.contourOrig=dir+'contour-original.f32'; }
       if(s.tt){ entries.push({name:dir+'times.f32',data:f32buf(s.tt)}); m.files.tt=dir+'times.f32'; }
       m.backs=backsOf(s).map((b,i)=>{ const f=dir+'backing'+i+'.'+blobExt(b.blob,b.name); entries.push({name:f,data:b.blob}); return {name:b.name,sep:!!b.sep,type:b.blob.type||'',size:b.blob.size,file:f}; });
+      m.choir=choirOf(s).filter(c=>c.blob).map((c,i)=>{ const f=dir+'choir'+i+'.mp3'; entries.push({name:f,data:c.blob}); return {part:c.part,uid:c.uid||null,d:c.d||0,type:c.blob.type||'audio/mpeg',size:c.blob.size,file:f}; });
       man.songs.push(m);
       if(sharePart){ if(s.base||s.sentHash||s.sent){ delete s.base; delete s.sentHash; delete s.sent; }   // you make the share file: these songs are yours
         if(s.contour) s.pub={at:man.created,contour:Float32Array.from(toF32(s.contour)),lyrics:(s.lyrics||[]).map(l=>({t:l.t,text:l.text}))};   // what the choir gets: "your own edits" are compared with it
@@ -2074,7 +2105,8 @@ async function backupLibrary(fixedName,btn0,txt0){
 }
 function neededBytes(z,man,byUid,want){
   let need=0; want=want||(u=>!isSkipped(u));
-  for(const m of man.songs){ const cur=byUid[m.uid]; if(!cur&&(skipDeleted(m,man)||!want(m.uid))) continue; if(cur&&!wantsBacksBack(cur,m)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
+  for(const m of man.songs){ const cur=byUid[m.uid]; if(!cur&&(skipDeleted(m,man)||!want(m.uid))) continue; if(cur&&!wantsBacksBack(cur,m)&&!wantsChoir(cur,m,man.part)&&(memberBase(cur,man.part)?cur.base.updated:(cur.updated||cur.created))>=(m.updated||m.created)) continue;
+    if((choirDl()||isOwnerPart(man.part))&&m.choir) for(const c of m.choir) if(!(cur&&choirOf(cur).some(o=>o.part===c.part&&o.blob&&o.blob.size===c.size))) need+=z.size(c.file)||0;
     const samePcm=cur&&cur.pcm&&cur.sr===m.sr&&Math.abs((cur.dur||0)-(m.dur||0))<0.01; if(!samePcm) need+=z.size(m.files.pcm);
     for(const f of [m.files.contour,m.files.contourOrig,m.files.tt]) if(f) need+=z.size(f);
     const old=cur?backsOf(cur):[]; for(const b of (m.backs||[])) if(!(!restoreBacks()&&wasDeleted(cur,b))&&!old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size))) need+=z.size(b.file); }
@@ -2109,7 +2141,7 @@ async function restoreLibrary(file,out,askBig,force,opts){   // force: every son
       const cur=byUid[m.uid]?await libGet(byUid[m.uid].id):undefined;
       if(!cur&&shared&&skipDeleted(m,man)) continue;   // you deleted it and restoring is off
       if(!cur&&shared&&!force&&(only?!only.has(m.uid):isSkipped(m.uid))) continue;   // not chosen for this phone
-      if(cur&&!force&&!wantsBacksBack(cur,m)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
+      if(cur&&!force&&!wantsBacksBack(cur,m)&&!wantsChoir(cur,m,m.part||man.part)&&verOf(cur)>=(m.updated||m.created)){ skipped++;
         if(shared&&!cur.base){ // shared before this version: remember the shared version now (from the file if you edited it since)
           const same=(cur.updated||cur.created)===(m.updated||m.created), c0=same?toF32(cur.contour):(m.files.contour?new Float32Array(await (await z.get(m.files.contour)).arrayBuffer()):null);
           if(c0){ cur.base={updated:m.updated||m.created,contour:Float32Array.from(c0),lyrics:(same?cur.lyrics:m.lyrics||[]).map(l=>({t:l.t,text:l.text}))}; await libPutRaw(cur); } }
@@ -2125,6 +2157,9 @@ async function restoreLibrary(file,out,askBig,force,opts){   // force: every son
       rec.backs=[]; const old=cur?backsOf(cur):[];
       for(const b of (m.backs||[])){ if(!force&&!restoreBacks()&&wasDeleted(cur,b)) continue; const keep=old.find(o=>o.name===b.name&&!!o.sep===!!b.sep&&(b.size==null||o.blob.size===b.size)); if(keep){ rec.backs.push({name:b.name,sep:!!b.sep,blob:keep.blob}); continue; } const bl=await z.get(b.file); if(bl) rec.backs.push({name:b.name,sep:!!b.sep,blob:new Blob([await bl.arrayBuffer()],{type:b.type||'audio/mpeg'})}); }
       rec.backSel=rec.backs.length?Math.max(0,Math.min(rec.backs.length-1,m.backSel||0)):-1;
+      if(m.choir&&m.choir.length&&(!shared||force||choirDl())){ rec.choir=[]; const oldC=cur?choirOf(cur):[];
+        for(const c of m.choir){ const keep=oldC.find(o=>o.part===c.part&&o.blob&&o.blob.size===c.size); if(keep){ rec.choir.push({part:c.part,uid:c.uid||null,d:c.d||0,blob:keep.blob}); continue; }
+          const bl=await z.get(c.file); if(bl) rec.choir.push({part:c.part,uid:c.uid||null,d:c.d||0,blob:new Blob([await bl.arrayBuffer()],{type:c.type||'audio/mpeg'})}); } }
       if(cur&&cur.delBacks&&!restoreBacks()&&!force) rec.delBacks=cur.delBacks;   // keep remembering what you deleted
       if(cur) rec.id=cur.id;
       if(shared&&rec.contour) rec.base={updated:rec.updated,contour:Float32Array.from(rec.contour),lyrics:rec.lyrics.map(l=>({t:l.t,text:l.text}))};   // the shared version: suggestions are made against it
@@ -2151,17 +2186,20 @@ async function restoreLibrary(file,out,askBig,force,opts){   // force: every son
 }
 // choose songs from a share link (all ticked); returns the chosen uids, or null when cancelled
 async function pickSongs(fresh,z,man,first){
-  const rows=fresh.map((m,i)=>'<label class="pick-song"><input type="checkbox" checked data-i="'+i+'"><span><b>'+esc(m.name)+'</b><span class="small">'+fmtT(m.dur||0)+' · '+fmtMB(songBytes(z,m,null))+'</span></span></label>').join('');
-  const part=man.part||'this part';
+  const rows=fresh.map((m,i)=>'<label class="pick-song"><input type="checkbox" checked data-i="'+i+'"><span><b>'+esc(m.name)+'</b><span class="small">'+fmtT(m.dur||0)+' · '+fmtMB(songBytes(z,m,null,false))+((m.choir||[]).length?' · choir parts: '+esc(m.choir.map(c=>c.part).join(', '))+' (+'+fmtMB(choirBytes(z,m))+')':'')+'</span></span></label>').join('');
+  const part=man.part||'this part', anyChoir=fresh.some(m=>(m.choir||[]).length);
+  const choirRow=anyChoir?'<label class="check pick-choir"><input type="checkbox" id="pickChoir"'+(choirDl()?' checked':'')+'><span>Include the other choir parts <span class="small">(sing inside the whole choir; you can change this later in Settings)</span></span></label>':'';
   const r=await dlg({title:first?'Choose your songs':'New songs in '+part,
     html:'<p class="kv-sub">'+(first?'Download only the songs you need now; this keeps the app small. ':'The moderator added '+(fresh.length>1?fresh.length+' songs':'a song')+'. ')+'Songs you leave out stay available under <b>Not on this phone</b> in the Song library.</p>'+
-      '<div class="row pick-all"><button type="button" class="link-btn" data-all="1">Select all</button><button type="button" class="link-btn" data-all="0">Select none</button></div><div class="pick-list">'+rows+'</div>',
+      '<div class="row pick-all"><button type="button" class="link-btn" data-all="1">Select all</button><button type="button" class="link-btn" data-all="0">Select none</button></div><div class="pick-list">'+rows+'</div>'+choirRow,
     buttons:[{label:'Download',value:'ok',primary:true},{label:'Cancel',value:null}],
-    onOpen:(b)=>{ const btn=$('#dlgBtns button.primary'), boxes=[...b.querySelectorAll('input[type=checkbox]')];
-      const upd=()=>{ const sel=boxes.filter(x=>x.checked), mb=sel.reduce((a,x)=>a+songBytes(z,fresh[+x.dataset.i],null),0); btn.textContent=sel.length?'Download '+sel.length+' song'+(sel.length>1?'s':'')+' ('+fmtMB(mb)+')':'Continue without them'; };
+    onOpen:(b)=>{ const btn=$('#dlgBtns button.primary'), boxes=[...b.querySelectorAll('.pick-list input[type=checkbox]')];
+      const ch=b.querySelector('#pickChoir'); if(ch) ch.addEventListener('change',()=>upd());
+      const upd=()=>{ const wc=!!(ch&&ch.checked), sel=boxes.filter(x=>x.checked), mb=sel.reduce((a,x)=>a+songBytes(z,fresh[+x.dataset.i],null,wc),0); btn.textContent=sel.length?'Download '+sel.length+' song'+(sel.length>1?'s':'')+' ('+fmtMB(mb)+')':'Continue without them'; };
       boxes.forEach(x=>x.addEventListener('change',upd)); b.querySelectorAll('[data-all]').forEach(x=>x.addEventListener('click',()=>{ boxes.forEach(c=>c.checked=x.dataset.all==='1'); upd(); })); upd(); btn.focus({preventScroll:true}); }});
   if(r.value!=='ok') return null;
-  return [...r.body.querySelectorAll('input[type=checkbox]')].filter(x=>x.checked).map(x=>fresh[+x.dataset.i].uid); }
+  { const ch=r.body.querySelector('#pickChoir'); if(ch){ try{ localStorage.setItem('pc-choir-dl',ch.checked?'1':'0'); }catch(e){} const so=$('#choirDlOn'); if(so) so.checked=ch.checked; } }
+  return [...r.body.querySelectorAll('.pick-list input[type=checkbox]')].filter(x=>x.checked).map(x=>fresh[+x.dataset.i].uid); }
 function paintSkipList(){ const box=$('#skipList'); if(!box) return; const sk=skipGet(), mine=Object.entries(sk).filter(([u,x])=>x.part===S.part);
   box.hidden=!mine.length; if(!mine.length){ box.innerHTML=''; return; }
   box.innerHTML='<b class="small skip-head">Not on this phone ('+mine.length+')</b>';
@@ -2276,8 +2314,9 @@ async function openLibSongInner(id,auto){
     S.guideBuf=buf; S.backBuf=null; S.curBackBlob=null; $('#backName').textContent='None loaded.'; $('#backClear').hidden=true;
     S.curBacks=backsOf(s).slice(); S.curBackSel=S.curBacks.length?Math.max(0,Math.min(S.curBacks.length-1,s.backSel==null?0:s.backSel)):-1;
     if(S.curBackSel>=0){ const bk=S.curBacks[S.curBackSel]; try{ setStatus('Opening the backing track…'); S.backBuf=await decode(await bk.blob.arrayBuffer()); S.curBackBlob=bk.blob; $('#backName').textContent=bk.name+' (from library)'; $('#backClear').hidden=false; }catch(e){ S.backBuf=null; } }
+    await choirLoad(s);
     S.cur={libId:id,fromFile:false}; S.curUid=s.uid||''; setTimeout(paintBmBtn,0); S.curPart=partOf(s); RT.cm=null; S.sheet=s.sheet||null; S.beat=s.beat?{...s.beat}:null; S.pendingKey=s.musicKey?{...s.musicKey}:null; S.beatTok++; renderBackPick(); $('#addLib').hidden=true; S.lyrics=Array.isArray(s.lyrics)?s.lyrics.map(l=>({t:l.t,text:l.text})):[];
-    setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } S.openRec=s; songReady(s.name,s.name+' (vocals, from library)');
+    setTarget(tt,mm,s.contourOrig); if(s.view&&s.view.hi>s.view.lo){ S.view={lo:s.view.lo,hi:s.view.hi}; S.viewManual=true; } S.openRec=s; songReady(s.name,s.name+' (vocals, from library)'); paintChoir();
     setStatus((auto?'Opened your last song, '+s.name+'. ':'')+(S.backBuf?'Ready with vocals and backing. Press Play.':'Ready. The vocals are the guide. Load a backing track and it will be kept with this song.'));
     try{ localStorage.setItem('pc-last',String(id)); }catch(e){}
     if(!auto) window.scrollTo({top:0,behavior:'smooth'});
@@ -2362,7 +2401,7 @@ async function separateSong(file){
     for(let i=0;i<n;i++){ bl[i]=oL[i]-VL[i]; br[i]=oR[i]-VR[i]; } back.copyToChannel(bl,0); back.copyToChannel(br,1);
     const pl=await pitchLineOf(voc,p=>sepUI('Finding the pitch line… '+Math.round(p*100)+'%',1),rangeKey(S.part));
     S.guideBuf=voc; S.backBuf=back; $('#backName').textContent='Backing from the separation (this time only)'; $('#backClear').hidden=false;
-    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
+    S.curBackBlob=null; S.cur={libId:null,fromFile:true}; S.curPart=S.part; choirUnload(); S.choirList=[]; setTimeout(paintChoir,0); RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=false; S.lyrics=[];
     S.beat=null; S.beatTok++;
     setTarget(pl.tt,pl.mm); songReady(name,name+' (separated vocals)');
     let note='';
@@ -2865,6 +2904,94 @@ function intListen(){ const q=INT.q, t0=performance.now()+900; let held=0, last=
     if(held>=0.7){ q.done=true; INT.n++; INT.score++; INT.cue=new Set([q.root,q.target]); pnoMarks(); intRender(); }
     else if(now-t0>12000){ q.gave=true; INT.n++; INT.miss.push(q.it); intPlay(true); INT.cue=new Set([q.root,q.target]); pnoMarks(); intRender(); } };
   INT.raf=requestAnimationFrame(tick); }
+
+// ===== choir parts: the other parts singing the same song (sopranos, altos…), lined up with this song =====
+// Each part is a small MP3 kept with the song (rec.choir: {part, uid, d, blob}; d = where this song's 0:00 is in that file).
+// At full speed every part plays on its own, with its own volume; slowed, one mix of them is made for that speed.
+S.choir=[]; S.choirMuted=(()=>{ try{ return localStorage.getItem('pc-choir-muted')==='1'; }catch(e){ return false; } })();
+function choirVols(){ try{ return JSON.parse(localStorage.getItem('pc-choir-vol')||'{}')||{}; }catch(e){ return {}; } }
+const choirVolOf=part=>{ const v=choirVols()[part]; return v!=null&&isFinite(+v)?+v:0.8; };
+function choirKey(){ return S.choir.length?S.choir.map(c=>c.part+':'+choirVolOf(c.part).toFixed(2)).join(','):''; }
+function choirUnload(){ S.choir.forEach(c=>{ try{ c.g.disconnect(); }catch(e){} }); S.choir=[]; }
+async function choirLoad(rec){ choirUnload(); const L=choirOf(rec); S.choirList=L.map(c=>({part:c.part,size:c.blob?c.blob.size:0})); if(!L.length) return;
+  ensureCtx(); setStatus('Opening the choir parts…');
+  for(const c of L){ try{ const buf=await decode(await c.blob.arrayBuffer()), g=S.ctx.createGain(); g.gain.value=choirVolOf(c.part); g.connect(S.gChoir); S.choir.push({part:c.part,d:c.d||0,buf,g}); }catch(e){} }
+  S.choir.sort((a,b)=>partRank(a.part)-partRank(b.part)); }
+const partRank=p=>{ const k=String(p).toLowerCase(); const i=['sop','alt','ten','bar','bas'].findIndex(x=>k.startsWith(x)); return (i<0?9:i)*10+(parseInt(k.replace(/\D+/g,''),10)||0); };
+// the parts mixed at their volumes, for song time s0–s1, at the playback rate (made only when slowing down)
+function choirMixBuf(s0,s1){ if(!S.choir.length) return null; const sr=S.ctx.sampleRate, n=Math.max(1,Math.round((s1-s0)*sr)), out=new Float32Array(n);
+  for(const c of S.choir){ const v=choirVolOf(c.part), x=c.buf.getChannelData(0), csr=c.buf.sampleRate, k=csr/sr, o=(s0+c.d)*csr;
+    for(let i=0;i<n;i++){ const p=o+i*k, j=p|0; if(j<0||j+1>=x.length) continue; const f=p-j; out[i]+=v*(x[j]+(x[j+1]-x[j])*f); } }
+  const b=new AudioBuffer({numberOfChannels:1,length:n,sampleRate:sr}); b.copyToChannel(out,0); return b; }
+function paintChoir(){ const has=S.choir.length>0, g=$('#choirGrp'); if(g) g.hidden=!has; if(!has) $('#choirPop').hidden=true;
+  const b=$('#choirBtn'); if(b){ b.setAttribute('aria-pressed',String(!S.choirMuted)); b.classList.toggle('guide-on',!S.choirMuted); b.title='The other choir parts singing ('+S.choir.map(c=>c.part).join(', ')+')'; }
+  const box=$('#choirSliders'); if(box&&has){ box.innerHTML=S.choir.map((c,i)=>'<label class="crow"><span>'+esc(c.part)+'</span><input type="range" min="0" max="2" step="0.05" value="'+choirVolOf(c.part)+'" data-ci="'+i+'" aria-label="'+esc(c.part)+' volume"><span class="val">'+Math.round(choirVolOf(c.part)*100)+'%</span></label>').join('');
+    box.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{ const c=S.choir[+inp.dataset.ci], v=+inp.value; c.g.gain.value=v; inp.nextElementSibling.textContent=Math.round(v*100)+'%';
+      const m=choirVols(); m[c.part]=v; try{ localStorage.setItem('pc-choir-vol',JSON.stringify(m)); }catch(e){} choirVolChanged(); })); }
+  paintChoirAdmin(); applyGains(); }
+// slowed down: the mix for that speed is made again with the new volumes (shortly after you stop moving the slider)
+let choirVolT=null; function choirVolChanged(){ if(S.rate===1) return; clearTimeout(choirVolT); choirVolT=setTimeout(async()=>{ if(tempoReady()) return; const was=S.playing, t=was?songTime():S.pos; if(was) stop(); S.pos=t; if(await prepareTempo()&&was) play(); },700); }
+$('#choirBtn').addEventListener('click',()=>{ S.choirMuted=!S.choirMuted; try{ localStorage.setItem('pc-choir-muted',S.choirMuted?'1':'0'); }catch(e){} paintChoir(); setStatus(S.choirMuted?'Choir parts off.':'Choir parts on: '+S.choir.map(c=>c.part).join(', ')+'.'); });
+$('#choirMix').addEventListener('click',e=>{ e.stopPropagation(); const p=$('#choirPop'), on=p.hidden; p.hidden=!on; $('#choirMix').setAttribute('aria-expanded',String(on)); });
+$('#choirPop').addEventListener('click',e=>e.stopPropagation());
+document.addEventListener('pointerdown',e=>{ const p=$('#choirPop'); if(!p.hidden&&!e.target.closest('#choirPop,#choirMix')){ p.hidden=true; $('#choirMix').setAttribute('aria-expanded','false'); } },true);
+
+// ----- the moderator adds choir parts: same song, other parts, from the library -----
+function paintChoirAdmin(){ const f=$('#choirField'); if(!f) return; const ok=!!(S.cur&&S.cur.libId!=null&&isOwnerPart(S.curPart)); f.hidden=!ok; if(!ok) return;
+  const L=S.choirList||[]; $('#choirAdmList').innerHTML=L.map((c,i)=>'<div class="crow"><span>'+esc(c.part)+' <span class="small">'+(c.size?fmtMB(c.size):'')+'</span></span><button type="button" data-cdel="'+i+'">Remove</button></div>').join('')||'<span class="small">None yet.</span>';
+  $('#choirAdmList').querySelectorAll('[data-cdel]').forEach(b=>b.addEventListener('click',async()=>{ const r=await libGet(S.cur.libId); if(!r) return; const gone=choirOf(r)[+b.dataset.cdel]; r.choir=choirOf(r).filter((_,k)=>k!==+b.dataset.cdel); await libPut(r); unpubMark(partOf(r),r.name,'choir part removed: '+(gone&&gone.part)); await choirLoad(r); S.stretch=null; S.stretchHQ=null; paintChoir(); setStatus('Removed '+(gone&&gone.part)+' from the choir parts.'); })); }
+const songKeyName=n=>String(n||'').toLowerCase().replace(/[_\-–—()\[\].,!?'"]/g,' ').replace(/\b(soprano|sopran|alto|tenor|bass|baritone|bari|sop|alt|ten|bas|s|a|t|b)\s*\d*\b/g,' ').replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();
+function nameSim(a,b){ a=songKeyName(a); b=songKeyName(b); if(!a||!b) return 0; if(a===b) return 1; const A=new Set(a.split(' ')), B=new Set(b.split(' ')); let n=0; A.forEach(w=>{ if(B.has(w)) n++; }); return n/Math.max(A.size,B.size); }
+$('#choirAdd').addEventListener('click',async()=>{ if(!S.cur||S.cur.libId==null) return; const cur=await libGet(S.cur.libId); if(!cur) return;
+  const all=(await libListLight()).filter(x=>x.id!==S.cur.libId&&partOf(x)!==S.curPart).map(x=>({x,sim:nameSim(x.name,cur.name)})).sort((a,b)=>b.sim-a.sim||partRank(partOf(a.x))-partRank(partOf(b.x)));
+  if(!all.length){ $('#choirText').textContent='There are no songs of other parts in your library. Add the same song for the other parts first.'; return; }
+  const have=new Set(choirOf(cur).map(c=>c.part));
+  const rows=all.slice(0,30).map((o,i)=>'<label class="pick-song"><input type="checkbox" data-i="'+i+'"'+(o.sim>=0.6&&!have.has(partOf(o.x))?' checked':'')+'><span><b>'+esc(o.x.name)+'</b><span class="small">'+esc(partOf(o.x))+' · '+fmtT(o.x.dur||0)+(have.has(partOf(o.x))?' · already added (will be replaced)':'')+'</span></span></label>').join('');
+  const r=await dlg({title:'Choir parts for '+cur.name,html:'<p class="kv-sub">Choose the same song in the other parts. Each is lined up with this song automatically (by its backing, which is the same in every part).</p><div class="pick-list">'+rows+'</div>',buttons:[{label:'Add',value:'ok',primary:true},{label:'Cancel',value:null}]});
+  if(r.value!=='ok') return; const pick=[...r.body.querySelectorAll('input:checked')].map(b=>all[+b.dataset.i].x); if(!pick.length) return;
+  const btn=$('#choirAdd'), txt=$('#choirText'); btn.disabled=true; const done=[], warn=[];
+  try{ for(let i=0;i<pick.length;i++){ const o=await libGet(pick[i].id); if(!o) continue; txt.textContent='Lining up '+partOf(o)+' ('+(i+1)+' of '+pick.length+')…';
+      const c=await choirBuild(cur,o,p=>{ txt.textContent=partOf(o)+': '+p; }); if(!c) { warn.push(partOf(o)); continue; } done.push(c); }
+    if(done.length){ const rec=await libGet(S.cur.libId); rec.choir=choirOf(rec).filter(c=>!done.some(d=>d.part===c.part)).concat(done); await libPut(rec);
+      unpubMark(partOf(rec),rec.name,'choir parts: '+done.map(c=>c.part).join(', ')); await choirLoad(rec); S.stretch=null; S.stretchHQ=null; paintChoir(); renderLib(); }
+    txt.textContent=(done.length?'Added '+done.map(c=>c.part+' (lined up '+(c.lag>=0?'+':'')+c.lag.toFixed(2)+' s'+(c.weak?', check by ear':'')+')').join(', ')+'. Share the part again so the choir gets them.':'')+(warn.length?' Could not line up: '+warn.join(', ')+'.':''); }
+  catch(err){ txt.textContent='Could not add the choir parts: '+((err&&err.message)||'unknown error')+'.'; }
+  finally{ btn.disabled=false; } });
+// a song's voice track (and its backing, when it has one) as audio
+function pcmBuf(rec){ const pcm=new Int16Array(rec.pcm), f=new Float32Array(pcm.length); for(let i=0;i<pcm.length;i++) f[i]=pcm[i]/32768; const b=new AudioBuffer({numberOfChannels:1,length:f.length,sampleRate:rec.sr}); b.copyToChannel(f,0); return b; }
+async function backBufOf(rec){ const L=backsOf(rec); if(!L.length) return null; const b=L[Math.max(0,Math.min(L.length-1,rec.backSel||0))]; try{ return await decode(await b.blob.arrayBuffer()); }catch(e){ return null; } }
+// mono, at about 4 kHz (enough to line things up)
+function dsMono(buf,target){ const sr=buf.sampleRate, k=Math.max(1,Math.round(sr/target)), a=buf.getChannelData(0), b=buf.numberOfChannels>1?buf.getChannelData(1):null, n=Math.floor(buf.length/k), y=new Float32Array(n);
+  for(let i=0;i<n;i++){ let s=0; for(let j=0;j<k;j++){ const q=i*k+j; s+=b?0.5*(a[q]+b[q]):a[q]; } y[i]=s/k; } return {y,sr:sr/k}; }
+// how far the other recording is ahead of this one (seconds): its time = this song's time + lag
+async function choirAlign(A,B){
+  const a=dsMono(A,4000), b=dsMono(B,4000), F=40, env=x=>{ const n=Math.floor(x.y.length/F), e=new Float32Array(n); for(let i=0;i<n;i++){ let s=0; for(let j=0;j<F;j++){ const v=x.y[i*F+j]; s+=v*v; } e[i]=Math.sqrt(s/F); }
+    const w=100, o=new Float32Array(n); let run=0; for(let i=0;i<n;i++){ run+=e[i]; if(i>=w) run-=e[i-w]; o[i]=e[i]-run/Math.min(i+1,w); } return o; };   // loudness every 10 ms, its slow drift taken away: the rhythm of the music
+  const ea=env(a), eb=env(b); let N=1; while(N<ea.length+eb.length) N<<=1;
+  const ar=new Float64Array(N), ai=new Float64Array(N), br=new Float64Array(N), bi=new Float64Array(N); ea.forEach((v,i)=>ar[i]=v); eb.forEach((v,i)=>br[i]=v);
+  fftIn(ar,ai,false); fftIn(br,bi,false); for(let k=0;k<N;k++){ const r=br[k]*ar[k]+bi[k]*ai[k], im=bi[k]*ar[k]-br[k]*ai[k]; ar[k]=r; ai[k]=im; } fftIn(ar,ai,true);
+  await new Promise(r=>setTimeout(r,0));
+  const maxL=3000; let best=0,bv=-Infinity, sum=0,cnt=0; for(let L=-maxL;L<=maxL;L++){ const v=ar[(L+N)%N]; sum+=Math.abs(v); cnt++; if(v>bv){ bv=v; best=L; } }
+  const weak=bv<6*(sum/cnt);   // the peak hardly stands out: it may be wrong
+  // finer: ±15 ms on the 4 kHz signals, over up to 60 s from the middle
+  const c0=best*F, W=Math.min(a.y.length,b.y.length,240000), s0=Math.max(0,Math.floor(a.y.length/2-W/2)); let fb=c0,fv=-Infinity;
+  for(let L=c0-60;L<=c0+60;L++){ let s=0,e=1e-9; for(let i=s0;i<s0+W;i+=2){ const j=i+L; if(j<0||j>=b.y.length) continue; s+=a.y[i]*b.y[j]; e+=b.y[j]*b.y[j]; } const v=s/Math.sqrt(e); if(v>fv){ fv=v; fb=L; } }
+  return {lag:fb/a.sr,weak}; }
+async function choirBuild(cur,oth,say){
+  // line up by the backings (the same piano in every part) when both songs have one, else by the voice tracks
+  let A=null,B=null; if(S.backBuf&&S.cur&&S.cur.libId===cur.id) A=S.backBuf; else A=await backBufOf(cur); if(A) B=await backBufOf(oth);
+  if(!A||!B){ A=pcmBuf(cur); B=pcmBuf(oth); }
+  say('finding where it lines up…'); const {lag,weak}=await choirAlign(A,B);
+  // the other part's voice, moved onto this song's time and as long as this song
+  const src=pcmBuf(oth), sr=src.sampleRate, n=Math.round(cur.dur*sr), x=src.getChannelData(0), y=new Float32Array(n), sh=Math.round(lag*sr); let pk=1e-6;
+  for(let i=0;i<n;i++){ const j=i+sh; const v=j>=0&&j<x.length?x[j]:0; y[i]=v; const a=Math.abs(v); if(a>pk) pk=a; }
+  const g=Math.min(4,0.9/pk); for(let i=0;i<n;i++) y[i]*=g;
+  const ab=new AudioBuffer({numberOfChannels:1,length:n,sampleRate:sr}); ab.copyToChannel(y,0);
+  say('making the file…'); const blob=await encodeMp3(ab,64,p=>say('making the file… '+Math.round(p*100)+'%'),true);
+  // MP3 files start with a short silence of their own: measure it, so the part plays exactly in time
+  const dec=await decode(await blob.arrayBuffer()), p1=dsMono(ab,4000), p2=dsMono(dec,4000); let dl=0,dv=-Infinity; const st=Math.min(p1.y.length-8000,Math.floor(p1.y.length/3));
+  for(let L=0;L<=400;L++){ let s=0,e=1e-9; for(let i=st;i<st+8000&&i+L<p2.y.length;i++){ s+=p1.y[i]*p2.y[i+L]; e+=p2.y[i+L]*p2.y[i+L]; } const v=s/Math.sqrt(e); if(v>dv){ dv=v; dl=L; } }
+  return {part:partOf(oth),uid:oth.uid||null,d:dl/p1.sr,blob,lag,weak}; }
 
 // ===== suggestions from choir members (Google Apps Script inbox) =====
 // Members' songs from a share link keep their shared version in rec.base = {updated, contour, lyrics}.
@@ -5755,6 +5882,13 @@ function useAnswer(yes){ $('#useNote').hidden=true; try{ localStorage.setItem('p
 $('#useNoteOk').addEventListener('click',()=>useAnswer(true));
 $('#useNoteNo').addEventListener('click',()=>useAnswer(false));
 $('#restoreBacksOn').checked=restoreBacks();
+try{ $('#choirDlOn').checked=choirDl(); }catch(e){}
+$('#choirDlOn').addEventListener('change',async e=>{ const on=e.target.checked; try{ localStorage.setItem('pc-choir-dl',on?'1':'0'); }catch(x){}
+  if(on){ setStatus('Choir parts will come with songs. Checking for them now…'); try{ await runUpdates(); }catch(x){} return; }
+  // off: free the space they take on this phone (never on the moderator's own parts)
+  let n=0; for(const x of await libListLight()){ if(isOwnerPart(partOf(x))) continue; const r=await libGet(x.id); if(r&&choirOf(r).length){ delete r.choir; await libPutRaw(r); n++; } }
+  if(S.cur&&S.cur.libId!=null&&!isOwnerPart(S.curPart)){ choirUnload(); paintChoir(); }
+  setStatus(n?'Removed the choir parts from '+n+' song'+(n>1?'s':'')+' on this phone.':'Choir parts are off.'); });
 $('#restoreBacksOn').addEventListener('change',e=>{ try{ localStorage.setItem('pc-restore-backs',e.target.checked?'1':'0'); }catch(x){} setStatus(e.target.checked?'Deleted songs and backings come back with the next update (tap Update when it appears).':'Songs and backings you delete now stay deleted after updates.'); if(e.target.checked&&getShared().length) setTimeout(()=>checkShared(false),300); });
 $('#admAddVocals').addEventListener('click',()=>$('#guideFile').click());
 $('#edSplit').addEventListener('click',splitAtPlayhead);
