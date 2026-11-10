@@ -1256,7 +1256,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-10 c';
+const APP_VERSION='2026-11-10 d';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -2911,24 +2911,24 @@ function intListen(){ const q=INT.q, t0=performance.now()+900; let held=0, last=
 S.choir=[]; S.choirMuted=(()=>{ try{ return localStorage.getItem('pc-choir-muted')==='1'; }catch(e){ return false; } })();
 function choirVols(){ try{ return JSON.parse(localStorage.getItem('pc-choir-vol')||'{}')||{}; }catch(e){ return {}; } }
 const choirVolOf=part=>{ const v=choirVols()[part]; return v!=null&&isFinite(+v)?+v:0.8; };
-function choirMaster(){ try{ const v=localStorage.getItem('pc-choir-master'); return v!=null&&isFinite(+v)?+v:0.7; }catch(e){ return 0.7; } }
+function choirMaster(){ try{ const v=localStorage.getItem('pc-choir-master2'); return v!=null&&isFinite(+v)?+v:0.7; }catch(e){ return 0.7; } }
 function choirKey(){ return S.choir.length?S.choir.map(c=>c.part+':'+choirVolOf(c.part).toFixed(2)).join(','):''; }
 function choirUnload(){ S.choir.forEach(c=>{ try{ c.g.disconnect(); }catch(e){} }); S.choir=[]; }
 async function choirLoad(rec){ choirUnload(); const L=choirOf(rec); S.choirList=L.map(c=>({part:c.part,size:c.blob?c.blob.size:0})); if(!L.length) return;
   ensureCtx(); setStatus('Opening the choir parts…');
-  for(const c of L){ try{ const buf=await decode(await c.blob.arrayBuffer()), g=S.ctx.createGain(); g.gain.value=choirVolOf(c.part); g.connect(S.gChoir); S.choir.push({part:c.part,d:c.d||0,buf,g}); }catch(e){} }
+  for(const c of L){ try{ const buf=await decode(await c.blob.arrayBuffer()), g=S.ctx.createGain(), lv=loudness(buf), norm=lv>1e-4?Math.min(4,Math.max(0.02,0.09/lv)):1; g.gain.value=choirVolOf(c.part)*norm; g.connect(S.gChoir); S.choir.push({part:c.part,d:c.d||0,buf,g,norm}); }catch(e){} }   // each part as loud as 60% of the voice (0.15), whatever level it was made at
   S.choir.sort((a,b)=>partRank(a.part)-partRank(b.part)); }
 const partRank=p=>{ const k=String(p).toLowerCase(); const i=['sop','alt','ten','bar','bas'].findIndex(x=>k.startsWith(x)); return (i<0?9:i)*10+(parseInt(k.replace(/\D+/g,''),10)||0); };
 // the parts mixed at their volumes, for song time s0–s1, at the playback rate (made only when slowing down)
 function choirMixBuf(s0,s1){ if(!S.choir.length) return null; const sr=S.ctx.sampleRate, n=Math.max(1,Math.round((s1-s0)*sr)), out=new Float32Array(n);
-  for(const c of S.choir){ const v=choirVolOf(c.part), x=c.buf.getChannelData(0), csr=c.buf.sampleRate, k=csr/sr, o=(s0+c.d)*csr;
+  for(const c of S.choir){ const v=choirVolOf(c.part)*(c.norm||1), x=c.buf.getChannelData(0), csr=c.buf.sampleRate, k=csr/sr, o=(s0+c.d)*csr;
     for(let i=0;i<n;i++){ const p=o+i*k, j=p|0; if(j<0||j+1>=x.length) continue; const f=p-j; out[i]+=v*(x[j]+(x[j+1]-x[j])*f); } }
   const b=new AudioBuffer({numberOfChannels:1,length:n,sampleRate:sr}); b.copyToChannel(out,0); return b; }
 function paintChoir(){ const has=S.choir.length>0, g=$('#choirGrp'); if(g) g.hidden=!has; if(!has) $('#choirPop').hidden=true;
   const b=$('#choirBtn'); if(b){ b.setAttribute('aria-pressed',String(!S.choirMuted)); b.classList.toggle('guide-on',!S.choirMuted); b.title='The other choir parts singing ('+S.choir.map(c=>c.part).join(', ')+')'; }
   const box=$('#choirSliders'); if(box&&has){ box.innerHTML='<label class="crow cmaster"><span><b>All parts</b></span><input type="range" min="0" max="1.5" step="0.05" value="'+choirMaster()+'" id="choirMasterIn" aria-label="Volume of the whole choir"><span class="val">'+Math.round(choirMaster()*100)+'%</span></label>'+S.choir.map((c,i)=>'<label class="crow"><span>'+esc(c.part)+'</span><input type="range" min="0" max="2" step="0.05" value="'+choirVolOf(c.part)+'" data-ci="'+i+'" aria-label="'+esc(c.part)+' volume"><span class="val">'+Math.round(choirVolOf(c.part)*100)+'%</span></label>').join('');
-    { const mi=box.querySelector('#choirMasterIn'); mi.addEventListener('input',()=>{ try{ localStorage.setItem('pc-choir-master',mi.value); }catch(e){} mi.nextElementSibling.textContent=Math.round(+mi.value*100)+'%'; applyGains(); }); }   // live at any speed: it works after the mix
-    box.querySelectorAll('input[data-ci]').forEach(inp=>inp.addEventListener('input',()=>{ const c=S.choir[+inp.dataset.ci], v=+inp.value; c.g.gain.value=v; inp.nextElementSibling.textContent=Math.round(v*100)+'%';
+    { const mi=box.querySelector('#choirMasterIn'); mi.addEventListener('input',()=>{ try{ localStorage.setItem('pc-choir-master2',mi.value); }catch(e){} mi.nextElementSibling.textContent=Math.round(+mi.value*100)+'%'; applyGains(); }); }   // live at any speed: it works after the mix
+    box.querySelectorAll('input[data-ci]').forEach(inp=>inp.addEventListener('input',()=>{ const c=S.choir[+inp.dataset.ci], v=+inp.value; c.g.gain.value=v*(c.norm||1); inp.nextElementSibling.textContent=Math.round(v*100)+'%';
       const m=choirVols(); m[c.part]=v; try{ localStorage.setItem('pc-choir-vol',JSON.stringify(m)); }catch(e){} choirVolChanged(); })); }
   paintChoirAdmin(); applyGains(); }
 // slowed down: the mix for that speed is made again with the new volumes (shortly after you stop moving the slider)
@@ -2983,32 +2983,36 @@ async function choirAlign(A,B){
 // recording does). Kept: only that part's melody and its overtones (from its target line, following the sung pitch within
 // a semitone of it, so vibrato stays), and only where that track is clearly louder than this song's own voice track
 // (the shared choir is about equally loud in both, and this song's part is louder in its own track). Breaths and consonants
-// stay only where the part's track clearly dominates.
+// are dropped (they would let the shared choir back in).
 async function choirFilter(y,T,sr,midiAt,say){
-  const N=2048, H=512, B=N/2+1, n=Math.max(0,Math.floor((y.length-N)/H)+1), win=new Float64Array(N); for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
-  const out=new Float32Array(y.length), wsum=new Float32Array(y.length), binHz=sr/N;
-  // the power ratio, a little smoothed over neighbouring frequencies and moments: less "watery"
-  const ar=new Float64Array(N), ai=new Float64Array(N), tr=new Float64Array(N), ti=new Float64Array(N);
-  const R=[new Float32Array(B),new Float32Array(B),new Float32Array(B)], PA=[new Float32Array(B),new Float32Array(B),new Float32Array(B)], SA=[], f0s=[];
-  const frame=t=>{ const o=t*H; for(let j=0;j<N;j++){ const i=o+j; ar[j]=(i<y.length?y[i]:0)*win[j]; ai[j]=0; tr[j]=(i<T.length?T[i]:0)*win[j]; ti[j]=0; } fftIn(ar,ai,false); fftIn(tr,ti,false);
-    const r=new Float32Array(B), pa=new Float32Array(B); for(let k=0;k<B;k++){ const a=ar[k]*ar[k]+ai[k]*ai[k], b=tr[k]*tr[k]+ti[k]*ti[k]; pa[k]=a; r[k]=a/(a+b+1e-12); }
-    // the sung pitch near the target line: the f0 (±1 semitone, 10-cent steps) whose overtones are strongest
-    const m=midiAt((o+N/2)/sr); let f0=0;
-    if(!isNaN(m)){ const ft=440*Math.pow(2,(m-69)/12); let bv=-1;
-      for(let c=-100;c<=100;c+=10){ const f=ft*Math.pow(2,c/1200); let sm=0; for(let h=1;h<=8&&h*f<sr/2;h++){ const k=Math.round(h*f/binHz); sm+=Math.sqrt(pa[k]||0)/Math.sqrt(h); } if(sm>bv){ bv=sm; f0=f; } } }
-    return {re:Float64Array.from(ar),im:Float64Array.from(ai),r,pa,f0}; };
-  let prev=null, cur=frame(0), next=n>1?frame(1):null;
+  // smoother than a plain mask (no crackle): steps of 11 ms (7/8 overlap), the sung pitch found first for the whole track and
+  // steadied (a median over 5 steps, small gaps bridged), and each frequency fading out over ~40 ms instead of switching off
+  const N=2048, H=256, B=N/2+1, n=Math.max(0,Math.floor((y.length-N)/H)+1), win=new Float64Array(N); for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
+  const binHz=sr/N, re=new Float64Array(N), im=new Float64Array(N), tr=new Float64Array(N), ti=new Float64Array(N);
+  const spec=(x,t,r,i)=>{ const o=t*H; for(let j=0;j<N;j++){ const q=o+j; r[j]=(q<x.length?x[q]:0)*win[j]; i[j]=0; } fftIn(r,i,false); };
+  // pass 1: the sung pitch near the target line, every step
+  const f0=new Float32Array(n);
+  for(let t=0;t<n;t++){ const m=midiAt((t*H+N/2)/sr); if(isNaN(m)) continue; spec(y,t,re,im);
+    const ft=440*Math.pow(2,(m-69)/12); let bv=-1, best=0;
+    for(let c=-100;c<=100;c+=10){ const f=ft*Math.pow(2,c/1200); let sm=0; for(let h=1;h<=8&&h*f<sr/2;h++){ const k=Math.round(h*f/binHz); sm+=Math.hypot(re[k],im[k])/Math.sqrt(h); } if(sm>bv){ bv=sm; best=f; } }
+    f0[t]=best; if(t%400===0){ say&&say(Math.round(t/n*30)); await new Promise(r=>setTimeout(r,0)); } }
+  const fs=new Float32Array(n);
+  for(let t=0;t<n;t++){ const w=[]; for(let k=t-2;k<=t+2;k++) if(k>=0&&k<n&&f0[k]>0) w.push(f0[k]); if(f0[t]>0||w.length>=3){ w.sort((a,b)=>a-b); fs[t]=w.length?w[w.length>>1]:0; } }
+  // pass 2: the filter
+  const out=new Float32Array(y.length), wsum=new Float32Array(y.length), gPrev=new Float32Array(B), R=[null,null,null];
+  const ratio=t=>{ if(t<0||t>=n) return null; spec(y,t,re,im); spec(T,t,tr,ti); const r=new Float32Array(B); for(let k=0;k<B;k++){ const a=re[k]*re[k]+im[k]*im[k], b=tr[k]*tr[k]+ti[k]*ti[k]; r[k]=a/(a+b+1e-12); } return r; };
+  R[1]=ratio(0); R[2]=ratio(1);
   for(let t=0;t<n;t++){
-    const rs=new Float32Array(B); for(let k=0;k<B;k++){ let s=0,c=0; for(const F of [prev,cur,next]){ if(!F) continue; for(let d=-1;d<=1;d++){ const q=k+d; if(q<0||q>=B) continue; s+=F.r[q]; c++; } } rs[k]=s/c; }
-    const f0=cur.f0, re=cur.re, im=cur.im;
-    for(let k=0;k<B;k++){ const fr=k*binHz; let g;
-      if(f0>0&&fr<6000){ const h=Math.max(1,Math.round(fr/f0)), cents=1200*Math.abs(Math.log2(Math.max(fr,1)/(h*f0))); g=Math.exp(-0.5*(cents/60)*(cents/60))*Math.pow(rs[k],1.5); }
-      else g=rs[k]>0.85?0.5*rs[k]*rs[k]*rs[k]:0;   // no pitch here (breath, consonant): only where this part's track clearly dominates
+    const rs=new Float32Array(B); for(let k=0;k<B;k++){ let s=0,c=0; for(const F of R){ if(!F) continue; for(let d=-1;d<=1;d++){ const q=k+d; if(q<0||q>=B) continue; s+=F[q]; c++; } } rs[k]=s/c; }
+    spec(y,t,re,im); const f=fs[t];
+    for(let k=0;k<B;k++){ const fr=k*binHz; let g=0;
+      if(f>0&&fr<6000){ const h=Math.max(1,Math.round(fr/f)), cents=1200*Math.abs(Math.log2(Math.max(fr,1)/(h*f))); g=Math.exp(-0.5*(cents/60)*(cents/60))*Math.pow(rs[k],1.5); }
+      g=Math.max(g,gPrev[k]*0.75); gPrev[k]=g;   // fades out (about 40 ms) instead of snapping off
       re[k]*=g; im[k]*=g; if(k>0&&k<N/2){ re[N-k]=re[k]; im[N-k]=-im[k]; } }
     im[0]=0; im[N/2]=0; fftIn(re,im,true); const o=t*H;
     for(let j=0;j<N;j++){ const i=o+j; if(i>=out.length) break; out[i]+=re[j]*win[j]; wsum[i]+=win[j]*win[j]; }
-    prev=cur; cur=next; next=t+2<n?frame(t+2):null;
-    if(t%200===0){ say&&say(Math.round(t/n*100)); await new Promise(r=>setTimeout(r,0)); } }
+    R[0]=R[1]; R[1]=R[2]; R[2]=ratio(t+2);
+    if(t%400===0){ say&&say(30+Math.round(t/n*70)); await new Promise(r=>setTimeout(r,0)); } }
   for(let i=0;i<out.length;i++){ const w=wsum[i]; if(w>1e-3) out[i]/=w; }
   return out; }
 async function choirBuild(cur,oth,say){
