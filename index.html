@@ -1238,7 +1238,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-10 e';
+const APP_VERSION='2026-11-11 a';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -6441,25 +6441,52 @@ document.addEventListener('visibilitychange',async()=>{
   if(S.playing&&!S.wake){ try{ if(navigator.wakeLock) S.wake=await navigator.wakeLock.request('screen'); }catch(e){} }
 });
 
-// ===== warm-up (made by the app: 5-note scales, arpeggios, sirens) =====
-function warmupPlan(rk){ const o=rk==='high'?12:0, P=[]; // items: {m, b (beats), to (glide target)} ; rest: {rest:b}
-  const lines=[];
-  const rep=(text,notes,root)=>{ lines.push({text,at:P.length}); P.push({chord:root,b:2},{rest:1}); notes.forEach(n=>P.push(n)); };   // like a teacher: the chord first, then you sing
+// ===== warm-up (made by the app: 5-note scales, arpeggios, sirens, then harmony exercises) =====
+// syllables of the day: a new mix every day (the same all day), shown in the lyric line of each exercise
+function warmSyl(){ const d=new Date(); let h=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
+  const rnd=()=>{ h=(h*1103515245+12345)&0x7fffffff; return h/0x7fffffff; }, pick=a=>a[Math.floor(rnd()*a.length)];
+  for(let i=0;i<5;i++) rnd();
+  const scale=pick(['nay','zee','mum','ma','vee','yah','bah','no']); let arp=pick(['mi','nay','zee','mum','vee','yah','noo','lah']); if(arp===scale) arp='mi';
+  return {scale,arp,siren:pick(['lip trill','ng','oo','vee','zz','hum']),hold:pick(['oo','ah','noo','loo']),two:pick(['loo','noo','dah','mah'])}; }
+function warmupPlan(rk){ const o=rk==='high'?12:0, P=[], lines=[], BG=[], Y=warmSyl(); let pos=0;   // P: what you sing {m, b (beats), to (glide)}, {rest:b}, {chord:root,b}; BG: the app's own part in the harmony exercises {at (beat), b, notes, kind}
+  const push=x=>{ P.push(x); pos+=x.rest!=null?x.rest:x.b; };
+  const rep=(text,notes,root)=>{ lines.push({text,at:P.length}); push({chord:root,b:2}); push({rest:1}); notes.forEach(push); };   // like a teacher: the chord first, then you sing
   for(const k of [0,1,2,3,4,5,4,2,0]){ const r=48+o+k, sc=[0,2,4,5,7,5,4,2,0];
-    rep('“ma” · scale from '+noteName(r),sc.map((d,i)=>({m:r+d,b:i===8?2:1})).concat([{rest:2}]),r); }
-  P.push({rest:4});
+    rep('“'+Y.scale+'” · scale from '+noteName(r),sc.map((d,i)=>({m:r+d,b:i===8?2:1})).concat([{rest:2}]),r); }
+  push({rest:4});
   for(const k of [0,1,2,3,2,0]){ const r=45+o+k, ar=[0,4,7,12,7,4,0], bb=[1,1,1,2,1,1,2];
-    rep('“mi” · arpeggio from '+noteName(r),ar.map((d,i)=>({m:r+d,b:bb[i]})).concat([{rest:3}]),r); }
-  P.push({rest:4});
-  for(let n=0;n<2;n++){ const r=48+o; rep('“oo” · siren: slide up and down',[{m:r,b:8,to:r+12},{m:r+12,b:8,to:r},{rest:4}],r); }
-  return {P,lines}; }
+    rep('“'+Y.arp+'” · arpeggio from '+noteName(r),ar.map((d,i)=>({m:r+d,b:bb[i]})).concat([{rest:3}]),r); }
+  push({rest:4});
+  for(let n=0;n<2;n++){ const r=48+o; rep('“'+Y.siren+'” · siren: slide up and down',[{m:r,b:8,to:r+12},{m:r+12,b:8,to:r},{rest:4}],r); }
+  push({rest:4});
+  // harmony 1: hold over a drone. The app keeps the root sounding; you hold 1, 3, 5, 8 and back, until each one rings with it
+  { const r=48+o; lines.push({text:'“'+Y.hold+'” · harmony: hold over the drone (1 · 3 · 5 · 8)',at:P.length}); BG.push({at:pos,b:2+7*4+2,notes:[r-12,r-5,r],kind:'pad'});
+    push({rest:2}); [0,4,7,12,7,4,0].forEach(d=>push({m:r+d,b:4})); push({rest:2}); push({rest:3}); }
+  // harmony 2: two parts. The app sings a line a third above you; then you take the upper line and the app sings below
+  { const r=48+o, sc=[0,2,4,5,7,9,11,12,14,16], deg=[0,1,2,3,4,3,2,1,0], bb=[2,2,2,2,3,1,2,2,4];
+    lines.push({text:'“'+Y.two+'” · two parts: you the lower line, the app a third above',at:P.length}); push({chord:r,b:2}); push({rest:1});
+    deg.forEach((g,i)=>{ BG.push({at:pos,b:bb[i],notes:[r+sc[g+2]],kind:'line'}); push({m:r+sc[g],b:bb[i]}); }); push({rest:3});
+    lines.push({text:'“'+Y.two+'” · two parts: now you the upper line, the app below',at:P.length}); push({chord:r,b:2}); push({rest:1});
+    deg.forEach((g,i)=>{ BG.push({at:pos,b:bb[i],notes:[r+sc[g]],kind:'line'}); push({m:r+sc[g+2],b:bb[i]}); }); push({rest:3}); }
+  // harmony 3: chord tones. A chord sounds (I, IV, V, I); you find and sing its root, third and fifth
+  { const r=45+o; lines.push({text:'“'+Y.hold+'” · harmony: sing the chord tones (root · 3rd · 5th)',at:P.length});
+    for(const [nm,c] of [['I',0],['IV',5],['V',7],['I',0]]){ const t=[r+c,r+c+(nm==='V'||nm==='I'||nm==='IV'?4:3),r+c+7];
+      BG.push({at:pos,b:9,notes:[r+c-12,...t],kind:'pad'}); push({rest:1}); push({m:t[0],b:2}); push({m:t[1],b:2}); push({m:t[2],b:3}); push({rest:1}); }
+    push({rest:3}); }
+  return {P,lines,BG,Y}; }
 function warmVoice(){ try{ const v=localStorage.getItem('pc-warmvoice'); return ['bright','ah','oo'].includes(v)?v:'bright'; }catch(e){ return 'bright'; } }
 async function makeWarmup(rk){
-  const sr=22050, beat=0.5, lead=2.0, {P,lines}=warmupPlan(rk);
+  const sr=22050, beat=0.5, lead=2.0, {P,lines,BG}=warmupPlan(rk);
   const total=lead+P.reduce((a,x)=>a+(x.rest||x.b),0)*beat+1, oc=new OfflineAudioContext(1,Math.ceil(total*sr),sr);
   // the chords go on their own track (the Backing button), played with the piano recordings when they are on the phone, else a simple piano-like tone
   const cc=new OfflineAudioContext(1,Math.ceil(total*sr),sr), cbus=cc.createGain(); cbus.gain.value=0.55; cbus.connect(cc.destination);
   const chordNotes=r=>[r-12,r,r+4,r+7];
+  // a soft sustained tone for drones and held chords (the piano would die away), and a soft sung "oo" for the second line
+  const padNote=(m,st,dur)=>{ const v=m<45?0.16:0.12; [[1,1],[2,0.35],[3,0.15],[4,0.06]].forEach(([h,a],k)=>{ const o=cc.createOscillator(); o.type='sine'; o.frequency.value=m2f(m)*h; o.detune.value=(k%2?3:-3); const g=cc.createGain();
+      g.gain.setValueAtTime(0,st); g.gain.linearRampToValueAtTime(v*a,st+0.25); g.gain.setValueAtTime(v*a,st+dur-0.1); g.gain.linearRampToValueAtTime(0,st+dur+0.4); o.connect(g).connect(cbus); o.start(st); o.stop(st+dur+0.45); }); };
+  const lineNote=(m,st,dur)=>{ const o=cc.createOscillator(); o.type='triangle'; o.frequency.value=m2f(m); const lf=cc.createOscillator(); lf.frequency.value=5; const lg=cc.createGain(); lg.gain.value=9; lf.connect(lg).connect(o.detune);
+    const f=cc.createBiquadFilter(); f.type='lowpass'; f.frequency.value=900; const g=cc.createGain(), en=st+dur-0.06;
+    g.gain.setValueAtTime(0,st); g.gain.linearRampToValueAtTime(0.5,st+0.08); g.gain.setValueAtTime(0.5,en-0.06); g.gain.linearRampToValueAtTime(0,en); o.connect(f).connect(g).connect(cbus); o.start(st); o.stop(en+0.02); lf.start(st); lf.stop(en+0.02); };
   const need=[...new Set(P.filter(x=>x.chord!=null).flatMap(x=>chordNotes(x.chord)))], smp={};
   const nearest=m=>{ let best=null; for(const g of GRAND_NOTES){ if(best==null||Math.abs(g-m)<Math.abs(best-m)) best=g; } return best; };
   try{ await Promise.race([Promise.all([...new Set(need.map(nearest))].map(async g=>{ smp[g]=await grandLoad(g); })),new Promise((_,no)=>setTimeout(()=>no(new Error('slow')),6000))]); }catch(e){}
@@ -6474,6 +6501,7 @@ async function makeWarmup(rk){
     [[700,5,1],[1150,6,0.6],[2500,7,0.1]].forEach(([f,q,g])=>{ const bp=oc.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=f; bp.Q.value=q; const gg=oc.createGain(); gg.gain.value=g; vf.connect(bp).connect(gg).connect(lp); });
     const body=oc.createBiquadFilter(); body.type='lowpass'; body.frequency.value=450; const bg=oc.createGain(); bg.gain.value=0.35; vf.connect(body).connect(bg).connect(lp); bus.gain.value=0.9; }
   else { vf=oc.createBiquadFilter(); vf.type='lowpass'; vf.frequency.value=700; vf.Q.value=0.4; bus.gain.value=0.5; vf.connect(bus); }
+  (BG||[]).forEach(e=>{ const st=lead+e.at*beat, d=e.b*beat; e.notes.forEach(m=>(e.kind==='pad'?padNote:lineNote)(m,st,d)); });
   const seg=[], lyr=[]; let t=lead;
   P.forEach((x,i)=>{ const L=lines.find(l=>l.at===i); if(L) lyr.push({text:L.text,t:+t.toFixed(3)});
     if(x.rest){ t+=x.rest*beat; return; }
@@ -6486,7 +6514,7 @@ async function makeWarmup(rk){
   for(let x=0;x<total;x+=0.01){ tt.push(+x.toFixed(2)); while(j<seg.length-1&&x>=seg[j].en) j++; const g=seg[j]; let v=NaN;
     if(g&&x>=g.st+0.03&&x<g.en-0.04) v=g.to!=null?g.m+(g.to-g.m)*(x-g.st)/(g.en-g.st):g.m; mm.push(v); }
   const [buf,chords]=await Promise.all([oc.startRendering(),cc.startRendering()]);
-  return {buf,chords,tt:Float32Array.from(tt),mm:Float32Array.from(mm),lyrics:lyr,lead,bpm:1/beat*60};
+  return {buf,chords,tt:Float32Array.from(tt),mm:Float32Array.from(mm),lyrics:lyr,lead,bpm:1/beat*60,Y:warmSyl()};
 }
 async function openWarmup(auto){
   try{ stop(); if(S.tap) stopTap(); if(S.editMode) setEditMode(false); ensureCtx(); const rk=rangeKey(S.part);
@@ -6496,7 +6524,7 @@ async function openWarmup(auto){
     S.cur={libId:null,fromFile:false,warmup:true}; S.curPart=S.part; RT.cm=null; S.sheet=null; S.curBacks=[]; S.curBackSel=-1; renderBackPick(); $('#addLib').hidden=true;
     S.beat={bpm:w.bpm,offset:w.lead,auto:false,bar:w.lead,bpb:4}; S.beatTok++; S.pendingKey=null; S.lyrics=w.lyrics; S.openRec=null;
     setTarget(w.tt,w.mm); songReady('Warm-up ('+(rk==='high'?'high':'low')+' voice)','Warm-up');
-    setStatus((auto?'':'Warm-up ready. ')+'About 2½ minutes: 5-note scales on “ma”, arpeggios on “mi”, then sirens on “oo”, each a little higher, with a chord before each one (Backing turns the chords on or off). Press Play and sing along.');
+    setStatus((auto?'':'Warm-up ready. ')+'About 3½ minutes: scales on “'+w.Y.scale+'”, arpeggios on “'+w.Y.arp+'”, sirens on “'+w.Y.siren+'” (new syllables every day), then three harmony exercises: holding over a drone, two parts, and chord tones. The app\'s own part is on Backing; turn Voice off to sing your line on your own. Press Play and sing along.');
     if(!auto) window.scrollTo({top:0,behavior:'smooth'});
     return true;
   }catch(e){ setStatus('Could not make the warm-up: '+((e&&e.message)||'unknown error')+'.',true); return false; } }
