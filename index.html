@@ -919,6 +919,11 @@ button.confirmed{background:var(--accent);color:#fff;border-color:var(--accent)}
           <button id="lyrSnapAll" type="button">Snap all lines now</button>
           <button id="lyrClear" type="button">Remove lyrics</button>
         </div>
+        <span class="small" id="sheetFitHint">If the lyrics sheet from the PDF is chopped into odd pieces, rebuild it so its rows follow the lines above.</span>
+        <div class="row">
+          <button id="sheetFit" type="button" title="Join the sheet's rows so they follow your lyric lines">Rebuild sheet from these lines</button>
+          <button id="sheetFitUndo" type="button" hidden>Restore the PDF's sheet</button>
+        </div>
       <input id="lyrSnapOn" type="checkbox" checked hidden aria-hidden="true">
     </div>
   </details>
@@ -1238,7 +1243,7 @@ const BLACK=[1,3,6,8,10];
 const noteName=m=>NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const fmtT=t=>{ t=Math.max(0,t); const m=Math.floor(t/60), s=Math.floor(t-m*60); return m+':'+(s<10?'0':'')+s; };
 const setStatus=(t,warn)=>{ const el=$('#status'); el.textContent=t; el.classList.toggle('warn',!!warn); };
-const APP_VERSION='2026-11-18 a';
+const APP_VERSION='2026-11-18 b';
 const NTP_LAG=0.08; // Nail the Pitch pitch values trail the audio by ~80 ms
 
 const S={ctx:null,gGuide:null,gBack:null,guideBuf:null,backBuf:null,dur:0,
@@ -3630,8 +3635,29 @@ function lyrStep(){ return lyrSnapping()?snapStep()||beatP()/2:0.2; }
 function lyrT(t){ if(lyrSnapping()){ const d=snapDiv(); t=gridAt(t,d); if(t<0) t+=beatP(t)/d; } return Math.max(0,Math.round(t*100)/100); }
 function nudgeLine(i,dir){ timingTried(); const L=S.lyrics[i]; if(L.t==null) return; L.t=lyrT(L.t+dir*lyrStep()); lyrChanged(); }
 function snapAllLines(){ if(!lyrSnapping()) return; S.lyrics.forEach(L=>{ if(L.t!=null) L.t=lyrT(L.t); }); lyrChanged(); setStatus('All timed lines moved to the nearest beat or half beat.'); }
+// the lyrics sheet from a PDF can come out chopped into short pieces (a narrow column wraps every phrase):
+// join the rows so each row of your part is one of your lyric lines; the PDF's own rows are kept, so it can be undone
+function sheetFitLyrics(){
+  const sh=S.sheet; if(!sh||!S.lyrics.length) return null;
+  const src=sh.rows0||sh.rows, SM=sheetMap({...sh,rows:src}), mine=SM.mine;
+  const nz=t=>String(t||'').toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g,'');
+  let str=''; const ends=[]; S.lyrics.forEach(L=>{ str+=nz(L.text); ends.push(str.length); });
+  const lineAt=c=>ends.findIndex(e=>c<e);
+  const out=[]; let p=0, cur=null, curLine=-1;
+  src.forEach(r=>{ const c=SM.clean(r.cells[mine]), n=SM.usable(c)?nz(c):''; let li=-1;
+    if(n){ const at=str.indexOf(n,p); if(at>=0&&at-p<=200){ li=lineAt(at); p=at+n.length; } }   // which of your lines this row's text belongs to
+    if(cur&&li>=0&&li===curLine&&!r.label){   // same line as the row before: join them
+      cur.cells=cur.cells.map((x,k)=>[x,r.cells[k]].filter(Boolean).join(' ')||null);
+      if(cur.cont||r.cont){ cur.cont=cur.cells.map((x,k)=>!!(cur.cont&&cur.cont[k]&&r.cont&&r.cont[k])); if(!cur.cont.some(Boolean)) delete cur.cont; }
+      return; }
+    cur={label:r.label,cells:r.cells.slice()}; if(r.cont) cur.cont=r.cont.slice(); out.push(cur); curLine=li; });
+  return {from:src.length,rows:out};
+}
+function sheetSaved(){ S.secCache=null; if(S.cur&&S.cur.libId!=null){ libUpdate(S.cur.libId,{sheet:S.sheet}).catch(()=>{}); unpubMark(S.curPart,curSongName()); }
+  renderSheetBtns(); renderLyrSnap(); if(!$('#sheetView').hidden) openSheet(); }
 function renderLyrSnap(){
   $('#lyrSnapAll').disabled=!S.beat||!S.lyrics.length;
+  { const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.length); $('#sheetFit').hidden=$('#sheetFitHint').hidden=!has; $('#sheetFit').disabled=!S.lyrics.length; $('#sheetFitUndo').hidden=!(has&&S.sheet.rows0); }
   $('#lyrHint').textContent='After placing the lines, play the song and check them. Use − and + to move a line by '+(lyrSnapping()?'one grid step (the smallest beat line you can see: zoom in for finer steps)':'0.2 s')+', or ▶ to play from that line.'+(lyrSnapping()?' New times land on the nearest visible beat line.':'');
 }
 // editor: the first timed lyric after the playhead moves to the playhead (handy when it sits far off screen)
@@ -3749,7 +3775,7 @@ function sheetColumns(sheet){
 }
 async function pdfColumns(file){ return sheetColumns(await pdfSheet(file)); }
 // ===== lyrics sheet view =====
-function renderSheetBtns(){ const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.length); $('#sheetOpen').disabled=!has; $('#sheetOpen2').hidden=!has; $('#sheetOpen3').hidden=!has;
+function renderSheetBtns(){ setTimeout(renderLyrSnap,0); const has=!!(S.sheet&&S.sheet.rows&&S.sheet.rows.length); $('#sheetOpen').disabled=!has; $('#sheetOpen2').hidden=!has; $('#sheetOpen3').hidden=!has;
   $('#sheetFold').hidden=true; }
 // the Sheet button in the lyrics bar can be folded away, so the lyrics get the whole width (remembered on this device)
 S.sheetFolded=false; try{ S.sheetFolded=localStorage.getItem('pc-sheetfold')==='1'; }catch(e){}
@@ -5346,6 +5372,9 @@ function setSnap(on){ S.snap=on; $('#snapOn').checked=on; try{localStorage.setIt
 $('#snapOn').addEventListener('change',e=>setSnap(e.target.checked));
 $('#lyrSnapOn').addEventListener('change',e=>setSnap(e.target.checked));
 $('#lyrSnapAll').addEventListener('click',snapAllLines);
+$('#sheetFit').addEventListener('click',()=>{ const r=sheetFitLyrics(); if(!r) return; S.sheet.rows0=S.sheet.rows0||S.sheet.rows; S.sheet.rows=r.rows; sheetSaved();
+  setStatus('Lyrics sheet rebuilt: '+r.from+' rows from the PDF are now '+r.rows.length+', following your lines. Changed the lines? Tap Rebuild again.'); });
+$('#sheetFitUndo').addEventListener('click',()=>{ if(!S.sheet||!S.sheet.rows0) return; S.sheet.rows=S.sheet.rows0; delete S.sheet.rows0; sheetSaved(); setStatus('The lyrics sheet is back as it came from the PDF.'); });
 S.snap=true; $('#snapOn').checked=true;   // snapping is always on
 renderBeatInfo();
 $('#edFill').addEventListener('click',edFill);
