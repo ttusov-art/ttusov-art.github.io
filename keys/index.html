@@ -39,11 +39,22 @@
 
 <main class="keys" id="keys" aria-label="Piano keys"></main>
 
+<div class="markbar" id="markbar" hidden>
+  <span class="mb-title">Tap or drag over keys to colour them:</span>
+  <span class="swatches" id="swatches"></span>
+  <button id="mkErase" type="button" aria-pressed="false" title="Eraser: tap or drag to take colours off">Eraser</button>
+  <button id="mkFit" type="button" title="Show just the marked keys">Fit to marks</button>
+  <button id="mkClear" type="button" title="Take all colours off">Clear all</button>
+  <button id="mkDone" type="button" class="primary" title="Done (M)">Done</button>
+</div>
+
 <footer class="strip">
   <button id="pedalBtn" type="button" aria-pressed="false" title="Sustain pedal: hold it while you play, or tap to latch it on and off (Space: hold)">Pedal</button>
   <button id="octDn" type="button" aria-label="One octave lower" title="One octave lower (←)">◀<span class="long"> Oct</span></button>
   <button id="octUp" type="button" aria-label="One octave higher" title="One octave higher (→)"><span class="long">Oct </span>▶</button>
   <button id="chordBtn" type="button" aria-pressed="false" title="Chord mode: each key plays the triad of the key you chose, with that note at the bottom (1)">Chord</button>
+  <button id="markBtn" type="button" aria-pressed="false" title="Mark keys with colours to map out your voice (M)">Mark</button>
+  <span class="legend" id="legend" aria-label="Your voice map"></span>
   <button id="loopBtn" type="button" title="Loop pedal: record a pattern, it repeats underneath while you play on top (2)"><span id="loopT">● Loop</span><span class="lp-bar" id="loopBar"></span></button>
   <span class="lpx" id="lpx" hidden>
     <button id="lpMute" type="button" aria-label="Pause the loop" title="Pause / play the loop (3)">❚❚</button>

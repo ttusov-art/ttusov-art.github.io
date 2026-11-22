@@ -4,6 +4,7 @@
   --accent: #0c7165; --accent-ink: #ffffff; --warm: #c86f0c;
   --key-w: #ffffff; --key-w-edge: #b8c0c6; --key-w-in: #f1f8f6; --key-b: #2a3239; --key-b-in: #364a4a;
   --ink-w: #4a5257; --ink-b: #e9eef1; --ink-home: #0c7165; --ink-oct: #8a949a;
+  --mk0: #2e9b5f; --mk1: #3b7dd8; --mk2: #8b5cf6; --mk3: #d6457a;
   --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: light;
@@ -65,6 +66,14 @@ button.on, button[aria-pressed="true"] { background: var(--accent); border-color
 .keys rect.w.in, .keys rect.w.home { fill: var(--key-w-in); }
 .keys rect.b { fill: var(--key-b); }
 .keys rect.b.in, .keys rect.b.home { fill: var(--key-b-in); }
+.keys rect.w.mk0 { fill: color-mix(in srgb, var(--mk0) 42%, var(--key-w)); }
+.keys rect.w.mk1 { fill: color-mix(in srgb, var(--mk1) 42%, var(--key-w)); }
+.keys rect.w.mk2 { fill: color-mix(in srgb, var(--mk2) 42%, var(--key-w)); }
+.keys rect.w.mk3 { fill: color-mix(in srgb, var(--mk3) 42%, var(--key-w)); }
+.keys rect.b.mk0 { fill: color-mix(in srgb, var(--mk0) 75%, var(--key-b)); }
+.keys rect.b.mk1 { fill: color-mix(in srgb, var(--mk1) 75%, var(--key-b)); }
+.keys rect.b.mk2 { fill: color-mix(in srgb, var(--mk2) 75%, var(--key-b)); }
+.keys rect.b.mk3 { fill: color-mix(in srgb, var(--mk3) 75%, var(--key-b)); }
 .keys rect.on { fill: var(--warm) !important; }
 .keys text { pointer-events: none; text-anchor: middle; font-family: var(--font-body); font-weight: 600; }
 .keys .tw { fill: var(--ink-w); font-size: var(--fw); }
@@ -87,6 +96,19 @@ button.on, button[aria-pressed="true"] { background: var(--accent); border-color
 .lpx { display: flex; gap: 6px; }
 .lpx button { min-width: 50px; padding: 4px 8px; }
 
+/* Mark mode bar and the legend of your voice map */
+.markbar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 8px 10px 0; }
+.mb-title { font-size: 13px; color: var(--muted); width: 100%; }
+.swatches { display: contents; }
+.sw { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 2px 4px 2px 2px; background: var(--surface); }
+.sw.sel { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+.sw .dot { width: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 6px; }
+.sw input { font: inherit; font-size: 14px; width: 110px; border: 0; background: transparent; color: var(--fg); padding: 4px; user-select: text; -webkit-user-select: text; }
+#mkErase[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.legend { display: flex; flex-wrap: wrap; align-content: center; gap: 2px 10px; font-size: 13px; color: var(--muted); min-width: 0; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+body.marking .legend { display: none; }
+
 /* big screens: bigger controls, readable from a distance */
 @media (min-width: 1600px) and (min-height: 800px) {
   body { font-size: 18px; }
@@ -107,6 +129,8 @@ button.on, button[aria-pressed="true"] { background: var(--accent); border-color
   .strip { gap: 6px; padding: 6px 8px 8px; }
   .strip button { padding: 4px 10px; min-height: 48px; }
   #pedalBtn { min-width: 72px; }
+  .legend { display: none; }
+  .sw input { width: 84px; }
   #loopBtn { min-width: 84px; }
   .strip button { padding: 4px 8px; }
 }

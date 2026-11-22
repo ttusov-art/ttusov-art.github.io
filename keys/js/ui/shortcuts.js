@@ -5,7 +5,8 @@ import { NOTE_CODES, US_LABELS, baseC } from '../lib/laptop.js';
 import * as play from '../play.js';
 import * as loop from '../loop.js';
 import { zoom, shiftOctave } from './overview.js';
-import { toggleChord, toggleBare, toggleFullscreen } from './controls.js';
+import { toggleChord, toggleBare, toggleFullscreen, toggleMarkMode, fitMarks } from './controls.js';
+import { paintStart, paintEnd } from '../marks.js';
 import { setLaptopLabels, place } from './keyboard.js';
 import { toggleHelp, helpOpen } from './help.js';
 
@@ -20,6 +21,8 @@ export const SHORTCUTS = [
   { show: '3', what: 'Pause / play the loop', key: ['3'], down: loop.togglePause },
   { show: '4', what: 'Undo the last loop layer', key: ['4'], down: loop.undoLayer },
   { show: 'Delete', what: 'Clear the loop', key: ['Delete', 'Backspace'], down: loop.clear },
+  { show: 'M', what: 'Mark mode on / off: colour keys to map out your voice', code: 'KeyM', down: () => toggleMarkMode() },
+  { show: 'N', what: 'Fit the screen to your marked keys', code: 'KeyN', down: fitMarks },
   { show: '0', what: 'Keys only (hide the bars) / show them again', key: ['0'], down: toggleBare },
   { show: 'Enter', what: 'Full screen on / off', key: ['Enter'], down: toggleFullscreen },
   { show: '?', what: 'Show this list', key: ['?'], down: toggleHelp },
@@ -57,7 +60,9 @@ export function initShortcuts() {
       e.preventDefault();
       if (e.repeat) return;
       if (!live.usedKeyboard) { live.usedKeyboard = true; place(); }
-      play.press('k' + e.code, baseC(WHITES, settings.w0) + off);
+      const m = baseC(WHITES, settings.w0) + off;
+      if (live.markMode) { paintStart(m); paintEnd(); }   // Mark mode: laptop keys colour keys too
+      play.press('k' + e.code, m);
       return;
     }
     const s = find(e);

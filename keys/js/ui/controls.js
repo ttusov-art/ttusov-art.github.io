@@ -4,7 +4,8 @@ import { keyName, allKeys } from '../lib/music.js';
 import { setVolume } from '../audio.js';
 import * as play from '../play.js';
 import * as loop from '../loop.js';
-import { zoom, shiftOctave } from './overview.js';
+import { zoom, shiftOctave, fitTo } from './overview.js';
+import { COLOURS, clearAll, rename, markedRange, hasMarks } from '../marks.js';
 
 const $ = s => document.querySelector(s);
 
@@ -57,7 +58,60 @@ export function initControls() {
   pb.addEventListener('contextmenu', e => e.preventDefault());
 
   document.addEventListener('fullscreenchange', paintFullscreen);
+  initMarkBar();
   paintAll();
+}
+
+// ----- Mark mode: colour keys to map out your voice -----
+function initMarkBar() {
+  $('#swatches').innerHTML = COLOURS.map((c, i) =>
+    '<span class="sw" data-c="' + i + '"><button type="button" class="dot" data-c="' + i + '" style="background:' + c + '" aria-label="Paint with colour ' + (i + 1) + '"></button>' +
+    '<input type="text" maxlength="24" data-c="' + i + '" aria-label="Name of colour ' + (i + 1) + '"></span>').join('');
+  $('#swatches').querySelectorAll('.dot').forEach(b => b.addEventListener('click', () => pickColour(+b.dataset.c)));
+  $('#swatches').querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('focus', () => pickColour(+inp.dataset.c));
+    inp.addEventListener('change', () => rename(+inp.dataset.c, inp.value.trim()));
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  });
+  $('#markBtn').addEventListener('click', () => toggleMarkMode());
+  $('#mkDone').addEventListener('click', () => toggleMarkMode(false));
+  $('#mkErase').addEventListener('click', () => pickColour(live.markColour < 0 ? 0 : -1));
+  $('#mkFit').addEventListener('click', fitMarks);
+  $('#mkClear').addEventListener('click', () => { if (confirm('Take all colours off the keys?')) clearAll(); });
+}
+
+function pickColour(i) {
+  live.markColour = i;
+  paintMarkBar();
+}
+
+export function fitMarks() {
+  const r = markedRange();
+  if (r) fitTo(r[0], r[1]);
+}
+
+export function toggleMarkMode(on) {
+  live.markMode = on === undefined ? !live.markMode : on;
+  document.body.classList.toggle('marking', live.markMode);
+  $('#markbar').hidden = !live.markMode;
+  $('#markBtn').setAttribute('aria-pressed', String(live.markMode));
+  if (live.markMode && settings.bare) set({ bare: false });   // the bar needs to be visible
+  paintMarkBar();
+  window.dispatchEvent(new Event('resize'));   // the keys area changed height
+}
+
+function paintMarkBar() {
+  $('#swatches').querySelectorAll('.sw').forEach(el => el.classList.toggle('sel', +el.dataset.c === live.markColour));
+  $('#swatches').querySelectorAll('input').forEach(inp => { if (document.activeElement !== inp) inp.value = settings.markNames[+inp.dataset.c] || ''; });
+  $('#mkErase').setAttribute('aria-pressed', String(live.markColour < 0));
+  $('#mkFit').disabled = !hasMarks();
+  $('#mkClear').disabled = !hasMarks();
+}
+
+// the legend next to the Mark button: only the colours you used
+function paintLegend() {
+  const used = new Set(Object.values(settings.marks));
+  $('#legend').innerHTML = COLOURS.map((c, i) => used.has(i) ? '<span><i style="background:' + c + '"></i>' + (settings.markNames[i] || '') + '</span>' : '').join('');
 }
 
 export function toggleChord() { set({ chord: !settings.chord }); }
@@ -121,4 +175,6 @@ export function paintAll() {
   $('#zoomIn').disabled = settings.view >= NW;
   paintFullscreen();
   paintInfo();
+  paintLegend();
+  paintMarkBar();
 }

@@ -3,14 +3,14 @@ import { settings, onChange } from './state.js';
 import { ensureCtx, setVolume, prefetch } from './audio.js';
 import * as play from './play.js';
 import * as loop from './loop.js';
-import { initKeyboard, render, place, marks } from './ui/keyboard.js';
+import { initKeyboard, render, place, marks, paintMarks } from './ui/keyboard.js';
 import { initOverview, renderOverview } from './ui/overview.js';
 import { initControls, paintAll, paintPedal } from './ui/controls.js';
 import { initShortcuts, SHORTCUTS } from './ui/shortcuts.js';
 import { initHelp, setHelpRows } from './ui/help.js';
 import { checkUpdate } from './ui/update.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
 const $ = s => document.querySelector(s);
 
@@ -34,6 +34,10 @@ onChange(patch => {
     layout();
   } else if ('w0' in patch) {
     place();
+    renderOverview();
+  }
+  if ('marks' in patch) {
+    paintMarks();
     renderOverview();
   }
   if ('sound' in patch && settings.sound === 'grand') loadGrand();

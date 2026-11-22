@@ -3,6 +3,7 @@ import { settings, live, WHITES, NW } from '../state.js';
 import { scaleSpelling, isBlack, octaveOf, pc } from '../lib/music.js';
 import { NOTE_CODES, baseC } from '../lib/laptop.js';
 import * as play from '../play.js';
+import { paintStart, paint, paintEnd } from '../marks.js';
 
 let box = null;
 let labels = {};   // laptop key code → the letter printed on it
@@ -46,6 +47,7 @@ export function render() {
   box.insertAdjacentHTML('beforeend', svg.join(''));
   place();
   marks();
+  paintMarks();
 }
 
 // shift the keys to the current position
@@ -71,6 +73,15 @@ function letters() {
   g.innerHTML = out.join('');
 }
 
+// your voice map: each marked key gets its colour class (mk0 … mk3)
+export function paintMarks() {
+  if (!box) return;
+  box.querySelectorAll('rect[data-m]').forEach(r => {
+    const c = settings.marks[r.dataset.m];
+    for (let i = 0; i < 4; i++) r.classList.toggle('mk' + i, c === i);
+  });
+}
+
 export function marks() {
   if (!box) return;
   const on = play.soundingNotes();
@@ -83,15 +94,20 @@ function onPointerDown(e) {
   if (!r0) return;
   e.preventDefault();
   const id = 'p' + e.pointerId;
+  const marking = live.markMode;   // in Mark mode the keys still sound, so you hear which note you colour
+  if (marking) paintStart(+r0.dataset.m);
   play.press(id, +r0.dataset.m);
   const move = ev => {
     if (ev.pointerId !== e.pointerId) return;
     const el = document.elementFromPoint(ev.clientX, ev.clientY);
     const r = el && el.closest && el.closest('#keys rect[data-m]');
-    if (r) play.press(id, +r.dataset.m);
+    if (!r) return;
+    if (marking) paint(+r.dataset.m);
+    play.press(id, +r.dataset.m);
   };
   const up = ev => {
     if (ev.pointerId !== e.pointerId) return;
+    if (marking) paintEnd();
     play.lift(id);
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);

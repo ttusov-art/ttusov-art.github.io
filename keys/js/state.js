@@ -15,6 +15,8 @@ const DEFAULTS = {
   volume: 0.8,
   chord: false,
   bare: false,             // "keys only": hide the bars
+  marks: {},               // MIDI note → colour index (your voice map)
+  markNames: ['Comfortable', 'Stretch', 'Passaggio', 'Top'],
 };
 
 const saved = loadSettings();
@@ -32,6 +34,8 @@ export const live = {
   sus: [],              // voices kept ringing by the pedal
   ww: 60,               // width of one white key in px
   usedKeyboard: false,  // a laptop key was pressed: show the letters on the keys
+  markMode: false,      // tapping keys paints marks
+  markColour: 0,        // colour index to paint with, -1 = eraser
 };
 
 const listeners = [];
