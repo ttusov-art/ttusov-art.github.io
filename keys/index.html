@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Keys</title>
+<meta name="description" content="A clean full-screen piano with sustain pedal, chord mode and a loop pedal.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Keys">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f5f7f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1419" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Keys <span id="ver" class="ver"></span></h1>
+  <select id="keySel" aria-label="Key" title="Key: names the notes of the key and sets the chords for chord mode"></select>
+  <select id="soundSel" aria-label="Sound" title="Sound">
+    <option value="grand">Grand</option>
+    <option value="piano">Simple</option>
+  </select>
+  <label class="vol" title="Volume"><span aria-hidden="true">Vol</span><input id="vol" type="range" min="0" max="1" step="0.05" aria-label="Volume"></label>
+  <span class="info" id="info" aria-live="polite"></span>
+  <button id="bareBtn" type="button" aria-pressed="false" title="Keys only: hide the bars (0)"><span class="long">Keys only</span><span class="short" aria-hidden="true">Keys</span></button>
+  <button id="fsBtn" type="button" aria-pressed="false" title="Full screen (Enter)"><span class="long" id="fsLabel">Full screen</span><span class="short" aria-hidden="true">⛶</span></button>
+  <button id="helpBtn" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">?</button>
+</header>
+
+<div class="map">
+  <button id="zoomOut" type="button" aria-label="Fewer, bigger keys" title="Fewer, bigger keys (−)">−</button>
+  <svg id="mini" role="img" aria-label="The whole piano: drag the window to move along it"></svg>
+  <button id="zoomIn" type="button" aria-label="More keys on screen" title="More keys on screen (+)">+</button>
+</div>
+
+<main class="keys" id="keys" aria-label="Piano keys"></main>
+
+<footer class="strip">
+  <button id="pedalBtn" type="button" aria-pressed="false" title="Sustain pedal: hold it while you play, or tap to latch it on and off (Space: hold)">Pedal</button>
+  <button id="octDn" type="button" aria-label="One octave lower" title="One octave lower (←)">◀<span class="long"> Oct</span></button>
+  <button id="octUp" type="button" aria-label="One octave higher" title="One octave higher (→)"><span class="long">Oct </span>▶</button>
+  <button id="chordBtn" type="button" aria-pressed="false" title="Chord mode: each key plays the triad of the key you chose, with that note at the bottom (1)">Chord</button>
+  <button id="loopBtn" type="button" title="Loop pedal: record a pattern, it repeats underneath while you play on top (2)"><span id="loopT">● Loop</span><span class="lp-bar" id="loopBar"></span></button>
+  <span class="lpx" id="lpx" hidden>
+    <button id="lpMute" type="button" aria-label="Pause the loop" title="Pause / play the loop (3)">❚❚</button>
+    <button id="lpUndo" type="button" aria-label="Undo the last layer" title="Undo the last layer (4)">↶</button>
+    <button id="lpClear" type="button" aria-label="Clear the loop" title="Clear the loop (Delete)">✕</button>
+  </span>
+</footer>
+
+<button id="showBars" class="show-bars" type="button" hidden aria-label="Show the controls" title="Show the controls (0)">☰</button>
+<div class="status" id="status" hidden role="status"></div>
+<div class="new-ver" id="newVer" hidden role="status"><span></span><button id="newVerGo" type="button" class="primary">Reload</button><button id="newVerX" type="button">Later</button></div>
+
+<dialog id="help" aria-labelledby="helpTitle">
+  <div class="help-head"><h2 id="helpTitle">Keyboard shortcuts</h2><button id="helpClose" type="button" aria-label="Close">✕</button></div>
+  <table><tbody id="helpList"></tbody></table>
+  <p class="small">The letters show on the keys once you play from the laptop keyboard. They start at the first C on screen; ← → move them with the keys.</p>
+  <p class="small">Everything stays on this device. Piano sounds: Salamander Grand Piano by Alexander Holm (CC BY 3.0). Fonts: IBM Plex, Bricolage Grotesque (SIL Open Font License). Made from the piano in <a href="../">Part Coach</a>.</p>
+</dialog>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
